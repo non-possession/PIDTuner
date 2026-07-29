@@ -119,7 +119,43 @@ public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile field
 
     private static IReadOnlyList<string> SplitCsvLine(string line)
     {
-        return line.Split(',');
+        var fields = new List<string>();
+        var field = new StringBuilder();
+        var inQuotes = false;
+
+        for (var index = 0; index < line.Length; index++)
+        {
+            var current = line[index];
+            if (current == '"')
+            {
+                if (inQuotes && index + 1 < line.Length && line[index + 1] == '"')
+                {
+                    field.Append('"');
+                    index++;
+                    continue;
+                }
+
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (current == ',' && !inQuotes)
+            {
+                fields.Add(field.ToString());
+                field.Clear();
+                continue;
+            }
+
+            field.Append(current);
+        }
+
+        if (inQuotes)
+        {
+            throw new FormatException("CSV line contains an unterminated quoted field.");
+        }
+
+        fields.Add(field.ToString());
+        return fields;
     }
 
     private static DateTimeOffset ParseDateTimeOffset(string? value)

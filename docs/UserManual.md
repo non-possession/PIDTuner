@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 7.
+Last updated: 2026-07-29, iteration 8.
 
 ## Requirements
 
@@ -80,7 +80,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 7 tests pass.
+Current expected result: 8 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -111,7 +111,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - No PLC connection yet.
 - No SQLite persistence yet.
 - No real charting library yet; the trend preview is a lightweight WPF polyline preview.
-- CSV parsing currently supports simple comma-separated values without quoted commas.
+- CSV parsing supports quoted fields with commas and escaped double quotes on a single line.
 - Field profile editing uses dropdowns for field type and semantic role.
 
 ## Iteration Reporting Rule

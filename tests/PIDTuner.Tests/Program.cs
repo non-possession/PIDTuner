@@ -16,6 +16,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("offline csv use case imports samples and analyzes the requested window", OfflineCsvUseCaseAnalyzesRequestedWindow),
     ("field profile store loads project metadata from json", FieldProfileStoreLoadsProjectMetadata),
     ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields),
+    ("configurable csv exchange imports quoted metadata with commas", ConfigurableCsvExchangeImportsQuotedMetadataWithCommas),
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields)
 };
@@ -184,6 +185,34 @@ time,setpoint_c,actual_c,output_pct,operator_note
     AssertClose(75.2, imported[0].ProcessValue, 0.001, "renamed PV");
     AssertClose(41.5, imported[0].ManipulatedValue, 0.001, "renamed MV");
     AssertEqual("start of trial", imported[0].ExtraFields?["operator_note"], "extra metadata");
+}
+
+static async Task ConfigurableCsvExchangeImportsQuotedMetadataWithCommas()
+{
+    var profile = new PidSampleFieldProfile(
+        1,
+        "quoted-metadata-profile",
+        "CSV columns with quoted metadata",
+        new[]
+        {
+            Field("time", PidSampleFieldRole.SampleTime, PidSampleFieldDataType.DateTimeOffset, true),
+            Field("sp", PidSampleFieldRole.SetPoint, PidSampleFieldDataType.Double, true),
+            Field("pv", PidSampleFieldRole.ProcessValue, PidSampleFieldDataType.Double, true),
+            Field("mv", PidSampleFieldRole.ManipulatedValue, PidSampleFieldDataType.Double, true),
+            Field("operator_note", PidSampleFieldRole.Metadata, PidSampleFieldDataType.String, false)
+        });
+
+    const string csv = """
+time,sp,pv,mv,operator_note
+2026-07-29T10:00:00.0000000+00:00,80,75.2,41.5,"opened valve, watched response"
+""";
+
+    var exchange = new ConfigurablePidSampleCsvExchange(profile);
+    await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+    var imported = await exchange.ImportAsync(stream, CancellationToken.None);
+
+    AssertEqual("opened valve, watched response", imported[0].ExtraFields?["operator_note"], "quoted metadata");
 }
 
 static Task TrendSeriesBuilderNormalizesPidSamples()
