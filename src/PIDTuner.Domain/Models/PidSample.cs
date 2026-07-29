@@ -10,4 +10,5 @@ public sealed record PidSample(
     double? KdOrTd,
     bool IsPlcConnected,
     Guid TestSessionId,
-    Guid? ParameterSetId);
+    Guid? ParameterSetId,
+    IReadOnlyDictionary<string, string?>? ExtraFields = null);

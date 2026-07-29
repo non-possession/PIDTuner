@@ -41,7 +41,7 @@
       "dataType": "Double",
       "required": false,
       "unit": null,
-      "role": "PidParameter"
+      "role": "Kp"
     },
     {
       "key": "ki_or_ti",
@@ -49,7 +49,7 @@
       "dataType": "Double",
       "required": false,
       "unit": null,
-      "role": "PidParameter"
+      "role": "KiOrTi"
     },
     {
       "key": "kd_or_td",
@@ -57,7 +57,7 @@
       "dataType": "Double",
       "required": false,
       "unit": null,
-      "role": "PidParameter"
+      "role": "KdOrTd"
     },
     {
       "key": "is_plc_connected",

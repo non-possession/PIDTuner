@@ -3,14 +3,18 @@ using System.Text;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Models;
 using PIDTuner.Application.UseCases;
+using PIDTuner.Domain.Configuration;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Csv;
+using PIDTuner.Infrastructure.Configuration;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("analysis calculates core response metrics from an offline step response", AnalysisCalculatesCoreMetrics),
     ("csv exchange imports and exports stable pid sample fields", CsvExchangeRoundTripsSamples),
-    ("offline csv use case imports samples and analyzes the requested window", OfflineCsvUseCaseAnalyzesRequestedWindow)
+    ("offline csv use case imports samples and analyzes the requested window", OfflineCsvUseCaseAnalyzesRequestedWindow),
+    ("field profile store loads project metadata from json", FieldProfileStoreLoadsProjectMetadata),
+    ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields)
 };
 
 var failures = new List<string>();
@@ -121,6 +125,64 @@ timestamp,sp,pv,mv,kp,ki_or_ti,kd_or_td,is_plc_connected,test_session_id,paramet
     AssertClose(12, result.Metrics.OvershootPercent, 0.001, "offline overshoot percent");
 }
 
+static async Task FieldProfileStoreLoadsProjectMetadata()
+{
+    const string json = """
+{
+  "schemaVersion": 1,
+  "profileName": "temperature-loop",
+  "description": "Customer site temperature PID fields",
+  "fields": [
+    { "key": "time", "displayName": "Time", "dataType": "DateTimeOffset", "required": true, "unit": null, "role": "SampleTime" },
+    { "key": "setpoint_c", "displayName": "Setpoint C", "dataType": "Double", "required": true, "unit": "degC", "role": "SetPoint" },
+    { "key": "actual_c", "displayName": "Actual C", "dataType": "Double", "required": true, "unit": "degC", "role": "ProcessValue" }
+  ]
+}
+""";
+
+    var store = new JsonPidSampleFieldProfileStore();
+    await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+    var profile = await store.LoadAsync(stream, CancellationToken.None);
+
+    AssertEqual("temperature-loop", profile.ProfileName, "profile name");
+    AssertEqual(3, profile.Fields.Count, "field count");
+    AssertEqual(PidSampleFieldRole.ProcessValue, profile.Fields[2].Role, "process value role");
+    AssertEqual("degC", profile.Fields[2].Unit, "process value unit");
+}
+
+static async Task ConfigurableCsvExchangeMapsRenamedFields()
+{
+    var profile = new PidSampleFieldProfile(
+        1,
+        "renamed-field-profile",
+        "Renamed CSV columns for a project",
+        new[]
+        {
+            Field("time", PidSampleFieldRole.SampleTime, PidSampleFieldDataType.DateTimeOffset, true),
+            Field("setpoint_c", PidSampleFieldRole.SetPoint, PidSampleFieldDataType.Double, true),
+            Field("actual_c", PidSampleFieldRole.ProcessValue, PidSampleFieldDataType.Double, true),
+            Field("output_pct", PidSampleFieldRole.ManipulatedValue, PidSampleFieldDataType.Double, true),
+            Field("operator_note", PidSampleFieldRole.Metadata, PidSampleFieldDataType.String, false)
+        });
+
+    const string csv = """
+time,setpoint_c,actual_c,output_pct,operator_note
+2026-07-29T10:00:00.0000000+00:00,80,75.2,41.5,start of trial
+""";
+
+    var exchange = new ConfigurablePidSampleCsvExchange(profile);
+    await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+    var imported = await exchange.ImportAsync(stream, CancellationToken.None);
+
+    AssertEqual(1, imported.Count, "renamed imported count");
+    AssertClose(80, imported[0].SetPoint, 0.001, "renamed SP");
+    AssertClose(75.2, imported[0].ProcessValue, 0.001, "renamed PV");
+    AssertClose(41.5, imported[0].ManipulatedValue, 0.001, "renamed MV");
+    AssertEqual("start of trial", imported[0].ExtraFields?["operator_note"], "extra metadata");
+}
+
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
 {
     return new PidSample(timestamp, sp, pv, mv, 1.2, 0.4, 0.1, true, sessionId, null);
@@ -149,4 +211,13 @@ static void AssertContains(string expected, string actual)
     {
         throw new InvalidOperationException($"Expected exported CSV to contain: {expected}");
     }
+}
+
+static PidSampleFieldDefinition Field(
+    string key,
+    PidSampleFieldRole role,
+    PidSampleFieldDataType dataType,
+    bool required)
+{
+    return new PidSampleFieldDefinition(key, key, dataType, required, null, role);
 }
