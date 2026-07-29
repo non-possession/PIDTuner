@@ -192,10 +192,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand LoadExampleCommand { get; }
 
-    private async Task LoadExampleAsync()
+    public async Task LoadExampleAsync()
     {
-        var fieldProfilePath = Path.Combine(Environment.CurrentDirectory, "config", "pid-sample-fields.example.json");
-        var csvPath = Path.Combine(Environment.CurrentDirectory, "samples", "offline-step-response.csv");
+        var repositoryRoot = FindRepositoryRoot();
+        var fieldProfilePath = Path.Combine(repositoryRoot, "config", "pid-sample-fields.example.json");
+        var csvPath = Path.Combine(repositoryRoot, "samples", "offline-step-response.csv");
 
         if (!File.Exists(fieldProfilePath) || !File.Exists(csvPath))
         {
@@ -218,6 +219,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             StatusMessage = $"示例加载失败：{exception.Message}";
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(Environment.CurrentDirectory);
+
+        while (directory is not null)
+        {
+            var configPath = Path.Combine(directory.FullName, "config", "pid-sample-fields.example.json");
+            var samplePath = Path.Combine(directory.FullName, "samples", "offline-step-response.csv");
+
+            if (File.Exists(configPath) && File.Exists(samplePath))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return Environment.CurrentDirectory;
     }
 
     private async Task ExportAnalysisResultAsync()

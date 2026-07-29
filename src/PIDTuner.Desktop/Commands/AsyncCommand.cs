@@ -1,9 +1,11 @@
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace PIDTuner.Desktop.Commands;
 
 public sealed class AsyncCommand(Func<Task> execute, Func<bool>? canExecute = null) : ICommand
 {
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private bool _isExecuting;
 
     public event EventHandler? CanExecuteChanged;
@@ -35,6 +37,12 @@ public sealed class AsyncCommand(Func<Task> execute, Func<bool>? canExecute = nu
 
     private void RaiseCanExecuteChanged()
     {
-        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        if (_dispatcher.CheckAccess())
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _dispatcher.BeginInvoke(() => CanExecuteChanged?.Invoke(this, EventArgs.Empty));
     }
 }

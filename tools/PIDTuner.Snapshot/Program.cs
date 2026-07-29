@@ -2,7 +2,9 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using PIDTuner.Desktop;
+using PIDTuner.Desktop.ViewModels;
 
 if (args.Length != 1)
 {
@@ -12,6 +14,9 @@ if (args.Length != 1)
 
 var thread = new Thread(() =>
 {
+    SynchronizationContext.SetSynchronizationContext(
+        new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+
     var outputPath = args[0];
     var window = new MainWindow
     {
@@ -25,6 +30,12 @@ var thread = new Thread(() =>
 
     window.Show();
     window.UpdateLayout();
+    if (window.DataContext is MainWindowViewModel viewModel)
+    {
+        PumpDispatcherUntilComplete(viewModel.LoadExampleAsync());
+        window.UpdateLayout();
+        Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+    }
 
     var width = (int)window.ActualWidth;
     var height = (int)window.ActualHeight;
@@ -46,3 +57,16 @@ thread.Start();
 thread.Join();
 
 return 0;
+
+static void PumpDispatcherUntilComplete(Task task)
+{
+    var dispatcher = Dispatcher.CurrentDispatcher;
+
+    while (!task.IsCompleted)
+    {
+        dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+        Thread.Sleep(10);
+    }
+
+    task.GetAwaiter().GetResult();
+}
