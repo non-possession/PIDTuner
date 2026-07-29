@@ -658,14 +658,47 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual("7", viewModel.HistorySessions[0].SampleCount, "history sample count after save");
     AssertEqual("00:00:06", viewModel.HistorySessions[0].Duration, "history duration after save");
 
+    var improvedSessionId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    var improvedStart = DateTimeOffset.Parse("2026-07-29T10:20:00.0000000+00:00", CultureInfo.InvariantCulture);
+    await sessionRepository.SaveAsync(new TestSession(
+        improvedSessionId,
+        Guid.Parse("66666666-6666-6666-6666-666666666666"),
+        "improved-step",
+        improvedStart,
+        improvedStart.AddSeconds(6),
+        "Device A",
+        "Reduced overshoot",
+        "After conservative Kp change"), CancellationToken.None);
+    await sampleRepository.SaveBatchAsync(new[]
+    {
+        Sample(improvedStart.AddSeconds(0), 100, 0, 0, improvedSessionId),
+        Sample(improvedStart.AddSeconds(1), 100, 45, 20, improvedSessionId),
+        Sample(improvedStart.AddSeconds(2), 100, 88, 38, improvedSessionId),
+        Sample(improvedStart.AddSeconds(3), 100, 104, 45, improvedSessionId),
+        Sample(improvedStart.AddSeconds(4), 100, 101, 43, improvedSessionId),
+        Sample(improvedStart.AddSeconds(5), 100, 100.2, 42, improvedSessionId),
+        Sample(improvedStart.AddSeconds(6), 100, 100.1, 42, improvedSessionId)
+    }, CancellationToken.None);
+    await viewModel.LoadHistoryAsync();
+    AssertEqual(2, viewModel.HistorySessions.Count, "history count after adding improved session");
+
     viewModel.HistorySearchText = "offline";
     AssertEqual(1, viewModel.HistorySessions.Count, "filtered history count");
     viewModel.HistorySearchText = "not-found";
     AssertEqual(0, viewModel.HistorySessions.Count, "filtered empty history count");
     viewModel.HistorySearchText = string.Empty;
 
-    viewModel.SelectedHistorySession = viewModel.HistorySessions[0];
+    viewModel.SelectedHistorySession = viewModel.HistorySessions.First(item =>
+        item.Name.Contains("offline", StringComparison.OrdinalIgnoreCase));
     AssertContains("样本：7", viewModel.SelectedHistoryDetails);
+    await viewModel.SetHistoryBaselineAsync();
+    viewModel.SelectedHistorySession = viewModel.HistorySessions.First(item => item.Name == "improved-step");
+    await viewModel.CompareHistorySessionAsync();
+    AssertEqual(true, viewModel.HistoryComparisonMetrics.Count >= 4, "history comparison metric count");
+    AssertEqual(true, viewModel.HistoryComparisonMetrics.Any(item =>
+        item.Metric == "超调量" && item.Delta.StartsWith("-", StringComparison.Ordinal)), "history comparison overshoot improvement");
+    AssertContains("improved-step", viewModel.HistoryComparisonStatus);
+
     await viewModel.OpenHistorySessionAsync();
 
     AssertEqual("历史记录已打开", viewModel.NotificationTitle, "open history notification title");

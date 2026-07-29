@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 50.
+Last updated: 2026-07-29, iteration 55.
 
 ## Requirements
 
@@ -123,6 +123,14 @@ local\test-sessions
 5. Use `筛选` to narrow saved sessions by name, device, condition, or notes.
 6. Click `导出采样` to export the selected saved session samples to CSV.
 
+To compare two saved sessions:
+
+1. Select the earlier or baseline session.
+2. Click `设为基准`.
+3. Select another saved session.
+4. Click `对比选中`.
+5. Review the comparison table for baseline value, candidate value, and delta across key PID metrics.
+
 ## Review Tuning Recommendations
 
 After importing CSV, loading the bundled example, or opening a saved history record, open the `参数调整` tab.
@@ -197,7 +205,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, records one accepted recommendation review, refreshes PLC tag previews, and then renders the window. The current snapshot view is switched to the analysis page so the expanded PID analysis metrics and trend preview are visible.
+It loads the bundled example profile and sample CSV, saves the current test session, seeds an improved comparison session, compares history records, records one accepted recommendation review, refreshes PLC tag previews, and then renders the window. The current snapshot view is switched to the history page so the saved-session comparison table is visible.
 
 ## Current Features
 
@@ -234,6 +242,8 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 - Filter saved test sessions.
 - Show saved session duration, sample count, and detail summary.
 - Export selected historical samples to CSV.
+- Set a saved session as comparison baseline.
+- Compare another saved session against the baseline across key PID metrics.
 - Generate conservative PID tuning recommendations from the latest analysis metrics.
 - Show recommendation reason, expected effect, risk, and confidence on the parameter-adjustment page.
 - Record engineer accept/defer decisions for tuning recommendations.
@@ -266,8 +276,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 50 snapshot:
+Iteration 55 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-50-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-55-rendered.png
 ```

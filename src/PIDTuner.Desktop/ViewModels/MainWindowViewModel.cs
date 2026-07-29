@@ -92,10 +92,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
+    private ObservableCollection<HistoryComparisonMetricViewModel> _historyComparisonMetrics = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TagDefinitionViewModel? _selectedTagDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
+    private TestSessionListItemViewModel? _baselineHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
     private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
@@ -104,6 +106,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
+    private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
 
     public MainWindowViewModel()
@@ -163,6 +166,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadHistoryCommand = new AsyncCommand(LoadHistoryAsync);
         OpenHistorySessionCommand = new AsyncCommand(OpenHistorySessionAsync);
         ExportHistorySamplesCommand = new AsyncCommand(ExportHistorySamplesAsync);
+        SetHistoryBaselineCommand = new AsyncCommand(SetHistoryBaselineAsync);
+        CompareHistorySessionCommand = new AsyncCommand(CompareHistorySessionAsync);
         AcceptRecommendationCommand = new AsyncCommand(AcceptRecommendationAsync);
         DeferRecommendationCommand = new AsyncCommand(DeferRecommendationAsync);
         LoadRecommendationReviewsCommand = new AsyncCommand(LoadRecommendationReviewsAsync);
@@ -394,6 +399,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _historyStatus, value);
     }
 
+    public string HistoryComparisonStatus
+    {
+        get => _historyComparisonStatus;
+        private set => SetProperty(ref _historyComparisonStatus, value);
+    }
+
     public string HistorySearchText
     {
         get => _historySearchText;
@@ -464,6 +475,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcMonitorTags;
         private set => SetProperty(ref _plcMonitorTags, value);
+    }
+
+    public ObservableCollection<HistoryComparisonMetricViewModel> HistoryComparisonMetrics
+    {
+        get => _historyComparisonMetrics;
+        private set => SetProperty(ref _historyComparisonMetrics, value);
     }
 
     public string RecommendationSummary
@@ -557,6 +574,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand OpenHistorySessionCommand { get; }
 
     public ICommand ExportHistorySamplesCommand { get; }
+
+    public ICommand SetHistoryBaselineCommand { get; }
+
+    public ICommand CompareHistorySessionCommand { get; }
 
     public ICommand AcceptRecommendationCommand { get; }
 
@@ -862,6 +883,55 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public Task SetHistoryBaselineAsync()
+    {
+        if (SelectedHistorySession is null)
+        {
+            Notify("无法设置对比基准", "请先选择一条历史记录。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        _baselineHistorySession = SelectedHistorySession;
+        HistoryComparisonStatus = $"基准：{_baselineHistorySession.Name}";
+        HistoryComparisonMetrics.Clear();
+        Notify("历史对比基准已设置", HistoryComparisonStatus, "Info");
+        return Task.CompletedTask;
+    }
+
+    public async Task CompareHistorySessionAsync()
+    {
+        if (_baselineHistorySession is null)
+        {
+            Notify("无法对比历史记录", "请先选择一条记录并设为基准。", "Warning");
+            return;
+        }
+
+        if (SelectedHistorySession is null)
+        {
+            Notify("无法对比历史记录", "请先选择要对比的历史记录。", "Warning");
+            return;
+        }
+
+        if (SelectedHistorySession.Id == _baselineHistorySession.Id)
+        {
+            Notify("无法对比历史记录", "请选择不同于基准的历史记录。", "Warning");
+            return;
+        }
+
+        try
+        {
+            var baseline = await AnalyzeHistorySessionAsync(_baselineHistorySession);
+            var candidate = await AnalyzeHistorySessionAsync(SelectedHistorySession);
+            HistoryComparisonMetrics = BuildHistoryComparisonMetrics(baseline.Metrics, candidate.Metrics);
+            HistoryComparisonStatus = $"基准：{_baselineHistorySession.Name}；对比：{SelectedHistorySession.Name}";
+            Notify("历史记录对比已完成", HistoryComparisonStatus, "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("历史记录对比失败", exception.Message, "Error");
+        }
+    }
+
     public async Task AcceptRecommendationAsync()
     {
         await ReviewRecommendationAsync(PidRecommendationReviewDecision.Accepted);
@@ -975,6 +1045,69 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify("建议审查记录失败", exception.Message, "Error");
         }
+    }
+
+    private async Task<(IReadOnlyList<PidSample> Samples, PidResponseMetrics Metrics)> AnalyzeHistorySessionAsync(
+        TestSessionListItemViewModel session)
+    {
+        var samples = await _pidSampleRepository.GetBySessionAsync(session.Id, CancellationToken.None);
+        if (samples.Count == 0)
+        {
+            throw new InvalidOperationException($"{session.Name} 没有可对比的采样数据。");
+        }
+
+        var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
+        return (samples, _pidAnalysisService.Analyze(samples, window));
+    }
+
+    private static ObservableCollection<HistoryComparisonMetricViewModel> BuildHistoryComparisonMetrics(
+        PidResponseMetrics baseline,
+        PidResponseMetrics candidate)
+    {
+        return new ObservableCollection<HistoryComparisonMetricViewModel>
+        {
+            Compare("超调量", baseline.OvershootPercent, candidate.OvershootPercent, "0.###"),
+            Compare("上升时间", baseline.RiseTime?.TotalSeconds, candidate.RiseTime?.TotalSeconds, "0.### s"),
+            Compare("调节时间", baseline.SettlingTime?.TotalSeconds, candidate.SettlingTime?.TotalSeconds, "0.### s"),
+            Compare("稳态误差", baseline.SteadyStateError, candidate.SteadyStateError, "0.###"),
+            Compare("峰值", baseline.PeakProcessValue, candidate.PeakProcessValue, "0.###"),
+            Compare("平均绝对误差", baseline.MeanAbsoluteError, candidate.MeanAbsoluteError, "0.###"),
+            Compare("误差积分", baseline.IntegralAbsoluteError, candidate.IntegralAbsoluteError, "0.###"),
+            Compare("输出标准差", baseline.OutputStandardDeviation, candidate.OutputStandardDeviation, "0.###")
+        };
+    }
+
+    private static HistoryComparisonMetricViewModel Compare(
+        string metric,
+        double? baseline,
+        double? candidate,
+        string format)
+    {
+        double? delta = baseline.HasValue && candidate.HasValue
+            ? candidate.Value - baseline.Value
+            : null;
+
+        return new HistoryComparisonMetricViewModel(
+            metric,
+            FormatComparisonValue(baseline, format),
+            FormatComparisonValue(candidate, format),
+            FormatDelta(delta, format));
+    }
+
+    private static string FormatComparisonValue(double? value, string format)
+    {
+        return value.HasValue ? value.Value.ToString(format, CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatDelta(double? value, string format)
+    {
+        if (!value.HasValue)
+        {
+            return "-";
+        }
+
+        var sign = value.Value > 0 ? "+" : string.Empty;
+        return sign + value.Value.ToString(format, CultureInfo.InvariantCulture);
     }
 
     private void ApplyHistoryFilter()

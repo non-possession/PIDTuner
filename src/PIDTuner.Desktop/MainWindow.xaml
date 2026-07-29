@@ -780,6 +780,16 @@
                       Width="96"
                       Height="36"
                       Margin="12,0,0,0" />
+              <Button Command="{Binding SetHistoryBaselineCommand}"
+                      Content="设为基准"
+                      Width="96"
+                      Height="36"
+                      Margin="12,0,0,0" />
+              <Button Command="{Binding CompareHistorySessionCommand}"
+                      Content="对比选中"
+                      Width="96"
+                      Height="36"
+                      Margin="12,0,0,0" />
               <TextBlock Text="筛选"
                          VerticalAlignment="Center"
                          Margin="20,0,0,0"
@@ -798,7 +808,7 @@
                   Margin="0,16,0,0">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="360" />
               </Grid.ColumnDefinitions>
 
               <DataGrid ItemsSource="{Binding HistorySessions}"
@@ -849,6 +859,36 @@
                              Margin="0,10,0,0"
                              TextWrapping="Wrap"
                              Foreground="#374151" />
+                  <TextBlock Text="对比结果"
+                             Margin="0,18,0,0"
+                             FontWeight="SemiBold"
+                             Foreground="#1F2937" />
+                  <TextBlock Text="{Binding HistoryComparisonStatus}"
+                             Margin="0,8,0,0"
+                             TextWrapping="Wrap"
+                             Foreground="#374151" />
+                  <DataGrid ItemsSource="{Binding HistoryComparisonMetrics}"
+                            AutoGenerateColumns="False"
+                            IsReadOnly="True"
+                            CanUserAddRows="False"
+                            HeadersVisibility="Column"
+                            Margin="0,10,0,0"
+                            Height="260">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="指标"
+                                          Binding="{Binding Metric}"
+                                          Width="110" />
+                      <DataGridTextColumn Header="基准"
+                                          Binding="{Binding Baseline}"
+                                          Width="70" />
+                      <DataGridTextColumn Header="对比"
+                                          Binding="{Binding Candidate}"
+                                          Width="70" />
+                      <DataGridTextColumn Header="差值"
+                                          Binding="{Binding Delta}"
+                                          Width="*" />
+                    </DataGrid.Columns>
+                  </DataGrid>
                 </StackPanel>
               </Border>
             </Grid>
