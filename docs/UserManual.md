@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 11.
+Last updated: 2026-07-29, iteration 12.
 
 ## Requirements
 
@@ -89,7 +89,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 10 tests pass.
+Current expected result: 11 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -110,6 +110,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - Analyze either the full CSV range or a user-entered analysis time window.
 - Fill and show the active analysis window after CSV import.
 - Show a conservative response assessment summary after analysis.
+- Export analysis result CSV from the infrastructure layer. UI wiring is planned next.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time

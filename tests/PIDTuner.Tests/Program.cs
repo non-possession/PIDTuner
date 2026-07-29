@@ -21,7 +21,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
-    ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError)
+    ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
+    ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields)
 };
 
 var failures = new List<string>();
@@ -326,6 +327,28 @@ static Task ResponseAssessmentFlagsHighOvershootAndSteadyStateError()
     AssertContains("未发现明显异常", normal.Summary);
 
     return Task.CompletedTask;
+}
+
+static async Task AnalysisResultCsvExporterWritesStableFields()
+{
+    var window = new AnalysisWindow(
+        DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse("2026-07-29T10:00:06.0000000+00:00", CultureInfo.InvariantCulture));
+    var metrics = new PidResponseMetrics(12, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), 0.5);
+    var assessment = new PidResponseAssessment(
+        PidResponseSeverity.Warning,
+        "超调偏高，可能需要降低比例增益或增强阻尼。",
+        new[] { "超调偏高，可能需要降低比例增益或增强阻尼。" });
+
+    var exporter = new PidAnalysisResultCsvExporter();
+    await using var output = new MemoryStream();
+
+    await exporter.ExportAsync(window, metrics, assessment, output, CancellationToken.None);
+
+    var csv = Encoding.UTF8.GetString(output.ToArray());
+    AssertContains("window_start,window_end,overshoot_percent,rise_time_seconds,settling_time_seconds,steady_state_error,severity,summary", csv);
+    AssertContains("2026-07-29T10:00:00.0000000+00:00,2026-07-29T10:00:06.0000000+00:00,12,2,5,0.5,Warning", csv);
+    AssertContains("\"超调偏高，可能需要降低比例增益或增强阻尼。\"", csv);
 }
 
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
