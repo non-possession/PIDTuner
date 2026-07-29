@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PIDTuner.Application\PIDTuner.Application.csproj" />
+    <ProjectReference Include="..\..\src\PIDTuner.Domain\PIDTuner.Domain.csproj" />
+    <ProjectReference Include="..\..\src\PIDTuner.Infrastructure\PIDTuner.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

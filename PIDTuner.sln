@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02FF0D29-4579-45F8-9D4F-D1BA1078AF20}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDTuner.Domain", "src\PIDTuner.Domain\PIDTuner.Domain.csproj", "{EFB48C81-0D88-48D1-B038-B9881B0CD542}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDTuner.Application", "src\PIDTuner.Application\PIDTuner.Application.csproj", "{955D2264-C5BA-498D-A0C0-76CE861A9C23}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDTuner.Infrastructure", "src\PIDTuner.Infrastructure\PIDTuner.Infrastructure.csproj", "{80762A89-D1AB-4CC2-B139-7E757A92DE94}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDTuner.Desktop", "src\PIDTuner.Desktop\PIDTuner.Desktop.csproj", "{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{1DB906AB-4232-46AB-A767-31ED1D1EDD97}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDTuner.Tests", "tests\PIDTuner.Tests\PIDTuner.Tests.csproj", "{469C7CF6-7428-486E-AFB7-D71077DB35F6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EFB48C81-0D88-48D1-B038-B9881B0CD542}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFB48C81-0D88-48D1-B038-B9881B0CD542}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFB48C81-0D88-48D1-B038-B9881B0CD542}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFB48C81-0D88-48D1-B038-B9881B0CD542}.Release|Any CPU.Build.0 = Release|Any CPU
+		{955D2264-C5BA-498D-A0C0-76CE861A9C23}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{955D2264-C5BA-498D-A0C0-76CE861A9C23}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{955D2264-C5BA-498D-A0C0-76CE861A9C23}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{955D2264-C5BA-498D-A0C0-76CE861A9C23}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80762A89-D1AB-4CC2-B139-7E757A92DE94}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80762A89-D1AB-4CC2-B139-7E757A92DE94}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80762A89-D1AB-4CC2-B139-7E757A92DE94}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80762A89-D1AB-4CC2-B139-7E757A92DE94}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{469C7CF6-7428-486E-AFB7-D71077DB35F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{469C7CF6-7428-486E-AFB7-D71077DB35F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{469C7CF6-7428-486E-AFB7-D71077DB35F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{469C7CF6-7428-486E-AFB7-D71077DB35F6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EFB48C81-0D88-48D1-B038-B9881B0CD542} = {02FF0D29-4579-45F8-9D4F-D1BA1078AF20}
+		{955D2264-C5BA-498D-A0C0-76CE861A9C23} = {02FF0D29-4579-45F8-9D4F-D1BA1078AF20}
+		{80762A89-D1AB-4CC2-B139-7E757A92DE94} = {02FF0D29-4579-45F8-9D4F-D1BA1078AF20}
+		{4816C3C7-E732-4D57-A8F4-2094E0A7FE6E} = {02FF0D29-4579-45F8-9D4F-D1BA1078AF20}
+		{469C7CF6-7428-486E-AFB7-D71077DB35F6} = {1DB906AB-4232-46AB-A767-31ED1D1EDD97}
+	EndGlobalSection
+EndGlobal

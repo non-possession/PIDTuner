@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "profileName": "default-pid-sample-fields",
+  "description": "Default CSV field profile for one PID tuning project. Users may copy and edit this per project.",
+  "fields": [
+    {
+      "key": "timestamp",
+      "displayName": "Timestamp",
+      "dataType": "DateTimeOffset",
+      "required": true,
+      "unit": null,
+      "role": "SampleTime"
+    },
+    {
+      "key": "sp",
+      "displayName": "SP",
+      "dataType": "Double",
+      "required": true,
+      "unit": null,
+      "role": "SetPoint"
+    },
+    {
+      "key": "pv",
+      "displayName": "PV",
+      "dataType": "Double",
+      "required": true,
+      "unit": null,
+      "role": "ProcessValue"
+    },
+    {
+      "key": "mv",
+      "displayName": "MV",
+      "dataType": "Double",
+      "required": true,
+      "unit": null,
+      "role": "ManipulatedValue"
+    },
+    {
+      "key": "kp",
+      "displayName": "Kp",
+      "dataType": "Double",
+      "required": false,
+      "unit": null,
+      "role": "PidParameter"
+    },
+    {
+      "key": "ki_or_ti",
+      "displayName": "Ki/Ti",
+      "dataType": "Double",
+      "required": false,
+      "unit": null,
+      "role": "PidParameter"
+    },
+    {
+      "key": "kd_or_td",
+      "displayName": "Kd/Td",
+      "dataType": "Double",
+      "required": false,
+      "unit": null,
+      "role": "PidParameter"
+    },
+    {
+      "key": "is_plc_connected",
+      "displayName": "PLC Connected",
+      "dataType": "Boolean",
+      "required": false,
+      "unit": null,
+      "role": "ConnectionState"
+    },
+    {
+      "key": "test_session_id",
+      "displayName": "Test Session Id",
+      "dataType": "Guid",
+      "required": true,
+      "unit": null,
+      "role": "TestSession"
+    },
+    {
+      "key": "parameter_set_id",
+      "displayName": "Parameter Set Id",
+      "dataType": "Guid",
+      "required": false,
+      "unit": null,
+      "role": "ParameterSet"
+    }
+  ]
+}

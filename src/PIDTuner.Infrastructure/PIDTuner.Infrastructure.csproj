@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\PIDTuner.Application\PIDTuner.Application.csproj" />
+    <ProjectReference Include="..\PIDTuner.Domain\PIDTuner.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+using Microsoft.Win32;
+
+namespace PIDTuner.Desktop.Services;
+
+public sealed class WindowsOpenFileDialogService : IOpenFileDialogService
+{
+    public string? PickCsvFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择 PID 采样 CSV",
+            Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*",
+            Multiselect = false
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+}

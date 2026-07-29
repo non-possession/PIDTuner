@@ -1,0 +1,98 @@
+<Window x:Class="PIDTuner.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="clr-namespace:PIDTuner.Desktop.ViewModels"
+        Title="PIDTuner"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="640">
+  <Window.DataContext>
+    <viewModels:MainWindowViewModel />
+  </Window.DataContext>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top"
+            Padding="16"
+            Background="#1F2937">
+      <TextBlock Text="{Binding Title}"
+                 FontSize="20"
+                 Foreground="White"
+                 FontWeight="SemiBold" />
+    </Border>
+
+    <Grid Margin="16">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <TextBlock Text="{Binding StatusMessage}"
+                 FontSize="14"
+                 Foreground="#374151" />
+
+      <TabControl Grid.Row="1"
+                  Margin="0,16,0,0">
+        <TabItem Header="连接与配置" />
+        <TabItem Header="实时监控" />
+        <TabItem Header="分析">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Button Command="{Binding ImportCsvCommand}"
+                    Content="导入 CSV"
+                    Width="120"
+                    Height="36"
+                    HorizontalAlignment="Left" />
+
+            <UniformGrid Grid.Row="1"
+                         Columns="5"
+                         Margin="0,20,0,0">
+              <StackPanel>
+                <TextBlock Text="样本数"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding SampleCount}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="超调量"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding OvershootPercent}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="上升时间"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding RiseTime}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="调节时间"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding SettlingTime}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="稳态误差"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding SteadyStateError}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+            </UniformGrid>
+          </Grid>
+        </TabItem>
+        <TabItem Header="参数调整" />
+        <TabItem Header="历史记录" />
+        <TabItem Header="系统日志" />
+      </TabControl>
+    </Grid>
+  </DockPanel>
+</Window>
