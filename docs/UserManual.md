@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 16.
+Last updated: 2026-07-29, iteration 20.
 
 ## Requirements
 
@@ -66,6 +66,21 @@ local\test-sessions
 ```
 
 The saved files are JSON files used by the current local persistence adapter. This keeps the UI and application layer ready for a later SQLite adapter.
+After imports, exports, saves, and history operations, PIDTuner shows a dismissible message box near the top of the window.
+
+## Open Saved History
+
+On the `历史记录` tab:
+
+1. Click `刷新历史` to load locally saved test sessions from:
+
+```text
+local\test-sessions
+```
+
+2. Select a row.
+3. Click `打开记录`.
+4. The selected session samples are loaded back into the analysis page state, including metrics and trend preview.
 
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
@@ -101,7 +116,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 13 tests pass.
+Current expected result: 14 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -113,7 +128,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV before rendering, so the image should show the current offline analysis results.
+It loads the bundled example profile and sample CSV, saves the current test session, and then renders the window. The image should show the latest offline analysis results and the operation message box.
 
 ## Current Features
 
@@ -124,8 +139,11 @@ It loads the bundled example profile and sample CSV before rendering, so the ima
 - Analyze either the full CSV range or a user-entered analysis time window.
 - Fill and show the active analysis window after CSV import.
 - Show a conservative response assessment summary after analysis.
+- Show a dismissible operation message box after imports, exports, saves, and history operations.
 - Export the latest analysis result CSV from the analysis page.
 - Save the latest offline analysis as a local test session record.
+- Refresh saved test sessions from the history page.
+- Open a saved test session back into the analysis page state.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
@@ -154,8 +172,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 15 snapshot:
+Iteration 20 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-15-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-20-rendered.png
 ```

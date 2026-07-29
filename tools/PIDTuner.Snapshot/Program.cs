@@ -33,6 +33,7 @@ var thread = new Thread(() =>
     if (window.DataContext is MainWindowViewModel viewModel)
     {
         PumpDispatcherUntilComplete(viewModel.LoadExampleAsync());
+        PumpDispatcherUntilComplete(viewModel.SaveTestSessionAsync());
         window.UpdateLayout();
         Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
     }

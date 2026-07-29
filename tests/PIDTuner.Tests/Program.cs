@@ -1,4 +1,6 @@
+using System.IO;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Application.Services;
@@ -6,6 +8,8 @@ using PIDTuner.Domain.Trends;
 using PIDTuner.Domain.Models;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Domain.Configuration;
+using PIDTuner.Desktop.Services;
+using PIDTuner.Desktop.ViewModels;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Csv;
 using PIDTuner.Infrastructure.Configuration;
@@ -25,7 +29,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
     ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields),
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
-    ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession)
+    ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession),
+    ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
 var failures = new List<string>();
@@ -407,6 +412,36 @@ static async Task JsonPidSampleRepositorySavesAndLoadsSamplesBySession()
     AssertEqual(sessionId, loaded[0].TestSessionId, "stored sample session id");
 }
 
+static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
+{
+    var directory = CreateTestStorageDirectory();
+    var sessionRepository = new JsonTestSessionRepository(directory);
+    var sampleRepository = new JsonPidSampleRepository(directory);
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        sessionRepository,
+        sampleRepository);
+
+    await viewModel.LoadExampleAsync();
+
+    AssertEqual(true, viewModel.IsNotificationVisible, "analysis notification visibility");
+    AssertEqual("离线分析已完成", viewModel.NotificationTitle, "analysis notification title");
+    AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
+
+    await viewModel.SaveTestSessionAsync();
+
+    AssertEqual(true, viewModel.IsNotificationVisible, "save session notification visibility");
+    AssertEqual("试验记录已保存", viewModel.NotificationTitle, "save session notification title");
+    AssertEqual(1, viewModel.HistorySessions.Count, "history count after save");
+
+    viewModel.SelectedHistorySession = viewModel.HistorySessions[0];
+    await viewModel.OpenHistorySessionAsync();
+
+    AssertEqual("历史记录已打开", viewModel.NotificationTitle, "open history notification title");
+    AssertEqual("7", viewModel.SampleCount, "history sample count");
+}
+
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
 {
     return new PidSample(timestamp, sp, pv, mv, 1.2, 0.4, 0.1, true, sessionId, null);
@@ -474,4 +509,27 @@ static PidSampleFieldDefinition Field(
     bool required)
 {
     return new PidSampleFieldDefinition(key, key, dataType, required, null, role);
+}
+
+file sealed class NoFileDialogService : IOpenFileDialogService
+{
+    public string? PickCsvFile()
+    {
+        return null;
+    }
+
+    public string? PickFieldProfileFile()
+    {
+        return null;
+    }
+
+    public string? PickFieldProfileSaveFile()
+    {
+        return null;
+    }
+
+    public string? PickAnalysisResultSaveFile()
+    {
+        return null;
+    }
 }

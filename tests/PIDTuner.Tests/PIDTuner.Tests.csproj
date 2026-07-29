@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PIDTuner.Application\PIDTuner.Application.csproj" />
+    <ProjectReference Include="..\..\src\PIDTuner.Desktop\PIDTuner.Desktop.csproj" />
     <ProjectReference Include="..\..\src\PIDTuner.Domain\PIDTuner.Domain.csproj" />
     <ProjectReference Include="..\..\src\PIDTuner.Infrastructure\PIDTuner.Infrastructure.csproj" />
   </ItemGroup>

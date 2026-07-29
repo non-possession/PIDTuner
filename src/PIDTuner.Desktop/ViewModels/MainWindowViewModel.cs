@@ -1,5 +1,5 @@
-using System.ComponentModel;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -49,11 +49,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _analysisEndText = string.Empty;
     private string _activeAnalysisWindow = "-";
     private string _assessmentSummary = "-";
+    private string _notificationTitle = string.Empty;
+    private string _notificationMessage = string.Empty;
+    private string _notificationKind = "Info";
+    private bool _isNotificationVisible;
+    private string _historyStatus = "尚未加载历史记录。";
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
+    private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
+    private TestSessionListItemViewModel? _selectedHistorySession;
 
     public MainWindowViewModel()
         : this(
@@ -84,6 +91,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ExportAnalysisResultCommand = new AsyncCommand(ExportAnalysisResultAsync);
         SaveTestSessionCommand = new AsyncCommand(SaveTestSessionAsync);
         LoadExampleCommand = new AsyncCommand(LoadExampleAsync);
+        DismissNotificationCommand = new AsyncCommand(DismissNotificationAsync);
+        LoadHistoryCommand = new AsyncCommand(LoadHistoryAsync);
+        OpenHistorySessionCommand = new AsyncCommand(OpenHistorySessionAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -162,6 +172,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _assessmentSummary, value);
     }
 
+    public string NotificationTitle
+    {
+        get => _notificationTitle;
+        private set => SetProperty(ref _notificationTitle, value);
+    }
+
+    public string NotificationMessage
+    {
+        get => _notificationMessage;
+        private set => SetProperty(ref _notificationMessage, value);
+    }
+
+    public string NotificationKind
+    {
+        get => _notificationKind;
+        private set => SetProperty(ref _notificationKind, value);
+    }
+
+    public bool IsNotificationVisible
+    {
+        get => _isNotificationVisible;
+        private set => SetProperty(ref _isNotificationVisible, value);
+    }
+
+    public string HistoryStatus
+    {
+        get => _historyStatus;
+        private set => SetProperty(ref _historyStatus, value);
+    }
+
     public PointCollection SetPointPoints
     {
         get => _setPointPoints;
@@ -186,10 +226,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _fieldDefinitions, value);
     }
 
+    public ObservableCollection<TestSessionListItemViewModel> HistorySessions
+    {
+        get => _historySessions;
+        private set => SetProperty(ref _historySessions, value);
+    }
+
     public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
     {
         get => _selectedFieldDefinition;
         set => SetProperty(ref _selectedFieldDefinition, value);
+    }
+
+    public TestSessionListItemViewModel? SelectedHistorySession
+    {
+        get => _selectedHistorySession;
+        set => SetProperty(ref _selectedHistorySession, value);
     }
 
     public ICommand ImportCsvCommand { get; }
@@ -208,6 +260,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand LoadExampleCommand { get; }
 
+    public ICommand DismissNotificationCommand { get; }
+
+    public ICommand LoadHistoryCommand { get; }
+
+    public ICommand OpenHistorySessionCommand { get; }
+
     public async Task LoadExampleAsync()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -216,7 +274,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         if (!File.Exists(fieldProfilePath) || !File.Exists(csvPath))
         {
-            StatusMessage = "示例文件不存在，请确认从仓库根目录运行程序。";
+            Notify("示例加载失败", "示例文件不存在，请确认从仓库根目录运行程序。", "Error");
             return;
         }
 
@@ -233,7 +291,89 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            StatusMessage = $"示例加载失败：{exception.Message}";
+            Notify("示例加载失败", exception.Message, "Error");
+        }
+    }
+
+    public async Task SaveTestSessionAsync()
+    {
+        if (_lastAnalysisWindow is null || _lastSamples.Count == 0)
+        {
+            Notify("无法保存试验记录", "请先导入 CSV 并完成一次分析。", "Warning");
+            return;
+        }
+
+        try
+        {
+            var sessionId = _lastSamples
+                .Select(sample => sample.TestSessionId)
+                .FirstOrDefault(id => id != Guid.Empty);
+
+            if (sessionId == Guid.Empty)
+            {
+                sessionId = Guid.NewGuid();
+            }
+
+            var samples = _lastSamples
+                .Select(sample => sample with { TestSessionId = sessionId })
+                .ToArray();
+
+            var session = new TestSession(
+                sessionId,
+                Guid.Empty,
+                string.IsNullOrWhiteSpace(_lastSourceFileName)
+                    ? $"offline-session-{sessionId:N}"
+                    : Path.GetFileNameWithoutExtension(_lastSourceFileName),
+                _lastAnalysisWindow.Start,
+                _lastAnalysisWindow.End,
+                null,
+                "Offline CSV analysis",
+                $"Profile: {_fieldProfile.ProfileName}");
+
+            await _testSessionRepository.SaveAsync(session, CancellationToken.None);
+            await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
+            await LoadHistoryAsync(showNotification: false);
+            Notify("试验记录已保存", $"{session.Name}，样本 {samples.Length} 条。", "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("试验记录保存失败", exception.Message, "Error");
+        }
+    }
+
+    public async Task LoadHistoryAsync()
+    {
+        await LoadHistoryAsync(showNotification: true);
+    }
+
+    public async Task OpenHistorySessionAsync()
+    {
+        if (SelectedHistorySession is null)
+        {
+            Notify("无法打开历史记录", "请先选择一条历史记录。", "Warning");
+            return;
+        }
+
+        try
+        {
+            var samples = await _pidSampleRepository.GetBySessionAsync(SelectedHistorySession.Id, CancellationToken.None);
+            if (samples.Count == 0)
+            {
+                Notify("历史记录无样本", "该试验记录没有可加载的采样数据。", "Warning");
+                return;
+            }
+
+            var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
+            ApplyAnalysisResult(
+                SelectedHistorySession.Name,
+                samples,
+                window,
+                _pidAnalysisService.Analyze(samples, window));
+            Notify("历史记录已打开", $"{SelectedHistorySession.Name}，样本 {samples.Count} 条。", "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("历史记录打开失败", exception.Message, "Error");
         }
     }
 
@@ -257,11 +397,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Environment.CurrentDirectory;
     }
 
+    private async Task LoadHistoryAsync(bool showNotification)
+    {
+        try
+        {
+            var sessions = await _testSessionRepository.ListAsync(CancellationToken.None);
+            HistorySessions = new ObservableCollection<TestSessionListItemViewModel>(
+                sessions
+                    .OrderByDescending(session => session.StartedAt)
+                    .Select(session => new TestSessionListItemViewModel(session)));
+            HistoryStatus = HistorySessions.Count == 0
+                ? "尚无已保存试验记录。"
+                : $"已加载 {HistorySessions.Count} 条试验记录。";
+
+            if (showNotification)
+            {
+                Notify("历史记录已刷新", HistoryStatus, "Info");
+            }
+        }
+        catch (Exception exception)
+        {
+            HistoryStatus = "历史记录加载失败。";
+            Notify("历史记录加载失败", exception.Message, "Error");
+        }
+    }
+
     private async Task ExportAnalysisResultAsync()
     {
         if (_lastAnalysisWindow is null || _lastMetrics is null || _lastAssessment is null)
         {
-            StatusMessage = "请先导入 CSV 并完成一次分析。";
+            Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
             return;
         }
 
@@ -280,54 +445,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _lastAssessment,
                 stream,
                 CancellationToken.None);
-            StatusMessage = $"已导出分析结果：{Path.GetFileName(fileName)}";
+            Notify("分析结果已导出", Path.GetFileName(fileName), "Success");
         }
         catch (Exception exception)
         {
-            StatusMessage = $"分析结果导出失败：{exception.Message}";
-        }
-    }
-
-    private async Task SaveTestSessionAsync()
-    {
-        if (_lastAnalysisWindow is null || _lastSamples.Count == 0)
-        {
-            StatusMessage = "请先导入 CSV 并完成一次分析。";
-            return;
-        }
-
-        try
-        {
-            var sessionId = _lastSamples
-                .Select(sample => sample.TestSessionId)
-                .FirstOrDefault(id => id != Guid.Empty);
-
-            if (sessionId == Guid.Empty)
-            {
-                sessionId = Guid.NewGuid();
-            }
-
-            var samples = _lastSamples
-                .Select(sample => sample with { TestSessionId = sessionId })
-                .ToArray();
-
-            var session = new TestSession(
-                sessionId,
-                Guid.Empty,
-                string.IsNullOrWhiteSpace(_lastSourceFileName) ? $"offline-session-{sessionId:N}" : Path.GetFileNameWithoutExtension(_lastSourceFileName),
-                _lastAnalysisWindow.Start,
-                _lastAnalysisWindow.End,
-                null,
-                "Offline CSV analysis",
-                $"Profile: {_fieldProfile.ProfileName}");
-
-            await _testSessionRepository.SaveAsync(session, CancellationToken.None);
-            await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
-            StatusMessage = $"已保存试验记录：{session.Name}";
-        }
-        catch (Exception exception)
-        {
-            StatusMessage = $"试验记录保存失败：{exception.Message}";
+            Notify("分析结果导出失败", exception.Message, "Error");
         }
     }
 
@@ -342,7 +464,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var field = PidSampleFieldDefinitionViewModel.CreateNew(index);
         FieldDefinitions.Add(field);
         SelectedFieldDefinition = field;
-        StatusMessage = "已新增字段，请编辑后保存字段配置。";
+        Notify("字段已新增", "请编辑字段信息后保存字段配置。", "Info");
         return Task.CompletedTask;
     }
 
@@ -350,13 +472,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         if (SelectedFieldDefinition is null)
         {
-            StatusMessage = "请先选择要删除的字段。";
+            Notify("无法删除字段", "请先选择要删除的字段。", "Warning");
             return Task.CompletedTask;
         }
 
         FieldDefinitions.Remove(SelectedFieldDefinition);
         SelectedFieldDefinition = null;
-        StatusMessage = "已删除字段，请保存字段配置。";
+        Notify("字段已删除", "请保存字段配置以保留修改。", "Info");
         return Task.CompletedTask;
     }
 
@@ -374,11 +496,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
             await using var stream = File.Create(fileName);
             await _fieldProfileStore.SaveAsync(_fieldProfile, stream, CancellationToken.None);
-            StatusMessage = $"已保存字段配置：{Path.GetFileName(fileName)}";
+            Notify("字段配置已保存", Path.GetFileName(fileName), "Success");
         }
         catch (Exception exception)
         {
-            StatusMessage = $"字段配置保存失败：{exception.Message}";
+            Notify("字段配置保存失败", exception.Message, "Error");
         }
     }
 
@@ -396,11 +518,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _fieldProfile = await _fieldProfileStore.LoadAsync(stream, CancellationToken.None);
             CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
             RefreshFieldDefinitions();
-            StatusMessage = $"已加载字段配置：{Path.GetFileName(fileName)}";
+            Notify("字段配置已加载", Path.GetFileName(fileName), "Success");
         }
         catch (Exception exception)
         {
-            StatusMessage = $"字段配置加载失败：{exception.Message}";
+            Notify("字段配置加载失败", exception.Message, "Error");
         }
     }
 
@@ -418,7 +540,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            StatusMessage = $"离线分析失败：{exception.Message}";
+            Notify("离线分析失败", exception.Message, "Error");
         }
     }
 
@@ -430,28 +552,53 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
         var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
 
+        ApplyAnalysisResult(fileName, result.Samples, result.Window, result.Metrics);
+
         if (window is null)
         {
             AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
             AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
         }
 
+        Notify("离线分析已完成", $"{Path.GetFileName(fileName)}，样本 {result.Samples.Count} 条。", "Success");
+    }
+
+    private void ApplyAnalysisResult(
+        string sourceName,
+        IReadOnlyList<PidSample> samples,
+        AnalysisWindow window,
+        PidResponseMetrics metrics)
+    {
         ActiveAnalysisWindow =
-            $"{result.Window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {result.Window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
-        SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
-        OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");
-        RiseTime = FormatNullable(result.Metrics.RiseTime);
-        SettlingTime = FormatNullable(result.Metrics.SettlingTime);
-        SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
-        var assessment = _assessmentService.Assess(result.Metrics);
+            $"{window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
+        SampleCount = samples.Count.ToString(CultureInfo.InvariantCulture);
+        OvershootPercent = FormatNullable(metrics.OvershootPercent, "0.### '%'");
+        RiseTime = FormatNullable(metrics.RiseTime);
+        SettlingTime = FormatNullable(metrics.SettlingTime);
+        SteadyStateError = FormatNullable(metrics.SteadyStateError, "0.###");
+        var assessment = _assessmentService.Assess(metrics);
         AssessmentSummary = assessment.Summary;
-        _lastAnalysisWindow = result.Window;
-        _lastMetrics = result.Metrics;
+        _lastAnalysisWindow = window;
+        _lastMetrics = metrics;
         _lastAssessment = assessment;
-        _lastSamples = result.Samples;
-        _lastSourceFileName = fileName;
-        UpdateTrendPreview(result.Samples);
-        StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
+        _lastSamples = samples;
+        _lastSourceFileName = sourceName;
+        UpdateTrendPreview(samples);
+    }
+
+    private Task DismissNotificationAsync()
+    {
+        IsNotificationVisible = false;
+        return Task.CompletedTask;
+    }
+
+    private void Notify(string title, string message, string kind)
+    {
+        StatusMessage = $"{title}：{message}";
+        NotificationTitle = title;
+        NotificationMessage = message;
+        NotificationKind = kind;
+        IsNotificationVisible = true;
     }
 
     private static string FormatNullable(double? value, string format)
@@ -464,7 +611,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return value.HasValue ? value.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture) : "-";
     }
 
-    private void UpdateTrendPreview(IReadOnlyList<Domain.Models.PidSample> samples)
+    private void UpdateTrendPreview(IReadOnlyList<PidSample> samples)
     {
         var trend = _trendSeriesBuilder.Build(samples);
         SetPointPoints = ToPointCollection(trend.SetPoint);

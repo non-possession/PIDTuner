@@ -7,6 +7,10 @@
         Height="800"
         MinWidth="960"
         MinHeight="640">
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+  </Window.Resources>
+
   <Window.DataContext>
     <viewModels:MainWindowViewModel />
   </Window.DataContext>
@@ -24,6 +28,7 @@
     <Grid Margin="16">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
@@ -31,7 +36,33 @@
                  FontSize="14"
                  Foreground="#374151" />
 
-      <TabControl Grid.Row="1"
+      <Border Grid.Row="1"
+              Margin="0,10,0,0"
+              Padding="12"
+              BorderBrush="#93C5FD"
+              BorderThickness="1"
+              Background="#EFF6FF"
+              Visibility="{Binding IsNotificationVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <DockPanel LastChildFill="True">
+          <Button DockPanel.Dock="Right"
+                  Command="{Binding DismissNotificationCommand}"
+                  Content="关闭"
+                  Width="56"
+                  Height="28"
+                  Margin="12,0,0,0" />
+          <StackPanel>
+            <TextBlock Text="{Binding NotificationTitle}"
+                       FontWeight="SemiBold"
+                       Foreground="#1F2937" />
+            <TextBlock Text="{Binding NotificationMessage}"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="#374151" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <TabControl Grid.Row="2"
                   SelectedIndex="2"
                   Margin="0,16,0,0">
         <TabItem Header="连接与配置" />
@@ -43,48 +74,49 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel Orientation="Horizontal">
+            <WrapPanel>
               <Button Command="{Binding LoadFieldProfileCommand}"
                       Content="导入字段配置"
                       Width="120"
-                      Height="36" />
+                      Height="36"
+                      Margin="0,0,12,8" />
               <Button Command="{Binding LoadExampleCommand}"
                       Content="载入示例"
                       Width="96"
                       Height="36"
-                      Margin="12,0,0,0" />
+                      Margin="0,0,12,8" />
               <Button Command="{Binding SaveFieldProfileCommand}"
                       Content="保存字段配置"
                       Width="120"
                       Height="36"
-                      Margin="12,0,0,0" />
+                      Margin="0,0,12,8" />
               <Button Command="{Binding ImportCsvCommand}"
                       Content="导入 CSV"
                       Width="120"
                       Height="36"
-                      Margin="12,0,0,0" />
+                      Margin="0,0,12,8" />
               <Button Command="{Binding ExportAnalysisResultCommand}"
                       Content="导出分析结果"
                       Width="120"
                       Height="36"
-                      Margin="12,0,0,0" />
+                      Margin="0,0,12,8" />
               <Button Command="{Binding SaveTestSessionCommand}"
                       Content="保存试验记录"
                       Width="120"
                       Height="36"
-                      Margin="12,0,0,0" />
+                      Margin="0,0,12,8" />
               <TextBlock Text="{Binding CurrentFieldProfile}"
                          VerticalAlignment="Center"
-                         Margin="16,0,0,0"
+                         Margin="4,0,0,8"
                          Foreground="#374151" />
-            </StackPanel>
+            </WrapPanel>
 
             <StackPanel Grid.Row="1"
                         Orientation="Horizontal"
-                        Margin="0,16,0,0">
+                        Margin="0,8,0,0">
               <TextBlock Text="分析开始"
                          VerticalAlignment="Center"
                          Foreground="#6B7280" />
@@ -160,7 +192,7 @@
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
               </Grid.RowDefinitions>
 
               <StackPanel Orientation="Horizontal">
@@ -193,7 +225,6 @@
               </StackPanel>
 
               <Border Grid.Row="1"
-                      Grid.Column="0"
                       Width="560"
                       Height="200"
                       Margin="0,8,0,0"
@@ -231,80 +262,137 @@
                 </Canvas>
               </Border>
 
-              <DataGrid Grid.Row="2"
-                        ItemsSource="{Binding FieldDefinitions}"
-                        SelectedItem="{Binding SelectedFieldDefinition}"
-                        AutoGenerateColumns="False"
-                        IsReadOnly="False"
-                        Width="760"
-                        Height="150"
-                        Margin="0,10,0,0"
-                        HorizontalAlignment="Left"
-                        CanUserAddRows="False"
-                        HeadersVisibility="Column">
-                <DataGrid.Columns>
-                  <DataGridTextColumn Header="字段"
-                                      Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
-                                      Width="78" />
-                  <DataGridTextColumn Header="显示名"
-                                      Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
-                                      Width="78" />
-                  <DataGridTemplateColumn Header="类型"
-                                          Width="96">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding DataType}" />
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                    <DataGridTemplateColumn.CellEditingTemplate>
-                      <DataTemplate>
-                        <ComboBox ItemsSource="{Binding DataContext.AvailableFieldDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                  SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" />
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellEditingTemplate>
-                  </DataGridTemplateColumn>
-                  <DataGridCheckBoxColumn Header="必填"
-                                          Binding="{Binding Required, UpdateSourceTrigger=PropertyChanged}"
-                                          Width="44" />
-                  <DataGridTextColumn Header="单位"
-                                      Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
-                                      Width="44" />
-                  <DataGridTemplateColumn Header="角色"
-                                          Width="126">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding Role}" />
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                    <DataGridTemplateColumn.CellEditingTemplate>
-                      <DataTemplate>
-                        <ComboBox ItemsSource="{Binding DataContext.AvailableFieldRoles, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                  SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}" />
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellEditingTemplate>
-                  </DataGridTemplateColumn>
-                </DataGrid.Columns>
-              </DataGrid>
+              <Grid Grid.Row="2"
+                    Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="760" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-              <StackPanel Grid.Row="2"
-                          Orientation="Horizontal"
-                          Margin="776,10,0,0"
-                          HorizontalAlignment="Left">
-                <Button Command="{Binding AddFieldCommand}"
-                        Content="新增字段"
-                        Width="96"
-                        Height="32" />
-                <Button Command="{Binding RemoveFieldCommand}"
-                        Content="删除字段"
-                        Width="96"
-                        Height="32"
-                        Margin="10,0,0,0" />
-              </StackPanel>
+                <DataGrid ItemsSource="{Binding FieldDefinitions}"
+                          SelectedItem="{Binding SelectedFieldDefinition}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="False"
+                          Height="150"
+                          CanUserAddRows="False"
+                          HeadersVisibility="Column">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="字段"
+                                        Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="78" />
+                    <DataGridTextColumn Header="显示名"
+                                        Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="78" />
+                    <DataGridTemplateColumn Header="类型"
+                                            Width="96">
+                      <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding DataType}" />
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellTemplate>
+                      <DataGridTemplateColumn.CellEditingTemplate>
+                        <DataTemplate>
+                          <ComboBox ItemsSource="{Binding DataContext.AvailableFieldDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                    SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridCheckBoxColumn Header="必填"
+                                            Binding="{Binding Required, UpdateSourceTrigger=PropertyChanged}"
+                                            Width="44" />
+                    <DataGridTextColumn Header="单位"
+                                        Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="44" />
+                    <DataGridTemplateColumn Header="角色"
+                                            Width="126">
+                      <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding Role}" />
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellTemplate>
+                      <DataGridTemplateColumn.CellEditingTemplate>
+                        <DataTemplate>
+                          <ComboBox ItemsSource="{Binding DataContext.AvailableFieldRoles, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                    SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+                  </DataGrid.Columns>
+                </DataGrid>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Margin="16,0,0,0"
+                            VerticalAlignment="Top">
+                  <Button Command="{Binding AddFieldCommand}"
+                          Content="新增字段"
+                          Width="96"
+                          Height="32" />
+                  <Button Command="{Binding RemoveFieldCommand}"
+                          Content="删除字段"
+                          Width="96"
+                          Height="32"
+                          Margin="10,0,0,0" />
+                </StackPanel>
+              </Grid>
             </Grid>
           </Grid>
         </TabItem>
         <TabItem Header="参数调整" />
-        <TabItem Header="历史记录" />
+        <TabItem Header="历史记录">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+              <Button Command="{Binding LoadHistoryCommand}"
+                      Content="刷新历史"
+                      Width="96"
+                      Height="36" />
+              <Button Command="{Binding OpenHistorySessionCommand}"
+                      Content="打开记录"
+                      Width="96"
+                      Height="36"
+                      Margin="12,0,0,0" />
+              <TextBlock Text="{Binding HistoryStatus}"
+                         VerticalAlignment="Center"
+                         Margin="16,0,0,0"
+                         Foreground="#374151" />
+            </StackPanel>
+
+            <DataGrid Grid.Row="1"
+                      ItemsSource="{Binding HistorySessions}"
+                      SelectedItem="{Binding SelectedHistorySession}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      Margin="0,16,0,0"
+                      CanUserAddRows="False"
+                      HeadersVisibility="Column">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="名称"
+                                    Binding="{Binding Name}"
+                                    Width="180" />
+                <DataGridTextColumn Header="开始"
+                                    Binding="{Binding StartedAt}"
+                                    Width="150" />
+                <DataGridTextColumn Header="结束"
+                                    Binding="{Binding EndedAt}"
+                                    Width="150" />
+                <DataGridTextColumn Header="设备"
+                                    Binding="{Binding Device}"
+                                    Width="120" />
+                <DataGridTextColumn Header="工况"
+                                    Binding="{Binding OperatingCondition}"
+                                    Width="150" />
+                <DataGridTextColumn Header="备注"
+                                    Binding="{Binding Notes}"
+                                    Width="*" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
         <TabItem Header="系统日志" />
       </TabControl>
     </Grid>
