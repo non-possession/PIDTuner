@@ -11,4 +11,8 @@ public interface IOpenFileDialogService
     string? PickAnalysisResultSaveFile();
 
     string? PickHistorySamplesSaveFile();
+
+    string? PickPlcProjectConfigurationFile();
+
+    string? PickPlcProjectConfigurationSaveFile();
 }

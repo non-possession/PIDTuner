@@ -65,7 +65,184 @@
       <TabControl Grid.Row="2"
                   SelectedIndex="2"
                   Margin="0,16,0,0">
-        <TabItem Header="连接与配置" />
+        <TabItem Header="连接与配置">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <WrapPanel>
+              <Button Command="{Binding LoadPlcConfigurationCommand}"
+                      Content="导入 PLC 配置"
+                      Width="120"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding SavePlcConfigurationCommand}"
+                      Content="保存 PLC 配置"
+                      Width="120"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding AddTagCommand}"
+                      Content="新增点位"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding RemoveTagCommand}"
+                      Content="删除点位"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <TextBlock Text="{Binding PlcConfigurationStatus}"
+                         VerticalAlignment="Center"
+                         Margin="4,0,0,8"
+                         Foreground="#374151" />
+            </WrapPanel>
+
+            <Grid Grid.Row="1"
+                  Margin="0,10,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="40" />
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="60" />
+                <ColumnDefinition Width="60" />
+                <ColumnDefinition Width="80" />
+                <ColumnDefinition Width="0" />
+                <ColumnDefinition Width="80" />
+                <ColumnDefinition Width="80" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <TextBlock Text="配置名"
+                         Foreground="#6B7280" />
+              <TextBox Grid.Row="1"
+                       Text="{Binding PlcConfigurationName, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28" />
+              <TextBlock Grid.Column="1"
+                         Text="协议"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="1"
+                       Text="{Binding PlcProtocol, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="2"
+                         Text="IP"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="2"
+                       Grid.ColumnSpan="2"
+                       Text="{Binding PlcIpAddress, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="4"
+                         Text="Rack"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="4"
+                       Text="{Binding PlcRack, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="5"
+                         Text="Slot"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="5"
+                       Text="{Binding PlcSlot, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="6"
+                         Text="超时 ms"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="6"
+                       Text="{Binding PlcTimeoutMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="8"
+                         Text="采样 ms"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="8"
+                       Text="{Binding PlcDefaultSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+            </Grid>
+
+            <DataGrid Grid.Row="2"
+                      ItemsSource="{Binding TagDefinitions}"
+                      SelectedItem="{Binding SelectedTagDefinition}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="False"
+                      Margin="0,18,0,0"
+                      CanUserAddRows="False"
+                      HeadersVisibility="Column">
+              <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="启用"
+                                        Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="48" />
+                <DataGridTextColumn Header="名称"
+                                    Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="90" />
+                <DataGridTextColumn Header="地址"
+                                    Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="130" />
+                <DataGridTemplateColumn Header="类型"
+                                        Width="96">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding DataType}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                  <DataGridTemplateColumn.CellEditingTemplate>
+                    <DataTemplate>
+                      <ComboBox ItemsSource="{Binding DataContext.AvailablePlcDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellEditingTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="权限"
+                                        Width="96">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding AccessMode}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                  <DataGridTemplateColumn.CellEditingTemplate>
+                    <DataTemplate>
+                      <ComboBox ItemsSource="{Binding DataContext.AvailableTagAccessModes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                SelectedItem="{Binding AccessMode, UpdateSourceTrigger=PropertyChanged}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellEditingTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="缩放"
+                                    Binding="{Binding Scale, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="70" />
+                <DataGridTextColumn Header="单位"
+                                    Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="70" />
+                <DataGridTextColumn Header="采样 ms"
+                                    Binding="{Binding SamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="80" />
+                <DataGridTextColumn Header="描述"
+                                    Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
         <TabItem Header="实时监控" />
         <TabItem Header="分析">
           <Grid Margin="16">

@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 35.
+Last updated: 2026-07-29, iteration 40.
 
 ## Requirements
 
@@ -29,6 +29,27 @@ dotnet run --project .\src\PIDTuner.Desktop\PIDTuner.Desktop.csproj
 ```
 
 The current MVP opens on the `分析` tab.
+
+## Configure A PLC Project
+
+On the `连接与配置` tab, PIDTuner now supports editable project-level PLC metadata and tag definitions. This is configuration only; it does not open a live PLC connection yet.
+
+You can start from the bundled example:
+
+```text
+config\plc-project.example.json
+```
+
+Typical flow:
+
+1. Edit project fields such as configuration name, protocol, IP address, Rack, Slot, timeout, and default sampling interval.
+2. Edit tag rows directly. Current tag metadata includes enable state, name, address, data type, access mode, scale, unit, sampling interval, and description.
+3. Click `新增点位` to add a tag.
+4. Select a tag row and click `删除点位` to remove it.
+5. Click `保存 PLC 配置` to save the current project configuration as JSON.
+6. Click `导入 PLC 配置` to load an existing PLC project configuration.
+
+Save notifications include the absolute JSON file path.
 
 ## Try The Current Offline CSV Flow
 
@@ -146,7 +167,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 16 tests pass.
+Current expected result: 18 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -158,11 +179,14 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, records one accepted recommendation review, and then renders the window. The image should show the parameter-adjustment page and the review record table.
+It loads the bundled example profile and sample CSV, saves the current test session, records one accepted recommendation review, and then renders the window. The current snapshot view is switched to the connection/configuration page so the PLC project and tag configuration surface is visible.
 
 ## Current Features
 
 - Load a PID sample field profile from JSON.
+- Load and save a PLC project configuration from JSON.
+- Edit PLC project connection metadata.
+- Edit, add, remove, and save PLC tag definitions.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
@@ -192,7 +216,7 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 
 ## Current Limitations
 
-- No PLC connection yet.
+- No live PLC connection or PLC writeback yet. The connection page is currently project/tag configuration only.
 - No SQLite persistence yet.
 - No real charting library yet; the trend preview is a lightweight WPF polyline preview.
 - CSV parsing supports quoted fields with commas and escaped double quotes on a single line.
@@ -210,8 +234,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 35 snapshot:
+Iteration 40 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-35-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-40-rendered.png
 ```

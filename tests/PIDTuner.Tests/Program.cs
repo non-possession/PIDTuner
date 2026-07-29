@@ -32,6 +32,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
     ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession),
     ("json recommendation review repository saves and lists reviews", JsonRecommendationReviewRepositorySavesAndListsReviews),
+    ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
+    ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
@@ -461,6 +463,76 @@ static async Task JsonRecommendationReviewRepositorySavesAndListsReviews()
     AssertEqual("现场同意小步验证", reviews[0].EngineerNote, "stored review note");
 }
 
+static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
+{
+    var store = new JsonPlcProjectConfigurationStore();
+    var configuration = new PlcProjectConfiguration(
+        1,
+        "line-a-temperature-loop",
+        "Siemens S7",
+        "10.10.0.5",
+        0,
+        2,
+        2500,
+        250,
+        new[]
+        {
+            new TagDefinition(
+                Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                "PV",
+                "DB12.DBD8",
+                PlcDataType.Double,
+                TagAccessMode.ReadOnly,
+                0.1,
+                "degC",
+                "reactor temperature",
+                TimeSpan.FromMilliseconds(250),
+                true)
+        });
+
+    await using var output = new MemoryStream();
+    await store.SaveAsync(configuration, output, CancellationToken.None);
+
+    var json = Encoding.UTF8.GetString(output.ToArray());
+    AssertContains("\"dataType\": \"Double\"", json);
+    AssertContains("\"accessMode\": \"ReadOnly\"", json);
+
+    output.Position = 0;
+    var roundTripped = await store.LoadAsync(output, CancellationToken.None);
+
+    AssertEqual("line-a-temperature-loop", roundTripped.Name, "plc configuration name");
+    AssertEqual("10.10.0.5", roundTripped.IpAddress, "plc ip address");
+    AssertEqual(1, roundTripped.Tags.Count, "plc tag count");
+    AssertEqual(PlcDataType.Double, roundTripped.Tags[0].DataType, "plc tag data type");
+    AssertEqual(TagAccessMode.ReadOnly, roundTripped.Tags[0].AccessMode, "plc tag access mode");
+}
+
+static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification()
+{
+    var directory = CreateTestStorageDirectory();
+    var plcConfigurationPath = Path.Combine(directory, "plc-project.json");
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(plcProjectConfigurationSaveFile: plcConfigurationPath),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        testSessionStorageDirectory: directory);
+
+    viewModel.PlcConfigurationName = "line-a-temperature-loop";
+    viewModel.PlcIpAddress = "10.10.0.5";
+
+    await viewModel.SavePlcConfigurationAsync();
+
+    AssertEqual(true, File.Exists(plcConfigurationPath), "plc configuration file exists");
+    AssertEqual(true, viewModel.IsNotificationVisible, "plc save notification visibility");
+    AssertContains(Path.GetFullPath(plcConfigurationPath), viewModel.NotificationMessage);
+
+    await using var input = File.OpenRead(plcConfigurationPath);
+    var saved = await new JsonPlcProjectConfigurationStore().LoadAsync(input, CancellationToken.None);
+    AssertEqual("line-a-temperature-loop", saved.Name, "saved plc configuration name");
+    AssertEqual("10.10.0.5", saved.IpAddress, "saved plc ip address");
+    AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
+}
+
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 {
     var directory = CreateTestStorageDirectory();
@@ -471,6 +543,7 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
         new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
         sessionRepository,
         sampleRepository,
         reviewRepository,
@@ -590,7 +663,10 @@ static PidSampleFieldDefinition Field(
     return new PidSampleFieldDefinition(key, key, dataType, required, null, role);
 }
 
-file sealed class NoFileDialogService(string? historySamplesSaveFile = null) : IOpenFileDialogService
+file sealed class NoFileDialogService(
+    string? historySamplesSaveFile = null,
+    string? plcProjectConfigurationFile = null,
+    string? plcProjectConfigurationSaveFile = null) : IOpenFileDialogService
 {
     public string? PickCsvFile()
     {
@@ -605,6 +681,16 @@ file sealed class NoFileDialogService(string? historySamplesSaveFile = null) : I
     public string? PickFieldProfileSaveFile()
     {
         return null;
+    }
+
+    public string? PickPlcProjectConfigurationFile()
+    {
+        return plcProjectConfigurationFile;
+    }
+
+    public string? PickPlcProjectConfigurationSaveFile()
+    {
+        return plcProjectConfigurationSaveFile;
     }
 
     public string? PickAnalysisResultSaveFile()

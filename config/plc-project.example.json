@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "name": "default-siemens-s7-project",
+  "protocol": "Siemens S7",
+  "ipAddress": "192.168.0.1",
+  "rack": 0,
+  "slot": 1,
+  "timeoutMilliseconds": 3000,
+  "defaultSamplingMilliseconds": 500,
+  "tags": [
+    {
+      "id": "10000000-0000-0000-0000-000000000001",
+      "name": "SP",
+      "address": "DB1.DBD0",
+      "dataType": "Double",
+      "accessMode": "ReadWrite",
+      "scale": 1,
+      "unit": null,
+      "description": "setpoint",
+      "samplingInterval": "00:00:00.5000000",
+      "isEnabled": true
+    },
+    {
+      "id": "10000000-0000-0000-0000-000000000002",
+      "name": "PV",
+      "address": "DB1.DBD8",
+      "dataType": "Double",
+      "accessMode": "ReadOnly",
+      "scale": 1,
+      "unit": null,
+      "description": "process value",
+      "samplingInterval": "00:00:00.5000000",
+      "isEnabled": true
+    },
+    {
+      "id": "10000000-0000-0000-0000-000000000003",
+      "name": "MV",
+      "address": "DB1.DBD16",
+      "dataType": "Double",
+      "accessMode": "ReadOnly",
+      "scale": 1,
+      "unit": null,
+      "description": "manipulated value",
+      "samplingInterval": "00:00:00.5000000",
+      "isEnabled": true
+    }
+  ]
+}

@@ -25,6 +25,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
+    private readonly IPlcProjectConfigurationStore _plcProjectConfigurationStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
     private readonly PidResponseAssessmentService _assessmentService = new();
     private readonly PidTuningRecommendationService _recommendationService = new();
@@ -36,6 +37,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
     private readonly string _testSessionStorageDirectory;
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
+    private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
     private PidResponseMetrics? _lastMetrics;
     private PidResponseAssessment? _lastAssessment;
@@ -44,6 +46,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _lastSourceFileName = string.Empty;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
+    private string _plcConfigurationName = "default-siemens-s7-project";
+    private string _plcProtocol = "Siemens S7";
+    private string _plcIpAddress = "192.168.0.1";
+    private int _plcRack;
+    private int _plcSlot = 1;
+    private int _plcTimeoutMilliseconds = 3000;
+    private int _plcDefaultSamplingMilliseconds = 500;
+    private string _plcConfigurationStatus = "PLC 配置尚未保存。";
     private string _sampleCount = "-";
     private string _overshootPercent = "-";
     private string _riseTime = "-";
@@ -64,11 +74,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
+    private ObservableCollection<TagDefinitionViewModel> _tagDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
+    private TagDefinitionViewModel? _selectedTagDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
@@ -79,6 +91,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         : this(
             new WindowsOpenFileDialogService(),
             new JsonPidSampleFieldProfileStore(),
+            new JsonPlcProjectConfigurationStore(),
             new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")))
@@ -88,6 +101,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         IOpenFileDialogService openFileDialogService,
         IPidSampleFieldProfileStore fieldProfileStore,
+        IPlcProjectConfigurationStore plcProjectConfigurationStore,
         ITestSessionRepository? testSessionRepository = null,
         IPidSampleRepository? pidSampleRepository = null,
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
@@ -95,6 +109,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
+        _plcProjectConfigurationStore = plcProjectConfigurationStore;
         _testSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
         _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
@@ -102,7 +117,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _recommendationReviewRepository = recommendationReviewRepository
             ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
         RefreshFieldDefinitions();
+        RefreshTagDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
+        LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
+        SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
+        AddTagCommand = new AsyncCommand(AddTagAsync);
+        RemoveTagCommand = new AsyncCommand(RemoveTagAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
         AddFieldCommand = new AsyncCommand(AddFieldAsync);
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
@@ -129,6 +149,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public IReadOnlyList<string> AvailableFieldRoles { get; } =
         Enum.GetNames<PidSampleFieldRole>();
 
+    public IReadOnlyList<string> AvailablePlcDataTypes { get; } =
+        Enum.GetNames<PlcDataType>();
+
+    public IReadOnlyList<string> AvailableTagAccessModes { get; } =
+        Enum.GetNames<TagAccessMode>();
+
     public string StatusMessage
     {
         get => _statusMessage;
@@ -139,6 +165,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _currentFieldProfile;
         private set => SetProperty(ref _currentFieldProfile, value);
+    }
+
+    public string PlcConfigurationName
+    {
+        get => _plcConfigurationName;
+        set => SetProperty(ref _plcConfigurationName, value);
+    }
+
+    public string PlcProtocol
+    {
+        get => _plcProtocol;
+        set => SetProperty(ref _plcProtocol, value);
+    }
+
+    public string PlcIpAddress
+    {
+        get => _plcIpAddress;
+        set => SetProperty(ref _plcIpAddress, value);
+    }
+
+    public int PlcRack
+    {
+        get => _plcRack;
+        set => SetProperty(ref _plcRack, value);
+    }
+
+    public int PlcSlot
+    {
+        get => _plcSlot;
+        set => SetProperty(ref _plcSlot, value);
+    }
+
+    public int PlcTimeoutMilliseconds
+    {
+        get => _plcTimeoutMilliseconds;
+        set => SetProperty(ref _plcTimeoutMilliseconds, value);
+    }
+
+    public int PlcDefaultSamplingMilliseconds
+    {
+        get => _plcDefaultSamplingMilliseconds;
+        set => SetProperty(ref _plcDefaultSamplingMilliseconds, value);
+    }
+
+    public string PlcConfigurationStatus
+    {
+        get => _plcConfigurationStatus;
+        private set => SetProperty(ref _plcConfigurationStatus, value);
     }
 
     public string SampleCount
@@ -267,6 +341,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _fieldDefinitions, value);
     }
 
+    public ObservableCollection<TagDefinitionViewModel> TagDefinitions
+    {
+        get => _tagDefinitions;
+        private set => SetProperty(ref _tagDefinitions, value);
+    }
+
     public ObservableCollection<TestSessionListItemViewModel> HistorySessions
     {
         get => _historySessions;
@@ -327,7 +407,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set => SetProperty(ref _selectedTuningRecommendation, value);
     }
 
+    public TagDefinitionViewModel? SelectedTagDefinition
+    {
+        get => _selectedTagDefinition;
+        set => SetProperty(ref _selectedTagDefinition, value);
+    }
+
     public ICommand ImportCsvCommand { get; }
+
+    public ICommand LoadPlcConfigurationCommand { get; }
+
+    public ICommand SavePlcConfigurationCommand { get; }
+
+    public ICommand AddTagCommand { get; }
+
+    public ICommand RemoveTagCommand { get; }
 
     public ICommand LoadFieldProfileCommand { get; }
 
@@ -384,6 +478,75 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify("示例加载失败", exception.Message, "Error");
         }
+    }
+
+    public async Task SavePlcConfigurationAsync()
+    {
+        var fileName = _openFileDialogService.PickPlcProjectConfigurationSaveFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            _plcConfiguration = BuildPlcConfigurationFromForm();
+            await using var stream = File.Create(fileName);
+            await _plcProjectConfigurationStore.SaveAsync(_plcConfiguration, stream, CancellationToken.None);
+            PlcConfigurationStatus = $"已保存 {TagDefinitions.Count} 个点位。";
+            Notify("PLC 配置已保存", Path.GetFullPath(fileName), "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("PLC 配置保存失败", exception.Message, "Error");
+        }
+    }
+
+    private async Task LoadPlcConfigurationAsync()
+    {
+        var fileName = _openFileDialogService.PickPlcProjectConfigurationFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(fileName);
+            _plcConfiguration = await _plcProjectConfigurationStore.LoadAsync(stream, CancellationToken.None);
+            ApplyPlcConfiguration(_plcConfiguration);
+            PlcConfigurationStatus = $"已加载 {TagDefinitions.Count} 个点位。";
+            Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("PLC 配置加载失败", exception.Message, "Error");
+        }
+    }
+
+    private Task AddTagAsync()
+    {
+        var tag = TagDefinitionViewModel.CreateNew(TagDefinitions.Count + 1);
+        TagDefinitions.Add(tag);
+        SelectedTagDefinition = tag;
+        PlcConfigurationStatus = "已新增点位，请保存 PLC 配置。";
+        Notify("点位已新增", "请编辑点位信息后保存 PLC 配置。", "Info");
+        return Task.CompletedTask;
+    }
+
+    private Task RemoveTagAsync()
+    {
+        if (SelectedTagDefinition is null)
+        {
+            Notify("无法删除点位", "请先选择要删除的点位。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        TagDefinitions.Remove(SelectedTagDefinition);
+        SelectedTagDefinition = null;
+        PlcConfigurationStatus = "已删除点位，请保存 PLC 配置。";
+        Notify("点位已删除", "请保存 PLC 配置以保留修改。", "Info");
+        return Task.CompletedTask;
     }
 
     public async Task SaveTestSessionAsync()
@@ -884,6 +1047,48 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         FieldDefinitions = new ObservableCollection<PidSampleFieldDefinitionViewModel>(
             _fieldProfile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
+    }
+
+    private void RefreshTagDefinitions()
+    {
+        TagDefinitions = new ObservableCollection<TagDefinitionViewModel>(
+            _plcConfiguration.Tags.Select(tag => new TagDefinitionViewModel(tag)));
+    }
+
+    private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)
+    {
+        PlcConfigurationName = configuration.Name;
+        PlcProtocol = configuration.Protocol;
+        PlcIpAddress = configuration.IpAddress;
+        PlcRack = configuration.Rack;
+        PlcSlot = configuration.Slot;
+        PlcTimeoutMilliseconds = configuration.TimeoutMilliseconds;
+        PlcDefaultSamplingMilliseconds = configuration.DefaultSamplingMilliseconds;
+        RefreshTagDefinitions();
+    }
+
+    private PlcProjectConfiguration BuildPlcConfigurationFromForm()
+    {
+        var tags = TagDefinitions.Select(tag => tag.ToDefinition()).ToArray();
+        var duplicateName = tags
+            .GroupBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicateName is not null)
+        {
+            throw new InvalidOperationException($"点位名称重复：{duplicateName.Key}");
+        }
+
+        return new PlcProjectConfiguration(
+            1,
+            PlcConfigurationName.Trim(),
+            PlcProtocol.Trim(),
+            PlcIpAddress.Trim(),
+            PlcRack,
+            PlcSlot,
+            PlcTimeoutMilliseconds,
+            PlcDefaultSamplingMilliseconds,
+            tags);
     }
 
     private PidSampleFieldProfile BuildFieldProfileFromGrid()
