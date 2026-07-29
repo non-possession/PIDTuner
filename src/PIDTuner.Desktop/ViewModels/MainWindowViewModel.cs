@@ -119,8 +119,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new WindowsOpenFileDialogService(),
             new JsonPidSampleFieldProfileStore(),
             new JsonPlcProjectConfigurationStore(),
-            new PingPlcConnectivityProbe(),
-            new PreviewPlcTagSnapshotReader(),
+            new ConfiguredPlcConnectivityProbe(new SiemensS7ConnectivityProbe(), new PingPlcConnectivityProbe()),
+            new ConfiguredPlcTagSnapshotReader(new SiemensS7PlcTagSnapshotReader(), new PreviewPlcTagSnapshotReader()),
             new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")),
@@ -143,8 +143,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
         _plcProjectConfigurationStore = plcProjectConfigurationStore;
-        _plcConnectivityProbe = plcConnectivityProbe ?? new PingPlcConnectivityProbe();
-        _plcTagSnapshotReader = plcTagSnapshotReader ?? new PreviewPlcTagSnapshotReader();
+        _plcConnectivityProbe = plcConnectivityProbe
+            ?? new ConfiguredPlcConnectivityProbe(new SiemensS7ConnectivityProbe(), new PingPlcConnectivityProbe());
+        _plcTagSnapshotReader = plcTagSnapshotReader
+            ?? new ConfiguredPlcTagSnapshotReader(new SiemensS7PlcTagSnapshotReader(), new PreviewPlcTagSnapshotReader());
         _testSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
         _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);

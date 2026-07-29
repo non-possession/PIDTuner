@@ -16,6 +16,7 @@ using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Csv;
 using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Persistence;
+using PIDTuner.Infrastructure.Plc;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
@@ -37,6 +38,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json recommendation review repository saves and lists reviews", JsonRecommendationReviewRepositorySavesAndListsReviews),
     ("pid parameter set extractor captures latest PID values", PidParameterSetExtractorCapturesLatestPidValues),
     ("json pid parameter set repository saves and lists sets", JsonPidParameterSetRepositorySavesAndListsSets),
+    ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
@@ -556,6 +558,28 @@ static async Task JsonPidParameterSetRepositorySavesAndListsSets()
     AssertEqual(1, parameterSets.Count, "stored parameter set count");
     AssertClose(1.1, parameterSets[0].Kp, 0.001, "updated parameter set Kp");
     AssertEqual("before tuning", parameterSets[0].Notes, "stored parameter set notes");
+}
+
+static Task S7AddressParserMapsDbOffsetsAndBits()
+{
+    var realAddress = S7AddressParser.Parse("DB1.DBD24", PlcDataType.Double);
+    AssertEqual(1, realAddress.DataBlock, "s7 DB number");
+    AssertEqual(24, realAddress.ByteOffset, "s7 byte offset");
+    AssertEqual(null, realAddress.BitOffset, "s7 non-bit offset");
+    AssertEqual(192, realAddress.BitAddress, "s7 bit address");
+    AssertEqual(4, realAddress.ReadByteCount, "s7 DBD numeric read byte count");
+
+    var bitAddress = S7AddressParser.Parse("DB2.DBX3.5", PlcDataType.Boolean);
+    AssertEqual(2, bitAddress.DataBlock, "s7 bit DB number");
+    AssertEqual(3, bitAddress.ByteOffset, "s7 bit byte offset");
+    AssertEqual(5, bitAddress.BitOffset, "s7 bit offset");
+    AssertEqual(29, bitAddress.BitAddress, "s7 absolute bit address");
+
+    AssertThrows<FormatException>(
+        () => S7AddressParser.Parse("M0.0", PlcDataType.Boolean),
+        "unsupported non-DB S7 address");
+
+    return Task.CompletedTask;
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
