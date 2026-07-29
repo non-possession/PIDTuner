@@ -356,41 +356,83 @@
                       Width="96"
                       Height="36"
                       Margin="12,0,0,0" />
+              <Button Command="{Binding ExportHistorySamplesCommand}"
+                      Content="导出采样"
+                      Width="96"
+                      Height="36"
+                      Margin="12,0,0,0" />
+              <TextBlock Text="筛选"
+                         VerticalAlignment="Center"
+                         Margin="20,0,0,0"
+                         Foreground="#6B7280" />
+              <TextBox Text="{Binding HistorySearchText, UpdateSourceTrigger=PropertyChanged}"
+                       Width="180"
+                       Height="28"
+                       Margin="8,0,0,0" />
               <TextBlock Text="{Binding HistoryStatus}"
                          VerticalAlignment="Center"
                          Margin="16,0,0,0"
                          Foreground="#374151" />
             </StackPanel>
 
-            <DataGrid Grid.Row="1"
-                      ItemsSource="{Binding HistorySessions}"
-                      SelectedItem="{Binding SelectedHistorySession}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      Margin="0,16,0,0"
-                      CanUserAddRows="False"
-                      HeadersVisibility="Column">
-              <DataGrid.Columns>
-                <DataGridTextColumn Header="名称"
-                                    Binding="{Binding Name}"
-                                    Width="180" />
-                <DataGridTextColumn Header="开始"
-                                    Binding="{Binding StartedAt}"
-                                    Width="150" />
-                <DataGridTextColumn Header="结束"
-                                    Binding="{Binding EndedAt}"
-                                    Width="150" />
-                <DataGridTextColumn Header="设备"
-                                    Binding="{Binding Device}"
-                                    Width="120" />
-                <DataGridTextColumn Header="工况"
-                                    Binding="{Binding OperatingCondition}"
-                                    Width="150" />
-                <DataGridTextColumn Header="备注"
-                                    Binding="{Binding Notes}"
-                                    Width="*" />
-              </DataGrid.Columns>
-            </DataGrid>
+            <Grid Grid.Row="1"
+                  Margin="0,16,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="280" />
+              </Grid.ColumnDefinitions>
+
+              <DataGrid ItemsSource="{Binding HistorySessions}"
+                        SelectedItem="{Binding SelectedHistorySession}"
+                        AutoGenerateColumns="False"
+                        IsReadOnly="True"
+                        CanUserAddRows="False"
+                        HeadersVisibility="Column">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="名称"
+                                      Binding="{Binding Name}"
+                                      Width="170" />
+                  <DataGridTextColumn Header="开始"
+                                      Binding="{Binding StartedAt}"
+                                      Width="145" />
+                  <DataGridTextColumn Header="结束"
+                                      Binding="{Binding EndedAt}"
+                                      Width="145" />
+                  <DataGridTextColumn Header="持续"
+                                      Binding="{Binding Duration}"
+                                      Width="80" />
+                  <DataGridTextColumn Header="样本"
+                                      Binding="{Binding SampleCount}"
+                                      Width="60" />
+                  <DataGridTextColumn Header="设备"
+                                      Binding="{Binding Device}"
+                                      Width="110" />
+                  <DataGridTextColumn Header="工况"
+                                      Binding="{Binding OperatingCondition}"
+                                      Width="130" />
+                  <DataGridTextColumn Header="备注"
+                                      Binding="{Binding Notes}"
+                                      Width="*" />
+                </DataGrid.Columns>
+              </DataGrid>
+
+              <Border Grid.Column="1"
+                      Margin="16,0,0,0"
+                      Padding="12"
+                      BorderBrush="#D1D5DB"
+                      BorderThickness="1"
+                      Background="#F9FAFB">
+                <StackPanel>
+                  <TextBlock Text="记录详情"
+                             FontWeight="SemiBold"
+                             Foreground="#1F2937" />
+                  <TextBlock Text="{Binding SelectedHistoryDetails}"
+                             Margin="0,10,0,0"
+                             TextWrapping="Wrap"
+                             Foreground="#374151" />
+                </StackPanel>
+              </Border>
+            </Grid>
           </Grid>
         </TabItem>
         <TabItem Header="系统日志" />

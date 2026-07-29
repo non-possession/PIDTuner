@@ -53,4 +53,17 @@ public sealed class WindowsOpenFileDialogService : IOpenFileDialogService
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+
+    public string? PickHistorySamplesSaveFile()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出历史采样数据",
+            Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*",
+            DefaultExt = ".csv",
+            AddExtension = true
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
 }

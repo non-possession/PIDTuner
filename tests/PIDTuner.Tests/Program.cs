@@ -417,8 +417,9 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     var directory = CreateTestStorageDirectory();
     var sessionRepository = new JsonTestSessionRepository(directory);
     var sampleRepository = new JsonPidSampleRepository(directory);
+    var exportedHistorySamplesPath = Path.Combine(directory, "history-samples.csv");
     var viewModel = new MainWindowViewModel(
-        new NoFileDialogService(),
+        new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
         new JsonPidSampleFieldProfileStore(),
         sessionRepository,
         sampleRepository,
@@ -438,12 +439,27 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertContains(Path.Combine(Path.GetFullPath(directory), "test-sessions.json"), viewModel.NotificationMessage);
     AssertContains(".samples.json", viewModel.NotificationMessage);
     AssertEqual(1, viewModel.HistorySessions.Count, "history count after save");
+    AssertEqual("7", viewModel.HistorySessions[0].SampleCount, "history sample count after save");
+    AssertEqual("00:00:06", viewModel.HistorySessions[0].Duration, "history duration after save");
+
+    viewModel.HistorySearchText = "offline";
+    AssertEqual(1, viewModel.HistorySessions.Count, "filtered history count");
+    viewModel.HistorySearchText = "not-found";
+    AssertEqual(0, viewModel.HistorySessions.Count, "filtered empty history count");
+    viewModel.HistorySearchText = string.Empty;
 
     viewModel.SelectedHistorySession = viewModel.HistorySessions[0];
+    AssertContains("样本：7", viewModel.SelectedHistoryDetails);
     await viewModel.OpenHistorySessionAsync();
 
     AssertEqual("历史记录已打开", viewModel.NotificationTitle, "open history notification title");
     AssertEqual("7", viewModel.SampleCount, "history sample count");
+
+    await viewModel.ExportHistorySamplesAsync();
+
+    AssertEqual("历史采样已导出", viewModel.NotificationTitle, "export history notification title");
+    AssertContains(Path.GetFullPath(exportedHistorySamplesPath), viewModel.NotificationMessage);
+    AssertEqual(true, File.Exists(exportedHistorySamplesPath), "exported history samples file exists");
 }
 
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
@@ -515,7 +531,7 @@ static PidSampleFieldDefinition Field(
     return new PidSampleFieldDefinition(key, key, dataType, required, null, role);
 }
 
-file sealed class NoFileDialogService : IOpenFileDialogService
+file sealed class NoFileDialogService(string? historySamplesSaveFile = null) : IOpenFileDialogService
 {
     public string? PickCsvFile()
     {
@@ -535,5 +551,10 @@ file sealed class NoFileDialogService : IOpenFileDialogService
     public string? PickAnalysisResultSaveFile()
     {
         return null;
+    }
+
+    public string? PickHistorySamplesSaveFile()
+    {
+        return historySamplesSaveFile;
     }
 }

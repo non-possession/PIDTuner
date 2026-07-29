@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -34,6 +35,13 @@ var thread = new Thread(() =>
     {
         PumpDispatcherUntilComplete(viewModel.LoadExampleAsync());
         PumpDispatcherUntilComplete(viewModel.SaveTestSessionAsync());
+        viewModel.SelectedHistorySession = viewModel.HistorySessions.FirstOrDefault();
+        var tabControl = FindVisualChild<TabControl>(window);
+        if (tabControl is not null)
+        {
+            tabControl.SelectedIndex = 4;
+        }
+
         window.UpdateLayout();
         Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
     }
@@ -70,4 +78,25 @@ static void PumpDispatcherUntilComplete(Task task)
     }
 
     task.GetAwaiter().GetResult();
+}
+
+static T? FindVisualChild<T>(DependencyObject parent)
+    where T : DependencyObject
+{
+    for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+    {
+        var child = VisualTreeHelper.GetChild(parent, index);
+        if (child is T typedChild)
+        {
+            return typedChild;
+        }
+
+        var descendant = FindVisualChild<T>(child);
+        if (descendant is not null)
+        {
+            return descendant;
+        }
+    }
+
+    return null;
 }

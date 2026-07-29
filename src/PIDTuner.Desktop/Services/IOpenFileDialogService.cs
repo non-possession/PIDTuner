@@ -9,4 +9,6 @@ public interface IOpenFileDialogService
     string? PickFieldProfileSaveFile();
 
     string? PickAnalysisResultSaveFile();
+
+    string? PickHistorySamplesSaveFile();
 }

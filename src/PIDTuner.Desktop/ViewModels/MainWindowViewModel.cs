@@ -55,11 +55,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _notificationKind = "Info";
     private bool _isNotificationVisible;
     private string _historyStatus = "尚未加载历史记录。";
+    private string _historySearchText = string.Empty;
+    private string _selectedHistoryDetails = "请选择一条历史记录。";
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
+    private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
 
@@ -97,6 +100,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         DismissNotificationCommand = new AsyncCommand(DismissNotificationAsync);
         LoadHistoryCommand = new AsyncCommand(LoadHistoryAsync);
         OpenHistorySessionCommand = new AsyncCommand(OpenHistorySessionAsync);
+        ExportHistorySamplesCommand = new AsyncCommand(ExportHistorySamplesAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -205,6 +209,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _historyStatus, value);
     }
 
+    public string HistorySearchText
+    {
+        get => _historySearchText;
+        set
+        {
+            if (SetProperty(ref _historySearchText, value))
+            {
+                ApplyHistoryFilter();
+            }
+        }
+    }
+
+    public string SelectedHistoryDetails
+    {
+        get => _selectedHistoryDetails;
+        private set => SetProperty(ref _selectedHistoryDetails, value);
+    }
+
     public PointCollection SetPointPoints
     {
         get => _setPointPoints;
@@ -244,7 +266,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public TestSessionListItemViewModel? SelectedHistorySession
     {
         get => _selectedHistorySession;
-        set => SetProperty(ref _selectedHistorySession, value);
+        set
+        {
+            if (SetProperty(ref _selectedHistorySession, value))
+            {
+                UpdateSelectedHistoryDetails();
+            }
+        }
     }
 
     public ICommand ImportCsvCommand { get; }
@@ -268,6 +296,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand LoadHistoryCommand { get; }
 
     public ICommand OpenHistorySessionCommand { get; }
+
+    public ICommand ExportHistorySamplesCommand { get; }
 
     public async Task LoadExampleAsync()
     {
@@ -388,6 +418,40 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task ExportHistorySamplesAsync()
+    {
+        if (SelectedHistorySession is null)
+        {
+            Notify("无法导出历史采样", "请先选择一条历史记录。", "Warning");
+            return;
+        }
+
+        var fileName = _openFileDialogService.PickHistorySamplesSaveFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            var samples = await _pidSampleRepository.GetBySessionAsync(SelectedHistorySession.Id, CancellationToken.None);
+            if (samples.Count == 0)
+            {
+                Notify("历史采样导出失败", "该试验记录没有可导出的采样数据。", "Warning");
+                return;
+            }
+
+            await using var stream = File.Create(fileName);
+            var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
+            await exchange.ExportAsync(samples, stream, CancellationToken.None);
+            Notify("历史采样已导出", Path.GetFullPath(fileName), "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("历史采样导出失败", exception.Message, "Error");
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(Environment.CurrentDirectory);
@@ -413,10 +477,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var sessions = await _testSessionRepository.ListAsync(CancellationToken.None);
-            HistorySessions = new ObservableCollection<TestSessionListItemViewModel>(
-                sessions
-                    .OrderByDescending(session => session.StartedAt)
-                    .Select(session => new TestSessionListItemViewModel(session)));
+            var items = new List<TestSessionListItemViewModel>();
+
+            foreach (var session in sessions.OrderByDescending(session => session.StartedAt))
+            {
+                var samples = await _pidSampleRepository.GetBySessionAsync(session.Id, CancellationToken.None);
+                items.Add(new TestSessionListItemViewModel(session, samples.Count));
+            }
+
+            _allHistorySessions = items;
+            ApplyHistoryFilter();
             HistoryStatus = HistorySessions.Count == 0
                 ? "尚无已保存试验记录。"
                 : $"已加载 {HistorySessions.Count} 条试验记录。";
@@ -431,6 +501,38 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             HistoryStatus = "历史记录加载失败。";
             Notify("历史记录加载失败", exception.Message, "Error");
         }
+    }
+
+    private void ApplyHistoryFilter()
+    {
+        var searchText = HistorySearchText.Trim();
+        var filtered = string.IsNullOrWhiteSpace(searchText)
+            ? _allHistorySessions
+            : _allHistorySessions.Where(item =>
+                item.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+                || item.Device.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+                || item.OperatingCondition.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+                || item.Notes.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+
+        HistorySessions = new ObservableCollection<TestSessionListItemViewModel>(filtered);
+        if (SelectedHistorySession is not null && !HistorySessions.Any(item => item.Id == SelectedHistorySession.Id))
+        {
+            SelectedHistorySession = null;
+        }
+    }
+
+    private void UpdateSelectedHistoryDetails()
+    {
+        SelectedHistoryDetails = SelectedHistorySession is null
+            ? "请选择一条历史记录。"
+            : string.Join(
+                Environment.NewLine,
+                $"名称：{SelectedHistorySession.Name}",
+                $"时间：{SelectedHistorySession.StartedAt} - {SelectedHistorySession.EndedAt}",
+                $"持续：{SelectedHistorySession.Duration}",
+                $"样本：{SelectedHistorySession.SampleCount}",
+                $"工况：{SelectedHistorySession.OperatingCondition}",
+                $"备注：{SelectedHistorySession.Notes}");
     }
 
     private async Task ExportAnalysisResultAsync()
@@ -664,15 +766,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return _fieldProfile with { Fields = fields };
     }
 
-    private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {
-            return;
+            return false;
         }
 
         field = value;
         OnPropertyChanged(propertyName);
+        return true;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 20.
+Last updated: 2026-07-29, iteration 25.
 
 ## Requirements
 
@@ -66,7 +66,7 @@ local\test-sessions
 ```
 
 The saved files are JSON files used by the current local persistence adapter. This keeps the UI and application layer ready for a later SQLite adapter.
-After imports, exports, saves, and history operations, PIDTuner shows a dismissible message box near the top of the window.
+After imports, exports, saves, and history operations, PIDTuner shows a dismissible message box near the top of the window. Save and export messages include the saved item's absolute path.
 
 ## Open Saved History
 
@@ -81,6 +81,8 @@ local\test-sessions
 2. Select a row.
 3. Click `打开记录`.
 4. The selected session samples are loaded back into the analysis page state, including metrics and trend preview.
+5. Use `筛选` to narrow saved sessions by name, device, condition, or notes.
+6. Click `导出采样` to export the selected saved session samples to CSV.
 
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
@@ -128,7 +130,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, and then renders the window. The image should show the latest offline analysis results and the operation message box.
+It loads the bundled example profile and sample CSV, saves the current test session, selects the saved history row, and then renders the window. The image should show the history page and the save message with absolute file paths.
 
 ## Current Features
 
@@ -140,10 +142,14 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 - Fill and show the active analysis window after CSV import.
 - Show a conservative response assessment summary after analysis.
 - Show a dismissible operation message box after imports, exports, saves, and history operations.
+- Show absolute saved file paths in save/export operation messages.
 - Export the latest analysis result CSV from the analysis page.
 - Save the latest offline analysis as a local test session record.
 - Refresh saved test sessions from the history page.
 - Open a saved test session back into the analysis page state.
+- Filter saved test sessions.
+- Show saved session duration, sample count, and detail summary.
+- Export selected historical samples to CSV.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
@@ -172,8 +178,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 20 snapshot:
+Iteration 25 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-20-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-25-rendered.png
 ```
