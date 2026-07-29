@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 65.
+Last updated: 2026-07-29, iteration 66.
 
 ## Requirements
 
@@ -69,7 +69,12 @@ On the `实时监控` tab:
 1. Click `检查通信` to Ping the configured PLC IP.
 2. Click `刷新点位` to read one snapshot of the enabled tag list.
 3. Click `启动/停止` to refresh repeatedly using the configured default sampling interval.
-4. Select a tag row to view its recent trend preview.
+4. Click `记录 1s` to record enabled readable tags in memory for one second.
+5. Select a tag row to view its recent trend preview.
+
+Repeated monitoring currently uses the project-level default sampling interval with a 250 ms lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, with a 200 ms lower bound. For example, if enabled tag A is 200 ms and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
+
+When the one-second recorder finishes, PIDTuner automatically stops recording and shows a notification with the frame count, enabled tag count, snapshot count, and effective recording interval.
 
 Important current boundary: Siemens S7 tag values are now read through the built-in S7 reader when protocol is `Siemens S7`. `Preview` remains available for offline UI validation. PLC writeback is still not enabled.
 
@@ -243,6 +248,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Read enabled Siemens S7 DB tag values for real-time monitor snapshots.
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
 - Start and stop repeated tag monitoring at the configured sampling interval.
+- Record one second of enabled PLC tag snapshots in memory at the fastest enabled tag interval, capped by the current 200 ms lower bound.
 - Show a selected tag's recent value trend.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.

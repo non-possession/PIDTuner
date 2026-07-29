@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -14,6 +15,7 @@ using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Models;
+using PIDTuner.Domain.Plc;
 using PIDTuner.Domain.Trends;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Configuration;
@@ -43,6 +45,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PidParameterSetExtractor _parameterSetExtractor = new();
     private readonly string _testSessionStorageDirectory;
     private readonly DispatcherTimer _monitorTimer = new();
+    private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
@@ -166,6 +169,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CheckPlcCommunicationCommand = new AsyncCommand(CheckPlcCommunicationAsync);
         RefreshPlcMonitorCommand = new AsyncCommand(RefreshPlcMonitorAsync);
         TogglePlcMonitoringCommand = new AsyncCommand(TogglePlcMonitoringAsync);
+        RecordPlcOneSecondCommand = new AsyncCommand(RecordPlcOneSecondAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
         AddFieldCommand = new AsyncCommand(AddFieldAsync);
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
@@ -578,6 +582,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand TogglePlcMonitoringCommand { get; }
 
+    public ICommand RecordPlcOneSecondCommand { get; }
+
+    public IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> LastPlcRecordingFrames => _lastPlcRecordingFrames;
+
     public ICommand LoadFieldProfileCommand { get; }
 
     public ICommand AddFieldCommand { get; }
@@ -690,28 +698,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var configuration = BuildPlcConfigurationFromForm();
             var snapshots = await _plcTagSnapshotReader.ReadAsync(configuration, CancellationToken.None);
-            foreach (var snapshot in snapshots)
-            {
-                var existing = PlcMonitorTags.FirstOrDefault(item => item.TagId == snapshot.TagId);
-                if (existing is null)
-                {
-                    PlcMonitorTags.Add(new PlcTagMonitorViewModel(snapshot));
-                    continue;
-                }
-
-                existing.Update(snapshot);
-            }
-
-            var activeIds = snapshots.Select(snapshot => snapshot.TagId).ToHashSet();
-            for (var index = PlcMonitorTags.Count - 1; index >= 0; index--)
-            {
-                if (!activeIds.Contains(PlcMonitorTags[index].TagId))
-                {
-                    PlcMonitorTags.RemoveAt(index);
-                }
-            }
-
-            SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
+            ApplyPlcMonitorSnapshots(snapshots);
             PlcMonitorStatus = snapshots.Count == 0
                 ? "没有启用的监控点位。"
                 : $"已刷新 {snapshots.Count} 个点位，数据源：{snapshots[0].Source}。";
@@ -721,6 +708,45 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcMonitorStatus = $"刷新失败：{exception.Message}";
             Notify("PLC 点位刷新失败", exception.Message, "Error");
         }
+    }
+
+    private void ApplyPlcMonitorSnapshots(IReadOnlyList<PlcTagSnapshot> snapshots)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            var existing = PlcMonitorTags.FirstOrDefault(item => item.TagId == snapshot.TagId);
+            if (existing is null)
+            {
+                PlcMonitorTags.Add(new PlcTagMonitorViewModel(snapshot));
+                continue;
+            }
+
+            existing.Update(snapshot);
+        }
+
+        var activeIds = snapshots.Select(snapshot => snapshot.TagId).ToHashSet();
+        for (var index = PlcMonitorTags.Count - 1; index >= 0; index--)
+        {
+            if (!activeIds.Contains(PlcMonitorTags[index].TagId))
+            {
+                PlcMonitorTags.RemoveAt(index);
+            }
+        }
+
+        SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
+    }
+
+    private static int ResolveRecordingIntervalMilliseconds(
+        PlcProjectConfiguration configuration,
+        IReadOnlyList<TagDefinition> enabledTags)
+    {
+        var minimumTagInterval = enabledTags
+            .Select(tag => (int)tag.SamplingInterval.TotalMilliseconds)
+            .Where(milliseconds => milliseconds > 0)
+            .DefaultIfEmpty(configuration.DefaultSamplingMilliseconds)
+            .Min();
+
+        return Math.Max(200, minimumTagInterval);
     }
 
     private async Task TogglePlcMonitoringAsync()
@@ -738,6 +764,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _monitorTimer.Start();
         IsPlcMonitoring = true;
         PlcMonitorStatus = $"点位监控运行中，周期 {_monitorTimer.Interval.TotalMilliseconds:0} ms。";
+    }
+
+    public async Task RecordPlcOneSecondAsync()
+    {
+        try
+        {
+            var configuration = BuildPlcConfigurationFromForm();
+            var enabledTags = configuration.Tags
+                .Where(tag => tag.IsEnabled && tag.AccessMode != TagAccessMode.WriteOnly)
+                .ToArray();
+            if (enabledTags.Length == 0)
+            {
+                Notify("无法记录 PLC 数据", "请先启用至少一个可读取点位。", "Warning");
+                return;
+            }
+
+            var intervalMilliseconds = ResolveRecordingIntervalMilliseconds(configuration, enabledTags);
+            var frames = new List<IReadOnlyList<PlcTagSnapshot>>();
+            var stopwatch = Stopwatch.StartNew();
+            PlcMonitorStatus = $"正在记录 1s 点位数据，周期 {intervalMilliseconds} ms。";
+
+            while (stopwatch.Elapsed < TimeSpan.FromSeconds(1))
+            {
+                var snapshots = await _plcTagSnapshotReader.ReadAsync(configuration, CancellationToken.None);
+                frames.Add(snapshots);
+                ApplyPlcMonitorSnapshots(snapshots);
+
+                var remaining = TimeSpan.FromSeconds(1) - stopwatch.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+
+                var delay = TimeSpan.FromMilliseconds(intervalMilliseconds);
+                await Task.Delay(remaining < delay ? remaining : delay);
+            }
+
+            _lastPlcRecordingFrames = frames;
+            OnPropertyChanged(nameof(LastPlcRecordingFrames));
+            var snapshotCount = frames.Sum(frame => frame.Count);
+            PlcMonitorStatus = $"1s 记录完成：{frames.Count} 组，{enabledTags.Length} 个点位，共 {snapshotCount} 条快照，周期 {intervalMilliseconds} ms。";
+            Notify("PLC 1s 记录完成", PlcMonitorStatus, "Success");
+        }
+        catch (Exception exception)
+        {
+            PlcMonitorStatus = $"1s 记录失败：{exception.Message}";
+            Notify("PLC 1s 记录失败", exception.Message, "Error");
+        }
     }
 
     private async Task LoadPlcConfigurationAsync()

@@ -43,6 +43,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
+    ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
@@ -695,6 +696,37 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
+static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        testSessionStorageDirectory: directory);
+
+    foreach (var tag in viewModel.TagDefinitions)
+    {
+        tag.IsEnabled = false;
+    }
+
+    viewModel.TagDefinitions[0].IsEnabled = true;
+    viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
+    viewModel.TagDefinitions[1].IsEnabled = true;
+    viewModel.TagDefinitions[1].SamplingMilliseconds = 500;
+
+    await viewModel.RecordPlcOneSecondAsync();
+
+    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 4, "recorded frame count");
+    AssertEqual(true, viewModel.LastPlcRecordingFrames.All(frame => frame.Count == 2), "recorded frame tag count");
+    AssertEqual(true, reader.ReadCount >= 4, "plc reader call count");
+    AssertEqual("PLC 1s 记录完成", viewModel.NotificationTitle, "plc recording notification title");
+    AssertContains("周期 200 ms", viewModel.PlcMonitorStatus);
+    AssertContains("2 个点位", viewModel.PlcMonitorStatus);
+}
+
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 {
     var directory = CreateTestStorageDirectory();
@@ -924,24 +956,28 @@ file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader
 {
     private int _value;
 
+    public int ReadCount { get; private set; }
+
     public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(
         PlcProjectConfiguration configuration,
         CancellationToken cancellationToken)
     {
+        ReadCount++;
         _value++;
-        var tag = configuration.Tags.First(item => item.IsEnabled);
-        IReadOnlyList<PlcTagSnapshot> snapshots = new[]
-        {
-            new PlcTagSnapshot(
+        var timestamp = DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+08:00", CultureInfo.InvariantCulture)
+            .AddMilliseconds(_value * 200);
+        IReadOnlyList<PlcTagSnapshot> snapshots = configuration.Tags
+            .Where(item => item.IsEnabled && item.AccessMode != TagAccessMode.WriteOnly)
+            .Select(tag => new PlcTagSnapshot(
                 tag.Id,
                 tag.Name,
                 tag.Address,
                 _value,
                 tag.Unit,
-                DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+08:00", CultureInfo.InvariantCulture).AddSeconds(_value),
+                timestamp,
                 "Good",
-                "Test")
-        };
+                "Test"))
+            .ToArray();
 
         return Task.FromResult(snapshots);
     }
