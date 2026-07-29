@@ -119,9 +119,8 @@
                 <ColumnDefinition Width="60" />
                 <ColumnDefinition Width="60" />
                 <ColumnDefinition Width="80" />
-                <ColumnDefinition Width="0" />
                 <ColumnDefinition Width="80" />
-                <ColumnDefinition Width="80" />
+                <ColumnDefinition Width="90" />
               </Grid.ColumnDefinitions>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -179,13 +178,22 @@
                        Text="{Binding PlcTimeoutMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
-              <TextBlock Grid.Column="8"
+              <TextBlock Grid.Column="7"
                          Text="默认采样 ms"
                          Foreground="#6B7280"
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
-                       Grid.Column="8"
+                       Grid.Column="7"
                        Text="{Binding PlcDefaultSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Height="28"
+                       Margin="12,0,0,0" />
+              <TextBlock Grid.Column="8"
+                         Text="最小采样 ms"
+                         Foreground="#6B7280"
+                         Margin="12,0,0,0" />
+              <TextBox Grid.Row="1"
+                       Grid.Column="8"
+                       Text="{Binding PlcMinimumSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
             </Grid>

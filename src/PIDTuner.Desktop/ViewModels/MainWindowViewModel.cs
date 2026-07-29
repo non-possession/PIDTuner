@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -44,6 +45,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PidParameterSetExtractor _parameterSetExtractor = new();
     private readonly string _testSessionStorageDirectory;
+    private readonly string _plcRecordingStorageDirectory;
     private readonly DispatcherTimer _monitorTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
@@ -63,6 +65,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _plcSlot = 1;
     private int _plcTimeoutMilliseconds = 3000;
     private int _plcDefaultSamplingMilliseconds = 500;
+    private int _plcMinimumSamplingMilliseconds = PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     private string _plcConfigurationStatus = "PLC 配置尚未保存。";
     private string _sampleCount = "-";
     private string _overshootPercent = "-";
@@ -141,7 +144,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IPidSampleRepository? pidSampleRepository = null,
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
         IPidParameterSetRepository? parameterSetRepository = null,
-        string? testSessionStorageDirectory = null)
+        string? testSessionStorageDirectory = null,
+        string? plcRecordingStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
@@ -152,6 +156,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ?? new ConfiguredPlcTagSnapshotReader(new SiemensS7PlcTagSnapshotReader(), new PreviewPlcTagSnapshotReader());
         _testSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
+        _plcRecordingStorageDirectory = Path.GetFullPath(
+            plcRecordingStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "plc-recordings"));
         _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
         _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
         _recommendationReviewRepository = recommendationReviewRepository
@@ -258,6 +264,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcDefaultSamplingMilliseconds;
         set => SetProperty(ref _plcDefaultSamplingMilliseconds, value);
+    }
+
+    public int PlcMinimumSamplingMilliseconds
+    {
+        get => _plcMinimumSamplingMilliseconds;
+        set => SetProperty(ref _plcMinimumSamplingMilliseconds, value);
     }
 
     public string PlcConfigurationStatus
@@ -746,7 +758,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             .DefaultIfEmpty(configuration.DefaultSamplingMilliseconds)
             .Min();
 
-        return Math.Max(200, minimumTagInterval);
+        return Math.Max(ResolveMinimumSamplingMilliseconds(configuration), minimumTagInterval);
+    }
+
+    private static int ResolveMonitoringIntervalMilliseconds(PlcProjectConfiguration configuration)
+    {
+        return Math.Max(
+            ResolveMinimumSamplingMilliseconds(configuration),
+            configuration.DefaultSamplingMilliseconds);
+    }
+
+    private static int ResolveMinimumSamplingMilliseconds(PlcProjectConfiguration configuration)
+    {
+        return configuration.MinimumSamplingMilliseconds > 0
+            ? configuration.MinimumSamplingMilliseconds
+            : PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     }
 
     private async Task TogglePlcMonitoringAsync()
@@ -759,7 +785,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        _monitorTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(250, PlcDefaultSamplingMilliseconds));
+        _monitorTimer.Interval = TimeSpan.FromMilliseconds(ResolveMonitoringIntervalMilliseconds(BuildPlcConfigurationFromForm()));
         await RefreshPlcMonitorAsync();
         _monitorTimer.Start();
         IsPlcMonitoring = true;
@@ -803,15 +829,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             _lastPlcRecordingFrames = frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
+            var recordingPath = await SavePlcRecordingAsync(configuration, intervalMilliseconds, frames);
             var snapshotCount = frames.Sum(frame => frame.Count);
             PlcMonitorStatus = $"1s 记录完成：{frames.Count} 组，{enabledTags.Length} 个点位，共 {snapshotCount} 条快照，周期 {intervalMilliseconds} ms。";
-            Notify("PLC 1s 记录完成", PlcMonitorStatus, "Success");
+            Notify(
+                "PLC 1s 记录完成",
+                string.Join(
+                    Environment.NewLine,
+                    PlcMonitorStatus,
+                    $"保存位置：{recordingPath}"),
+                "Success");
         }
         catch (Exception exception)
         {
             PlcMonitorStatus = $"1s 记录失败：{exception.Message}";
             Notify("PLC 1s 记录失败", exception.Message, "Error");
         }
+    }
+
+    private async Task<string> SavePlcRecordingAsync(
+        PlcProjectConfiguration configuration,
+        int intervalMilliseconds,
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+    {
+        Directory.CreateDirectory(_plcRecordingStorageDirectory);
+        var fileName = $"plc-recording-{DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}.json";
+        var filePath = Path.Combine(_plcRecordingStorageDirectory, fileName);
+        await using var stream = File.Create(filePath);
+        var recording = new PlcOneSecondRecording(
+            DateTimeOffset.Now,
+            configuration.Name,
+            configuration.Protocol,
+            configuration.IpAddress,
+            intervalMilliseconds,
+            frames.Count,
+            frames.Sum(frame => frame.Count),
+            frames);
+
+        await JsonSerializer.SerializeAsync(
+            stream,
+            recording,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true },
+            CancellationToken.None);
+
+        return Path.GetFullPath(filePath);
     }
 
     private async Task LoadPlcConfigurationAsync()
@@ -1573,6 +1634,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcSlot = configuration.Slot;
         PlcTimeoutMilliseconds = configuration.TimeoutMilliseconds;
         PlcDefaultSamplingMilliseconds = configuration.DefaultSamplingMilliseconds;
+        PlcMinimumSamplingMilliseconds = ResolveMinimumSamplingMilliseconds(configuration);
         RefreshTagDefinitions();
         PlcMonitorTags.Clear();
         SelectedPlcMonitorTag = null;
@@ -1600,6 +1662,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcSlot,
             PlcTimeoutMilliseconds,
             PlcDefaultSamplingMilliseconds,
+            PlcMinimumSamplingMilliseconds,
             tags);
     }
 
@@ -1634,4 +1697,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
+
+    private sealed record PlcOneSecondRecording(
+        DateTimeOffset RecordedAt,
+        string ConfigurationName,
+        string Protocol,
+        string IpAddress,
+        int IntervalMilliseconds,
+        int FrameCount,
+        int SnapshotCount,
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> Frames);
 }

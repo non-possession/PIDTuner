@@ -7,6 +7,7 @@
   "slot": 1,
   "timeoutMilliseconds": 3000,
   "defaultSamplingMilliseconds": 500,
+  "minimumSamplingMilliseconds": 250,
   "tags": [
     {
       "id": "10000000-0000-0000-0000-000000000001",

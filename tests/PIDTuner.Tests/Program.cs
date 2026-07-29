@@ -595,6 +595,7 @@ static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTag
         2,
         2500,
         250,
+        200,
         new[]
         {
             new TagDefinition(
@@ -616,15 +617,34 @@ static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTag
     var json = Encoding.UTF8.GetString(output.ToArray());
     AssertContains("\"dataType\": \"Double\"", json);
     AssertContains("\"accessMode\": \"ReadOnly\"", json);
+    AssertContains("\"minimumSamplingMilliseconds\": 200", json);
 
     output.Position = 0;
     var roundTripped = await store.LoadAsync(output, CancellationToken.None);
 
     AssertEqual("line-a-temperature-loop", roundTripped.Name, "plc configuration name");
     AssertEqual("10.10.0.5", roundTripped.IpAddress, "plc ip address");
+    AssertEqual(200, roundTripped.MinimumSamplingMilliseconds, "plc minimum sampling milliseconds");
     AssertEqual(1, roundTripped.Tags.Count, "plc tag count");
     AssertEqual(PlcDataType.Double, roundTripped.Tags[0].DataType, "plc tag data type");
     AssertEqual(TagAccessMode.ReadOnly, roundTripped.Tags[0].AccessMode, "plc tag access mode");
+
+    var legacyJson = """
+        {
+          "schemaVersion": 1,
+          "name": "legacy",
+          "protocol": "Preview",
+          "ipAddress": "127.0.0.1",
+          "rack": 0,
+          "slot": 1,
+          "timeoutMilliseconds": 3000,
+          "defaultSamplingMilliseconds": 500,
+          "tags": []
+        }
+        """;
+    await using var legacyInput = new MemoryStream(Encoding.UTF8.GetBytes(legacyJson));
+    var legacy = await store.LoadAsync(legacyInput, CancellationToken.None);
+    AssertEqual(0, legacy.MinimumSamplingMilliseconds, "legacy minimum sampling default remains unset");
 }
 
 static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification()
@@ -640,6 +660,7 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     viewModel.PlcConfigurationName = "line-a-temperature-loop";
     viewModel.PlcIpAddress = "10.10.0.5";
     viewModel.PlcDefaultSamplingMilliseconds = 1000;
+    viewModel.PlcMinimumSamplingMilliseconds = 200;
     viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
 
     await viewModel.SavePlcConfigurationAsync();
@@ -653,6 +674,7 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     AssertEqual("line-a-temperature-loop", saved.Name, "saved plc configuration name");
     AssertEqual("10.10.0.5", saved.IpAddress, "saved plc ip address");
     AssertEqual(1000, saved.DefaultSamplingMilliseconds, "saved default sampling milliseconds");
+    AssertEqual(200, saved.MinimumSamplingMilliseconds, "saved minimum sampling milliseconds");
     AssertEqual(TimeSpan.FromMilliseconds(200), saved.Tags[0].SamplingInterval, "saved tag sampling interval");
     AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
 }
@@ -685,7 +707,8 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
         plcTagSnapshotReader: reader,
-        testSessionStorageDirectory: directory);
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
 
     await viewModel.RefreshPlcMonitorAsync();
     await viewModel.RefreshPlcMonitorAsync();
@@ -705,7 +728,8 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
         plcTagSnapshotReader: reader,
-        testSessionStorageDirectory: directory);
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
 
     foreach (var tag in viewModel.TagDefinitions)
     {
@@ -716,6 +740,7 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
     viewModel.TagDefinitions[1].IsEnabled = true;
     viewModel.TagDefinitions[1].SamplingMilliseconds = 500;
+    viewModel.PlcMinimumSamplingMilliseconds = 200;
 
     await viewModel.RecordPlcOneSecondAsync();
 
@@ -725,6 +750,9 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     AssertEqual("PLC 1s 记录完成", viewModel.NotificationTitle, "plc recording notification title");
     AssertContains("周期 200 ms", viewModel.PlcMonitorStatus);
     AssertContains("2 个点位", viewModel.PlcMonitorStatus);
+    var recordingPath = Directory.GetFiles(Path.Combine(directory, "plc-recordings"), "plc-recording-*.json").Single();
+    AssertContains(Path.GetFullPath(recordingPath), viewModel.NotificationMessage);
+    AssertContains("\"frameCount\"", File.ReadAllText(recordingPath));
 }
 
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()

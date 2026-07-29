@@ -11,8 +11,11 @@ public sealed record PlcProjectConfiguration(
     int Slot,
     int TimeoutMilliseconds,
     int DefaultSamplingMilliseconds,
+    int MinimumSamplingMilliseconds,
     IReadOnlyList<TagDefinition> Tags)
 {
+    public const int DefaultMinimumSamplingMilliseconds = 250;
+
     public static PlcProjectConfiguration CreateDefault()
     {
         var samplingInterval = TimeSpan.FromMilliseconds(500);
@@ -25,6 +28,7 @@ public sealed record PlcProjectConfiguration(
             1,
             3000,
             500,
+            DefaultMinimumSamplingMilliseconds,
             new[]
             {
                 Tag("SP", "DB1.DBD0", PlcDataType.Double, TagAccessMode.ReadWrite, samplingInterval, "setpoint"),

@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 66.
+Last updated: 2026-07-29, iteration 67.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ config\plc-project.example.json
 
 Typical flow:
 
-1. Edit project fields such as configuration name, protocol, IP address, Rack, Slot, timeout, and default sampling interval.
+1. Edit project fields such as configuration name, protocol, IP address, Rack, Slot, timeout, default sampling interval, and minimum sampling interval.
 2. Edit tag rows directly. Current tag metadata includes enable state, name, address, data type, access mode, scale, unit, sampling interval, and description.
 3. Click `新增点位` to add a tag.
 4. Select a tag row and click `删除点位` to remove it.
@@ -72,9 +72,13 @@ On the `实时监控` tab:
 4. Click `记录 1s` to record enabled readable tags in memory for one second.
 5. Select a tag row to view its recent trend preview.
 
-Repeated monitoring currently uses the project-level default sampling interval with a 250 ms lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, with a 200 ms lower bound. For example, if enabled tag A is 200 ms and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
+Repeated monitoring currently uses the project-level default sampling interval with the configured `最小采样 ms` as the lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, also bounded by `最小采样 ms`. For example, if `最小采样 ms` is 200, enabled tag A is 200 ms, and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
 
-When the one-second recorder finishes, PIDTuner automatically stops recording and shows a notification with the frame count, enabled tag count, snapshot count, and effective recording interval.
+When the one-second recorder finishes, PIDTuner automatically stops recording and shows a notification with the frame count, enabled tag count, snapshot count, effective recording interval, and the absolute JSON save path. Recordings are saved under:
+
+```text
+local\plc-recordings
+```
 
 Important current boundary: Siemens S7 tag values are now read through the built-in S7 reader when protocol is `Siemens S7`. `Preview` remains available for offline UI validation. PLC writeback is still not enabled.
 
@@ -248,7 +252,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Read enabled Siemens S7 DB tag values for real-time monitor snapshots.
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
 - Start and stop repeated tag monitoring at the configured sampling interval.
-- Record one second of enabled PLC tag snapshots in memory at the fastest enabled tag interval, capped by the current 200 ms lower bound.
+- Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
 - Show a selected tag's recent value trend.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
