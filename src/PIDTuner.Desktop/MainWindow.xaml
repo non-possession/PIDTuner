@@ -40,6 +40,7 @@
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Orientation="Horizontal">
@@ -97,6 +98,81 @@
                            FontWeight="SemiBold" />
               </StackPanel>
             </UniformGrid>
+
+            <Grid Grid.Row="2"
+                  Margin="0,28,0,0">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,20,0">
+                  <Rectangle Width="22"
+                             Height="3"
+                             Fill="#2563EB"
+                             VerticalAlignment="Center" />
+                  <TextBlock Text="SP"
+                             Margin="6,0,0,0" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,20,0">
+                  <Rectangle Width="22"
+                             Height="3"
+                             Fill="#059669"
+                             VerticalAlignment="Center" />
+                  <TextBlock Text="PV"
+                             Margin="6,0,0,0" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <Rectangle Width="22"
+                             Height="3"
+                             Fill="#DC2626"
+                             VerticalAlignment="Center" />
+                  <TextBlock Text="MV"
+                             Margin="6,0,0,0" />
+                </StackPanel>
+              </StackPanel>
+
+              <Border Grid.Row="1"
+                      Width="760"
+                      Height="280"
+                      Margin="0,12,0,0"
+                      HorizontalAlignment="Left"
+                      BorderBrush="#D1D5DB"
+                      BorderThickness="1"
+                      Background="#F9FAFB">
+                <Canvas Width="720"
+                        Height="240"
+                        Margin="20">
+                  <Line X1="0"
+                        Y1="120"
+                        X2="720"
+                        Y2="120"
+                        Stroke="#E5E7EB" />
+                  <Line X1="0"
+                        Y1="60"
+                        X2="720"
+                        Y2="60"
+                        Stroke="#E5E7EB" />
+                  <Line X1="0"
+                        Y1="180"
+                        X2="720"
+                        Y2="180"
+                        Stroke="#E5E7EB" />
+                  <Polyline Points="{Binding SetPointPoints}"
+                            Stroke="#2563EB"
+                            StrokeThickness="2" />
+                  <Polyline Points="{Binding ProcessValuePoints}"
+                            Stroke="#059669"
+                            StrokeThickness="2" />
+                  <Polyline Points="{Binding ManipulatedValuePoints}"
+                            Stroke="#DC2626"
+                            StrokeThickness="2" />
+                </Canvas>
+              </Border>
+            </Grid>
           </Grid>
         </TabItem>
         <TabItem Header="参数调整" />

@@ -3,11 +3,13 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Media;
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Configuration;
+using PIDTuner.Domain.Trends;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Csv;
@@ -19,6 +21,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
+    private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
@@ -27,6 +30,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _riseTime = "-";
     private string _settlingTime = "-";
     private string _steadyStateError = "-";
+    private PointCollection _setPointPoints = new();
+    private PointCollection _processValuePoints = new();
+    private PointCollection _manipulatedValuePoints = new();
 
     public MainWindowViewModel()
         : this(
@@ -91,6 +97,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _steadyStateError, value);
     }
 
+    public PointCollection SetPointPoints
+    {
+        get => _setPointPoints;
+        private set => SetProperty(ref _setPointPoints, value);
+    }
+
+    public PointCollection ProcessValuePoints
+    {
+        get => _processValuePoints;
+        private set => SetProperty(ref _processValuePoints, value);
+    }
+
+    public PointCollection ManipulatedValuePoints
+    {
+        get => _manipulatedValuePoints;
+        private set => SetProperty(ref _manipulatedValuePoints, value);
+    }
+
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadFieldProfileCommand { get; }
@@ -136,6 +160,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RiseTime = FormatNullable(result.Metrics.RiseTime);
             SettlingTime = FormatNullable(result.Metrics.SettlingTime);
             SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
+            UpdateTrendPreview(result.Samples);
             StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
         }
         catch (Exception exception)
@@ -152,6 +177,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private static string FormatNullable(TimeSpan? value)
     {
         return value.HasValue ? value.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private void UpdateTrendPreview(IReadOnlyList<Domain.Models.PidSample> samples)
+    {
+        var trend = _trendSeriesBuilder.Build(samples);
+        SetPointPoints = ToPointCollection(trend.SetPoint);
+        ProcessValuePoints = ToPointCollection(trend.ProcessValue);
+        ManipulatedValuePoints = ToPointCollection(trend.ManipulatedValue);
+    }
+
+    private static PointCollection ToPointCollection(TrendSeries series)
+    {
+        const double width = 720;
+        const double height = 240;
+
+        var points = series.Points
+            .Select(point => new System.Windows.Point(
+                point.NormalizedX * width,
+                height - point.NormalizedY * height));
+
+        return new PointCollection(points);
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
