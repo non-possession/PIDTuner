@@ -103,7 +103,9 @@ timestamp,sp,pv,mv,kp,ki_or_ti,kd_or_td,is_plc_connected,test_session_id,paramet
     await using var output = new MemoryStream();
     await exchange.ExportAsync(imported, output, CancellationToken.None);
 
-    var exported = Encoding.UTF8.GetString(output.ToArray());
+    var exportedBytes = output.ToArray();
+    AssertUtf8Bom(exportedBytes, "sample CSV export encoding");
+    var exported = Encoding.UTF8.GetString(exportedBytes);
     AssertContains("timestamp,sp,pv,mv,kp,ki_or_ti,kd_or_td,is_plc_connected,test_session_id,parameter_set_id", exported);
     AssertContains("2026-07-29T10:00:00.0000000+00:00,100,98.5,41,2.5,0.8,0.05,False,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,", exported);
 }
@@ -345,7 +347,9 @@ static async Task AnalysisResultCsvExporterWritesStableFields()
 
     await exporter.ExportAsync(window, metrics, assessment, output, CancellationToken.None);
 
-    var csv = Encoding.UTF8.GetString(output.ToArray());
+    var exportedBytes = output.ToArray();
+    AssertUtf8Bom(exportedBytes, "analysis result CSV export encoding");
+    var csv = Encoding.UTF8.GetString(exportedBytes);
     AssertContains("window_start,window_end,overshoot_percent,rise_time_seconds,settling_time_seconds,steady_state_error,severity,summary", csv);
     AssertContains("2026-07-29T10:00:00.0000000+00:00,2026-07-29T10:00:06.0000000+00:00,12,2,5,0.5,Warning", csv);
     AssertContains("\"超调偏高，可能需要降低比例增益或增强阻尼。\"", csv);
@@ -378,6 +382,14 @@ static void AssertContains(string expected, string actual)
     if (!actual.Contains(expected, StringComparison.Ordinal))
     {
         throw new InvalidOperationException($"Expected exported CSV to contain: {expected}");
+    }
+}
+
+static void AssertUtf8Bom(byte[] actual, string name)
+{
+    if (actual.Length < 3 || actual[0] != 0xEF || actual[1] != 0xBB || actual[2] != 0xBF)
+    {
+        throw new InvalidOperationException($"{name}: expected UTF-8 BOM for Excel-compatible CSV.");
     }
 }
 

@@ -47,7 +47,7 @@ public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile field
         Stream destination,
         CancellationToken cancellationToken)
     {
-        await using var writer = new StreamWriter(destination, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
+        await using var writer = new StreamWriter(destination, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), leaveOpen: true);
         await writer.WriteLineAsync(string.Join(',', fieldProfile.Fields.Select(field => field.Key)).AsMemory(), cancellationToken);
 
         foreach (var sample in samples)

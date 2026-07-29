@@ -16,7 +16,7 @@ public sealed class PidAnalysisResultCsvExporter
         Stream destination,
         CancellationToken cancellationToken)
     {
-        await using var writer = new StreamWriter(destination, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
+        await using var writer = new StreamWriter(destination, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), leaveOpen: true);
         await writer.WriteLineAsync(Header.AsMemory(), cancellationToken);
 
         var fields = new[]
