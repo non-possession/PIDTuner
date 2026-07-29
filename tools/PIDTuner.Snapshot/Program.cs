@@ -39,7 +39,7 @@ var thread = new Thread(() =>
         var tabControl = FindVisualChild<TabControl>(window);
         if (tabControl is not null)
         {
-            tabControl.SelectedIndex = 4;
+            tabControl.SelectedIndex = 3;
         }
 
         window.UpdateLayout();

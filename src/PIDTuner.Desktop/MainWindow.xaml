@@ -338,7 +338,50 @@
             </Grid>
           </Grid>
         </TabItem>
-        <TabItem Header="参数调整" />
+        <TabItem Header="参数调整">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="{Binding RecommendationSummary}"
+                       Foreground="#374151"
+                       TextWrapping="Wrap" />
+
+            <DataGrid Grid.Row="1"
+                      ItemsSource="{Binding TuningRecommendations}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      Margin="0,16,0,0"
+                      CanUserAddRows="False"
+                      HeadersVisibility="Column">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="参数"
+                                    Binding="{Binding Parameter}"
+                                    Width="70" />
+                <DataGridTextColumn Header="方向"
+                                    Binding="{Binding Direction}"
+                                    Width="90" />
+                <DataGridTextColumn Header="建议"
+                                    Binding="{Binding Adjustment}"
+                                    Width="160" />
+                <DataGridTextColumn Header="原因"
+                                    Binding="{Binding Reason}"
+                                    Width="220" />
+                <DataGridTextColumn Header="预期影响"
+                                    Binding="{Binding ExpectedEffect}"
+                                    Width="220" />
+                <DataGridTextColumn Header="风险"
+                                    Binding="{Binding Risk}"
+                                    Width="240" />
+                <DataGridTextColumn Header="置信度"
+                                    Binding="{Binding Confidence}"
+                                    Width="70" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
         <TabItem Header="历史记录">
           <Grid Margin="16">
             <Grid.RowDefinitions>

@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 25.
+Last updated: 2026-07-29, iteration 30.
 
 ## Requirements
 
@@ -84,6 +84,21 @@ local\test-sessions
 5. Use `筛选` to narrow saved sessions by name, device, condition, or notes.
 6. Click `导出采样` to export the selected saved session samples to CSV.
 
+## Review Tuning Recommendations
+
+After importing CSV, loading the bundled example, or opening a saved history record, open the `参数调整` tab.
+
+The current MVP generates conservative rule-based suggestions from the latest response metrics. Each recommendation shows:
+
+- PID parameter or loop area.
+- Adjustment direction.
+- Reason.
+- Expected effect.
+- Risk.
+- Confidence.
+
+These suggestions are advisory only. PIDTuner does not write parameters back to PLC in the current MVP.
+
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
 ```text
@@ -118,7 +133,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 14 tests pass.
+Current expected result: 15 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -130,7 +145,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, selects the saved history row, and then renders the window. The image should show the history page and the save message with absolute file paths.
+It loads the bundled example profile and sample CSV, saves the current test session, and then renders the window. The image should show the parameter-adjustment page and the save message with absolute file paths.
 
 ## Current Features
 
@@ -150,6 +165,8 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 - Filter saved test sessions.
 - Show saved session duration, sample count, and detail summary.
 - Export selected historical samples to CSV.
+- Generate conservative PID tuning recommendations from the latest analysis metrics.
+- Show recommendation reason, expected effect, risk, and confidence on the parameter-adjustment page.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
@@ -178,8 +195,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 25 snapshot:
+Iteration 30 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-25-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-30-rendered.png
 ```

@@ -27,6 +27,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
+    ("tuning recommendation service suggests conservative adjustments", TuningRecommendationServiceSuggestsConservativeAdjustments),
     ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields),
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
     ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession),
@@ -339,6 +340,29 @@ static Task ResponseAssessmentFlagsHighOvershootAndSteadyStateError()
     return Task.CompletedTask;
 }
 
+static Task TuningRecommendationServiceSuggestsConservativeAdjustments()
+{
+    var service = new PidTuningRecommendationService();
+    var recommendations = service.Recommend(new PidResponseMetrics(
+        OvershootPercent: 18,
+        RiseTime: TimeSpan.FromSeconds(2),
+        SettlingTime: TimeSpan.FromSeconds(12),
+        SteadyStateError: 3.2));
+
+    AssertEqual(true, recommendations.Any(recommendation =>
+        recommendation.Parameter == "Kp"
+        && recommendation.Direction == PidTuningAdjustmentDirection.Decrease), "Kp decrease recommendation");
+    AssertEqual(true, recommendations.Any(recommendation =>
+        recommendation.Parameter == "Ki/Ti"
+        && recommendation.Direction == PidTuningAdjustmentDirection.Increase), "Ki/Ti increase recommendation");
+
+    var normal = service.Recommend(new PidResponseMetrics(2, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), 0.1));
+    AssertEqual(1, normal.Count, "normal recommendation count");
+    AssertEqual(PidTuningAdjustmentDirection.Hold, normal[0].Direction, "normal hold recommendation");
+
+    return Task.CompletedTask;
+}
+
 static async Task AnalysisResultCsvExporterWritesStableFields()
 {
     var window = new AnalysisWindow(
@@ -430,6 +454,8 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual(true, viewModel.IsNotificationVisible, "analysis notification visibility");
     AssertEqual("离线分析已完成", viewModel.NotificationTitle, "analysis notification title");
     AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
+    AssertEqual(true, viewModel.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
+    AssertContains("保守调整建议", viewModel.RecommendationSummary);
 
     await viewModel.SaveTestSessionAsync();
 

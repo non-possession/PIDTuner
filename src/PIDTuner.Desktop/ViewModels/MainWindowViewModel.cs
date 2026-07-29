@@ -27,6 +27,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
     private readonly PidResponseAssessmentService _assessmentService = new();
+    private readonly PidTuningRecommendationService _recommendationService = new();
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private readonly AnalysisWindowParser _analysisWindowParser = new();
@@ -62,9 +63,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
+    private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
+    private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
 
     public MainWindowViewModel()
         : this(
@@ -255,6 +258,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _historySessions;
         private set => SetProperty(ref _historySessions, value);
+    }
+
+    public ObservableCollection<PidTuningRecommendationViewModel> TuningRecommendations
+    {
+        get => _tuningRecommendations;
+        private set => SetProperty(ref _tuningRecommendations, value);
+    }
+
+    public string RecommendationSummary
+    {
+        get => _recommendationSummary;
+        private set => SetProperty(ref _recommendationSummary, value);
     }
 
     public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
@@ -696,7 +711,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _lastAssessment = assessment;
         _lastSamples = samples;
         _lastSourceFileName = sourceName;
+        UpdateTuningRecommendations(metrics);
         UpdateTrendPreview(samples);
+    }
+
+    private void UpdateTuningRecommendations(PidResponseMetrics metrics)
+    {
+        var recommendations = _recommendationService.Recommend(metrics);
+        TuningRecommendations = new ObservableCollection<PidTuningRecommendationViewModel>(
+            recommendations.Select(recommendation => new PidTuningRecommendationViewModel(recommendation)));
+        RecommendationSummary = TuningRecommendations.Count == 0
+            ? "当前没有可用建议。"
+            : $"已生成 {TuningRecommendations.Count} 条保守调整建议，写回 PLC 前必须由工程师确认。";
     }
 
     private Task DismissNotificationAsync()
