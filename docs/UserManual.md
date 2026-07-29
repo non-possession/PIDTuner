@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 55.
+Last updated: 2026-07-29, iteration 60.
 
 ## Requirements
 
@@ -159,6 +159,22 @@ Recommendation review records are saved under:
 local\recommendation-reviews\recommendation-reviews.json
 ```
 
+## Save PID Parameter Sets
+
+On the `参数调整` tab:
+
+1. Load or analyze data that contains Kp, Ki/Ti, and Kd/Td values.
+2. Click `保存参数方案`.
+3. Click `刷新方案` to reload saved PID parameter sets.
+
+Parameter sets are captured from the latest available PID sample values and saved locally under:
+
+```text
+local\parameter-sets\pid-parameter-sets.json
+```
+
+This is the first step toward writeback safety: before any future PLC parameter write, PIDTuner can preserve the current parameter combination for review and rollback.
+
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
 ```text
@@ -193,7 +209,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 21 tests pass.
+Current expected result: 23 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -205,7 +221,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, seeds an improved comparison session, compares history records, records one accepted recommendation review, refreshes PLC tag previews, and then renders the window. The current snapshot view is switched to the history page so the saved-session comparison table is visible.
+It loads the bundled example profile and sample CSV, saves the current PID parameter set, saves the current test session, seeds an improved comparison session, compares history records, and then renders the window. The current snapshot view is switched to the parameter-adjustment page so saved parameter sets are visible.
 
 ## Current Features
 
@@ -248,6 +264,8 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 - Show recommendation reason, expected effect, risk, and confidence on the parameter-adjustment page.
 - Record engineer accept/defer decisions for tuning recommendations.
 - Persist recommendation review records locally.
+- Extract PID parameter sets from sampled Kp, Ki/Ti, and Kd/Td values.
+- Save and refresh local PID parameter set records.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
@@ -276,8 +294,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 55 snapshot:
+Iteration 60 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-55-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-60-rendered.png
 ```

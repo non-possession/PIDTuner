@@ -719,17 +719,32 @@
                       Width="96"
                       Height="32"
                       Margin="10,0,0,0" />
+              <Button Command="{Binding SaveParameterSetCommand}"
+                      Content="保存参数方案"
+                      Width="112"
+                      Height="32"
+                      Margin="10,0,0,0" />
+              <Button Command="{Binding LoadParameterSetsCommand}"
+                      Content="刷新方案"
+                      Width="96"
+                      Height="32"
+                      Margin="10,0,0,0" />
               <TextBlock Text="{Binding RecommendationReviewStatus}"
                          VerticalAlignment="Center"
                          Margin="16,0,0,0"
                          Foreground="#374151" />
             </StackPanel>
 
-            <DataGrid Grid.Row="3"
-                      ItemsSource="{Binding RecommendationReviews}"
+            <Grid Grid.Row="3"
+                  Margin="0,12,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="2*" />
+              </Grid.ColumnDefinitions>
+
+              <DataGrid ItemsSource="{Binding RecommendationReviews}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
-                      Margin="0,12,0,0"
                       CanUserAddRows="False"
                       HeadersVisibility="Column">
               <DataGrid.Columns>
@@ -756,6 +771,38 @@
                                     Width="*" />
               </DataGrid.Columns>
             </DataGrid>
+
+              <StackPanel Grid.Column="1"
+                          Margin="16,0,0,0">
+                <TextBlock Text="{Binding ParameterSetStatus}"
+                           Foreground="#374151"
+                           TextWrapping="Wrap" />
+                <DataGrid ItemsSource="{Binding ParameterSets}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          Margin="0,8,0,0"
+                          CanUserAddRows="False"
+                          HeadersVisibility="Column">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="时间"
+                                        Binding="{Binding CapturedAt}"
+                                        Width="125" />
+                    <DataGridTextColumn Header="Kp"
+                                        Binding="{Binding Kp}"
+                                        Width="55" />
+                    <DataGridTextColumn Header="Ki/Ti"
+                                        Binding="{Binding KiOrTi}"
+                                        Width="55" />
+                    <DataGridTextColumn Header="Kd/Td"
+                                        Binding="{Binding KdOrTd}"
+                                        Width="55" />
+                    <DataGridTextColumn Header="来源"
+                                        Binding="{Binding SourceName}"
+                                        Width="*" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </StackPanel>
+            </Grid>
           </Grid>
         </TabItem>
         <TabItem Header="历史记录">

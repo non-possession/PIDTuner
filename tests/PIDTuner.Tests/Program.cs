@@ -35,6 +35,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
     ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession),
     ("json recommendation review repository saves and lists reviews", JsonRecommendationReviewRepositorySavesAndListsReviews),
+    ("pid parameter set extractor captures latest PID values", PidParameterSetExtractorCapturesLatestPidValues),
+    ("json pid parameter set repository saves and lists sets", JsonPidParameterSetRepositorySavesAndListsSets),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
@@ -508,6 +510,54 @@ static async Task JsonRecommendationReviewRepositorySavesAndListsReviews()
     AssertEqual("现场同意小步验证", reviews[0].EngineerNote, "stored review note");
 }
 
+static Task PidParameterSetExtractorCapturesLatestPidValues()
+{
+    var extractor = new PidParameterSetExtractor();
+    var sessionId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+    var start = DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+    var parameterSetId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+    var samples = new[]
+    {
+        new PidSample(start, 100, 90, 30, 1.2, 0.4, 0.1, true, sessionId, null),
+        new PidSample(start.AddSeconds(1), 100, 95, 35, 1.4, 0.5, 0.2, true, sessionId, parameterSetId)
+    };
+
+    var parameterSet = extractor.Extract(samples, sessionId, "offline-step-response", "baseline");
+
+    AssertEqual(parameterSetId, parameterSet?.Id, "extracted parameter set id");
+    AssertClose(1.4, parameterSet?.Kp, 0.001, "extracted Kp");
+    AssertClose(0.5, parameterSet?.KiOrTi, 0.001, "extracted Ki/Ti");
+    AssertClose(0.2, parameterSet?.KdOrTd, 0.001, "extracted Kd/Td");
+    AssertEqual("baseline", parameterSet?.Notes, "extracted notes");
+
+    return Task.CompletedTask;
+}
+
+static async Task JsonPidParameterSetRepositorySavesAndListsSets()
+{
+    var directory = CreateTestStorageDirectory();
+    var repository = new JsonPidParameterSetRepository(directory);
+    var parameterSet = new PidParameterSet(
+        Guid.Parse("99999999-9999-9999-9999-999999999999"),
+        Guid.Parse("77777777-7777-7777-7777-777777777777"),
+        "baseline",
+        1.2,
+        0.4,
+        0.1,
+        DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture),
+        "offline-step-response",
+        "before tuning");
+
+    await repository.SaveAsync(parameterSet, CancellationToken.None);
+    await repository.SaveAsync(parameterSet with { Kp = 1.1 }, CancellationToken.None);
+
+    var parameterSets = await repository.ListAsync(CancellationToken.None);
+
+    AssertEqual(1, parameterSets.Count, "stored parameter set count");
+    AssertClose(1.1, parameterSets[0].Kp, 0.001, "updated parameter set Kp");
+    AssertEqual("before tuning", parameterSets[0].Notes, "stored parameter set notes");
+}
+
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
 {
     var store = new JsonPlcProjectConfigurationStore();
@@ -623,6 +673,7 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     var sessionRepository = new JsonTestSessionRepository(directory);
     var sampleRepository = new JsonPidSampleRepository(directory);
     var reviewRepository = new JsonPidRecommendationReviewRepository(directory);
+    var parameterSetRepository = new JsonPidParameterSetRepository(directory);
     var exportedHistorySamplesPath = Path.Combine(directory, "history-samples.csv");
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
@@ -631,6 +682,7 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
         testSessionRepository: sessionRepository,
         pidSampleRepository: sampleRepository,
         recommendationReviewRepository: reviewRepository,
+        parameterSetRepository: parameterSetRepository,
         testSessionStorageDirectory: directory);
 
     await viewModel.LoadExampleAsync();
@@ -640,6 +692,10 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
     AssertEqual(true, viewModel.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
     AssertContains("保守调整建议", viewModel.RecommendationSummary);
+    await viewModel.SaveParameterSetAsync();
+    AssertEqual("参数方案已保存", viewModel.NotificationTitle, "parameter set notification title");
+    AssertEqual(1, viewModel.ParameterSets.Count, "parameter set count after save");
+    AssertEqual("1.2", viewModel.ParameterSets[0].Kp, "parameter set Kp display");
     viewModel.SelectedTuningRecommendation = viewModel.TuningRecommendations.First(item => item.Parameter == "Kp");
     viewModel.RecommendationReviewNote = "现场确认先小步调整";
     await viewModel.AcceptRecommendationAsync();

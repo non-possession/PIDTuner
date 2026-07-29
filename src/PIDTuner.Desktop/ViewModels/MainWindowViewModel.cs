@@ -37,8 +37,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
     private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
+    private readonly IPidParameterSetRepository _parameterSetRepository;
     private readonly IPlcConnectivityProbe _plcConnectivityProbe;
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
+    private readonly PidParameterSetExtractor _parameterSetExtractor = new();
     private readonly string _testSessionStorageDirectory;
     private readonly DispatcherTimer _monitorTimer = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
@@ -93,6 +95,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
     private ObservableCollection<HistoryComparisonMetricViewModel> _historyComparisonMetrics = [];
+    private ObservableCollection<PidParameterSetViewModel> _parameterSets = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TagDefinitionViewModel? _selectedTagDefinition;
@@ -109,6 +112,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
 
+    private string _parameterSetStatus = "尚未保存参数方案。";
+
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
@@ -118,7 +123,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new PreviewPlcTagSnapshotReader(),
             new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
-            new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")))
+            new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")),
+            new JsonPidParameterSetRepository(Path.Combine(FindRepositoryRoot(), "local", "parameter-sets")))
     {
     }
 
@@ -131,6 +137,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ITestSessionRepository? testSessionRepository = null,
         IPidSampleRepository? pidSampleRepository = null,
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
+        IPidParameterSetRepository? parameterSetRepository = null,
         string? testSessionStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
@@ -144,6 +151,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
         _recommendationReviewRepository = recommendationReviewRepository
             ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
+        _parameterSetRepository = parameterSetRepository
+            ?? new JsonPidParameterSetRepository(Path.Combine(FindRepositoryRoot(), "local", "parameter-sets"));
         _monitorTimer.Tick += async (_, _) => await RefreshPlcMonitorAsync();
         RefreshFieldDefinitions();
         RefreshTagDefinitions();
@@ -171,6 +180,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AcceptRecommendationCommand = new AsyncCommand(AcceptRecommendationAsync);
         DeferRecommendationCommand = new AsyncCommand(DeferRecommendationAsync);
         LoadRecommendationReviewsCommand = new AsyncCommand(LoadRecommendationReviewsAsync);
+        SaveParameterSetCommand = new AsyncCommand(SaveParameterSetAsync);
+        LoadParameterSetsCommand = new AsyncCommand(LoadParameterSetsAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -483,6 +494,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _historyComparisonMetrics, value);
     }
 
+    public ObservableCollection<PidParameterSetViewModel> ParameterSets
+    {
+        get => _parameterSets;
+        private set => SetProperty(ref _parameterSets, value);
+    }
+
     public string RecommendationSummary
     {
         get => _recommendationSummary;
@@ -499,6 +516,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _recommendationReviewStatus;
         private set => SetProperty(ref _recommendationReviewStatus, value);
+    }
+
+    public string ParameterSetStatus
+    {
+        get => _parameterSetStatus;
+        private set => SetProperty(ref _parameterSetStatus, value);
     }
 
     public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
@@ -584,6 +607,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand DeferRecommendationCommand { get; }
 
     public ICommand LoadRecommendationReviewsCommand { get; }
+
+    public ICommand SaveParameterSetCommand { get; }
+
+    public ICommand LoadParameterSetsCommand { get; }
 
     public async Task LoadExampleAsync()
     {
@@ -1012,6 +1039,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task SaveParameterSetAsync()
+    {
+        if (_lastSamples.Count == 0)
+        {
+            Notify("无法保存参数方案", "请先导入 CSV、载入示例或打开历史记录。", "Warning");
+            return;
+        }
+
+        var sourceName = string.IsNullOrWhiteSpace(_lastSourceFileName)
+            ? "current-analysis"
+            : Path.GetFileNameWithoutExtension(_lastSourceFileName);
+        var parameterSet = _parameterSetExtractor.Extract(
+            _lastSamples,
+            _lastTestSessionId == Guid.Empty ? null : _lastTestSessionId,
+            sourceName,
+            $"Captured from {sourceName}");
+
+        if (parameterSet is null)
+        {
+            Notify("无法保存参数方案", "当前样本没有 Kp、Ki/Ti 或 Kd/Td 参数值。", "Warning");
+            return;
+        }
+
+        await _parameterSetRepository.SaveAsync(parameterSet, CancellationToken.None);
+        await LoadParameterSetsAsync(showNotification: false);
+        Notify(
+            "参数方案已保存",
+            $"{parameterSet.Name}: Kp={FormatNullable(parameterSet.Kp, "0.###")}, Ki/Ti={FormatNullable(parameterSet.KiOrTi, "0.###")}, Kd/Td={FormatNullable(parameterSet.KdOrTd, "0.###")}",
+            "Success");
+    }
+
+    public async Task LoadParameterSetsAsync()
+    {
+        await LoadParameterSetsAsync(showNotification: true);
+    }
+
     private async Task ReviewRecommendationAsync(PidRecommendationReviewDecision decision)
     {
         if (SelectedTuningRecommendation is null)
@@ -1044,6 +1107,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception exception)
         {
             Notify("建议审查记录失败", exception.Message, "Error");
+        }
+    }
+
+    private async Task LoadParameterSetsAsync(bool showNotification)
+    {
+        try
+        {
+            var parameterSets = await _parameterSetRepository.ListAsync(CancellationToken.None);
+            ParameterSets = new ObservableCollection<PidParameterSetViewModel>(
+                parameterSets
+                    .OrderByDescending(item => item.CapturedAt)
+                    .Select(item => new PidParameterSetViewModel(item)));
+            ParameterSetStatus = ParameterSets.Count == 0
+                ? "尚无参数方案记录。"
+                : $"已加载 {ParameterSets.Count} 条参数方案。";
+
+            if (showNotification)
+            {
+                Notify("参数方案已刷新", ParameterSetStatus, "Info");
+            }
+        }
+        catch (Exception exception)
+        {
+            ParameterSetStatus = "参数方案加载失败。";
+            Notify("参数方案加载失败", exception.Message, "Error");
         }
     }
 
