@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 9.
+Last updated: 2026-07-29, iteration 10.
 
 ## Requirements
 
@@ -62,7 +62,7 @@ Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 
 2026-07-29T10:00:06.0000000+00:00
 ```
 
-When both fields are empty, PIDTuner analyzes the full CSV sample range.
+When both fields are empty, PIDTuner analyzes the full CSV sample range and fills the start/end inputs from the imported CSV. The `本次窗口` label shows the window used for the latest analysis.
 
 ## Edit A Field Profile
 
@@ -108,6 +108,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
 - Analyze either the full CSV range or a user-entered analysis time window.
+- Fill and show the active analysis window after CSV import.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
@@ -133,3 +134,11 @@ Every time the project reaches another fifth iteration, update this manual befor
 - current sample files
 - current feature list
 - latest UI snapshot command or snapshot path
+
+## Latest UI Snapshot
+
+Iteration 10 snapshot:
+
+```text
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-10-rendered.png
+```

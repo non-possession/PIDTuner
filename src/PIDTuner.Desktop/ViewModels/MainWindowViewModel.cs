@@ -35,6 +35,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _steadyStateError = "-";
     private string _analysisStartText = string.Empty;
     private string _analysisEndText = string.Empty;
+    private string _activeAnalysisWindow = "-";
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
@@ -124,6 +125,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _analysisEndText;
         set => SetProperty(ref _analysisEndText, value);
+    }
+
+    public string ActiveAnalysisWindow
+    {
+        get => _activeAnalysisWindow;
+        private set => SetProperty(ref _activeAnalysisWindow, value);
     }
 
     public PointCollection SetPointPoints
@@ -255,6 +262,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
             var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
 
+            if (window is null)
+            {
+                AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
+                AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
+            }
+
+            ActiveAnalysisWindow =
+                $"{result.Window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {result.Window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
             SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
             OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");
             RiseTime = FormatNullable(result.Metrics.RiseTime);
