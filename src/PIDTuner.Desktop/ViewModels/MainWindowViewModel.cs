@@ -62,6 +62,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string Title { get; } = "PIDTuner";
 
+    public IReadOnlyList<string> AvailableFieldDataTypes { get; } =
+        Enum.GetNames<PidSampleFieldDataType>();
+
+    public IReadOnlyList<string> AvailableFieldRoles { get; } =
+        Enum.GetNames<PidSampleFieldRole>();
+
     public string StatusMessage
     {
         get => _statusMessage;

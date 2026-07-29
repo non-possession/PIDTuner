@@ -199,18 +199,40 @@
                   <DataGridTextColumn Header="显示名"
                                       Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
                                       Width="78" />
-                  <DataGridTextColumn Header="类型"
-                                      Binding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"
-                                      Width="78" />
+                  <DataGridTemplateColumn Header="类型"
+                                          Width="96">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding DataType}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                    <DataGridTemplateColumn.CellEditingTemplate>
+                      <DataTemplate>
+                        <ComboBox ItemsSource="{Binding DataContext.AvailableFieldDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                  SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellEditingTemplate>
+                  </DataGridTemplateColumn>
                   <DataGridCheckBoxColumn Header="必填"
                                           Binding="{Binding Required, UpdateSourceTrigger=PropertyChanged}"
                                           Width="44" />
                   <DataGridTextColumn Header="单位"
                                       Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
                                       Width="44" />
-                  <DataGridTextColumn Header="角色"
-                                      Binding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
-                                      Width="82" />
+                  <DataGridTemplateColumn Header="角色"
+                                          Width="126">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Role}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                    <DataGridTemplateColumn.CellEditingTemplate>
+                      <DataTemplate>
+                        <ComboBox ItemsSource="{Binding DataContext.AvailableFieldRoles, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                  SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellEditingTemplate>
+                  </DataGridTemplateColumn>
                 </DataGrid.Columns>
               </DataGrid>
 

@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 6.
+Last updated: 2026-07-29, iteration 7.
 
 ## Requirements
 
@@ -63,10 +63,10 @@ On the `分析` tab:
 2. Edit the field table directly:
    - `字段`: stable CSV column key.
    - `显示名`: user-facing name.
-   - `类型`: one of `String`, `Boolean`, `Double`, `Guid`, `DateTimeOffset`.
+   - `类型`: choose one of `String`, `Boolean`, `Double`, `Guid`, `DateTimeOffset`.
    - `必填`: checked means the CSV must contain this field.
    - `单位`: optional engineering unit.
-   - `角色`: one of `Metadata`, `SampleTime`, `SetPoint`, `ProcessValue`, `ManipulatedValue`, `Kp`, `KiOrTi`, `KdOrTd`, `ConnectionState`, `TestSession`, `ParameterSet`.
+   - `角色`: choose one of `Metadata`, `SampleTime`, `SetPoint`, `ProcessValue`, `ManipulatedValue`, `Kp`, `KiOrTi`, `KdOrTd`, `ConnectionState`, `TestSession`, `ParameterSet`.
 3. Click `新增字段` to add a metadata field.
 4. Select a field row and click `删除字段` to remove it.
 5. Click `保存字段配置` to write the edited profile to a JSON file.
@@ -112,7 +112,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - No SQLite persistence yet.
 - No real charting library yet; the trend preview is a lightweight WPF polyline preview.
 - CSV parsing currently supports simple comma-separated values without quoted commas.
-- Field profile editing currently uses text cells for enum values; invalid enum text is reported when saving.
+- Field profile editing uses dropdowns for field type and semantic role.
 
 ## Iteration Reporting Rule
 
