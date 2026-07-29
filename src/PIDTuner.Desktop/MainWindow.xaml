@@ -42,11 +42,21 @@
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Button Command="{Binding ImportCsvCommand}"
-                    Content="导入 CSV"
-                    Width="120"
-                    Height="36"
-                    HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal">
+              <Button Command="{Binding LoadFieldProfileCommand}"
+                      Content="导入字段配置"
+                      Width="120"
+                      Height="36" />
+              <Button Command="{Binding ImportCsvCommand}"
+                      Content="导入 CSV"
+                      Width="120"
+                      Height="36"
+                      Margin="12,0,0,0" />
+              <TextBlock Text="{Binding CurrentFieldProfile}"
+                         VerticalAlignment="Center"
+                         Margin="16,0,0,0"
+                         Foreground="#374151" />
+            </StackPanel>
 
             <UniformGrid Grid.Row="1"
                          Columns="5"

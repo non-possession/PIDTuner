@@ -3,10 +3,13 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
+using PIDTuner.Domain.Configuration;
 using PIDTuner.Infrastructure.Analysis;
+using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Csv;
 
 namespace PIDTuner.Desktop.ViewModels;
@@ -14,8 +17,11 @@ namespace PIDTuner.Desktop.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly AnalyzeOfflineCsvUseCase _analyzeOfflineCsvUseCase;
+    private readonly IPidSampleFieldProfileStore _fieldProfileStore;
+    private readonly BasicPidAnalysisService _pidAnalysisService = new();
+    private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
+    private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
     private string _sampleCount = "-";
     private string _overshootPercent = "-";
     private string _riseTime = "-";
@@ -25,17 +31,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
-            new AnalyzeOfflineCsvUseCase(new StablePidSampleCsvExchange(), new BasicPidAnalysisService()))
+            new JsonPidSampleFieldProfileStore())
     {
     }
 
     public MainWindowViewModel(
         IOpenFileDialogService openFileDialogService,
-        AnalyzeOfflineCsvUseCase analyzeOfflineCsvUseCase)
+        IPidSampleFieldProfileStore fieldProfileStore)
     {
         _openFileDialogService = openFileDialogService;
-        _analyzeOfflineCsvUseCase = analyzeOfflineCsvUseCase;
+        _fieldProfileStore = fieldProfileStore;
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
+        LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -46,6 +53,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
+    }
+
+    public string CurrentFieldProfile
+    {
+        get => _currentFieldProfile;
+        private set => SetProperty(ref _currentFieldProfile, value);
     }
 
     public string SampleCount
@@ -80,6 +93,29 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand ImportCsvCommand { get; }
 
+    public ICommand LoadFieldProfileCommand { get; }
+
+    private async Task LoadFieldProfileAsync()
+    {
+        var fileName = _openFileDialogService.PickFieldProfileFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(fileName);
+            _fieldProfile = await _fieldProfileStore.LoadAsync(stream, CancellationToken.None);
+            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
+            StatusMessage = $"已加载字段配置：{Path.GetFileName(fileName)}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"字段配置加载失败：{exception.Message}";
+        }
+    }
+
     private async Task ImportCsvAsync()
     {
         var fileName = _openFileDialogService.PickCsvFile();
@@ -91,7 +127,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await using var stream = File.OpenRead(fileName);
-            var result = await _analyzeOfflineCsvUseCase.AnalyzeAsync(stream, null, CancellationToken.None);
+            var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
+            var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
+            var result = await useCase.AnalyzeAsync(stream, null, CancellationToken.None);
 
             SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
             OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");
