@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 13.
+Last updated: 2026-07-29, iteration 14.
 
 ## Requirements
 
@@ -31,6 +31,10 @@ dotnet run --project .\src\PIDTuner.Desktop\PIDTuner.Desktop.csproj
 The current MVP opens on the `分析` tab.
 
 ## Try The Current Offline CSV Flow
+
+Fast path: click `载入示例` to load the default field profile and sample CSV in one step.
+
+Manual path:
 
 1. Click `导入字段配置`.
 2. Select:
@@ -106,6 +110,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 ## Current Features
 
 - Load a PID sample field profile from JSON.
+- Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
 - Analyze either the full CSV range or a user-entered analysis time window.

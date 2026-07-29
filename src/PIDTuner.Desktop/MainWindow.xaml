@@ -51,6 +51,11 @@
                       Content="导入字段配置"
                       Width="120"
                       Height="36" />
+              <Button Command="{Binding LoadExampleCommand}"
+                      Content="载入示例"
+                      Width="96"
+                      Height="36"
+                      Margin="12,0,0,0" />
               <Button Command="{Binding SaveFieldProfileCommand}"
                       Content="保存字段配置"
                       Width="120"

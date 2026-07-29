@@ -69,6 +69,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
         SaveFieldProfileCommand = new AsyncCommand(SaveFieldProfileAsync);
         ExportAnalysisResultCommand = new AsyncCommand(ExportAnalysisResultAsync);
+        LoadExampleCommand = new AsyncCommand(LoadExampleAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -189,6 +190,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand ExportAnalysisResultCommand { get; }
 
+    public ICommand LoadExampleCommand { get; }
+
+    private async Task LoadExampleAsync()
+    {
+        var fieldProfilePath = Path.Combine(Environment.CurrentDirectory, "config", "pid-sample-fields.example.json");
+        var csvPath = Path.Combine(Environment.CurrentDirectory, "samples", "offline-step-response.csv");
+
+        if (!File.Exists(fieldProfilePath) || !File.Exists(csvPath))
+        {
+            StatusMessage = "示例文件不存在，请确认从仓库根目录运行程序。";
+            return;
+        }
+
+        try
+        {
+            await using (var profileStream = File.OpenRead(fieldProfilePath))
+            {
+                _fieldProfile = await _fieldProfileStore.LoadAsync(profileStream, CancellationToken.None);
+            }
+
+            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
+            RefreshFieldDefinitions();
+            await AnalyzeCsvFileAsync(csvPath);
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"示例加载失败：{exception.Message}";
+        }
+    }
+
     private async Task ExportAnalysisResultAsync()
     {
         if (_lastAnalysisWindow is null || _lastMetrics is null || _lastAssessment is null)
@@ -303,37 +334,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using var stream = File.OpenRead(fileName);
-            var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
-            var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
-            var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
-            var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
-
-            if (window is null)
-            {
-                AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
-                AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
-            }
-
-            ActiveAnalysisWindow =
-                $"{result.Window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {result.Window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
-            SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
-            OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");
-            RiseTime = FormatNullable(result.Metrics.RiseTime);
-            SettlingTime = FormatNullable(result.Metrics.SettlingTime);
-            SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
-            var assessment = _assessmentService.Assess(result.Metrics);
-            AssessmentSummary = assessment.Summary;
-            _lastAnalysisWindow = result.Window;
-            _lastMetrics = result.Metrics;
-            _lastAssessment = assessment;
-            UpdateTrendPreview(result.Samples);
-            StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
+            await AnalyzeCsvFileAsync(fileName);
         }
         catch (Exception exception)
         {
             StatusMessage = $"离线分析失败：{exception.Message}";
         }
+    }
+
+    private async Task AnalyzeCsvFileAsync(string fileName)
+    {
+        await using var stream = File.OpenRead(fileName);
+        var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
+        var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
+        var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
+        var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
+
+        if (window is null)
+        {
+            AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
+            AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        ActiveAnalysisWindow =
+            $"{result.Window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {result.Window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
+        SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
+        OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");
+        RiseTime = FormatNullable(result.Metrics.RiseTime);
+        SettlingTime = FormatNullable(result.Metrics.SettlingTime);
+        SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
+        var assessment = _assessmentService.Assess(result.Metrics);
+        AssessmentSummary = assessment.Summary;
+        _lastAnalysisWindow = result.Window;
+        _lastMetrics = result.Metrics;
+        _lastAssessment = assessment;
+        UpdateTrendPreview(result.Samples);
+        StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
     }
 
     private static string FormatNullable(double? value, string format)
