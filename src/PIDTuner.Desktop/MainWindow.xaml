@@ -94,9 +94,18 @@
                       Width="96"
                       Height="36"
                       Margin="0,0,12,8" />
+              <Button Command="{Binding CheckPlcCommunicationCommand}"
+                      Content="检查通信"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
               <TextBlock Text="{Binding PlcConfigurationStatus}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"
+                         Foreground="#374151" />
+              <TextBlock Text="{Binding PlcCommunicationStatus}"
+                         VerticalAlignment="Center"
+                         Margin="16,0,0,8"
                          Foreground="#374151" />
             </WrapPanel>
 
@@ -243,7 +252,96 @@
             </DataGrid>
           </Grid>
         </TabItem>
-        <TabItem Header="实时监控" />
+        <TabItem Header="实时监控">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="120" />
+            </Grid.RowDefinitions>
+
+            <WrapPanel>
+              <Button Command="{Binding CheckPlcCommunicationCommand}"
+                      Content="检查通信"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding RefreshPlcMonitorCommand}"
+                      Content="刷新点位"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding TogglePlcMonitoringCommand}"
+                      Content="启动/停止"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <TextBlock Text="{Binding PlcMonitorStatus}"
+                         VerticalAlignment="Center"
+                         Margin="4,0,0,8"
+                         Foreground="#374151" />
+              <TextBlock Text="{Binding PlcCommunicationStatus}"
+                         VerticalAlignment="Center"
+                         Margin="18,0,0,8"
+                         Foreground="#374151" />
+            </WrapPanel>
+
+            <DataGrid Grid.Row="1"
+                      ItemsSource="{Binding PlcMonitorTags}"
+                      SelectedItem="{Binding SelectedPlcMonitorTag}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      Margin="0,16,0,0"
+                      HeadersVisibility="Column">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="名称"
+                                    Binding="{Binding Name}"
+                                    Width="100" />
+                <DataGridTextColumn Header="地址"
+                                    Binding="{Binding Address}"
+                                    Width="150" />
+                <DataGridTextColumn Header="当前值"
+                                    Binding="{Binding ValueText}"
+                                    Width="100" />
+                <DataGridTextColumn Header="单位"
+                                    Binding="{Binding Unit}"
+                                    Width="80" />
+                <DataGridTextColumn Header="质量"
+                                    Binding="{Binding Quality}"
+                                    Width="100" />
+                <DataGridTextColumn Header="来源"
+                                    Binding="{Binding Source}"
+                                    Width="100" />
+                <DataGridTextColumn Header="时间"
+                                    Binding="{Binding TimestampText}"
+                                    Width="100" />
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="2"
+                    Margin="0,16,0,0"
+                    BorderBrush="#CBD5E1"
+                    BorderThickness="1"
+                    Background="#F8FAFC">
+              <Grid Margin="10">
+                <TextBlock Text="{Binding SelectedPlcMonitorTag.Name}"
+                           Foreground="#374151"
+                           FontWeight="SemiBold" />
+                <Canvas Margin="0,24,0,0"
+                        Height="76">
+                  <Line X1="0"
+                        Y1="70"
+                        X2="260"
+                        Y2="70"
+                        Stroke="#CBD5E1" />
+                  <Polyline Points="{Binding SelectedPlcMonitorTag.TrendPoints}"
+                            Stroke="#2563EB"
+                            StrokeThickness="2" />
+                </Canvas>
+              </Grid>
+            </Border>
+          </Grid>
+        </TabItem>
         <TabItem Header="分析">
           <Grid Margin="16">
             <Grid.RowDefinitions>

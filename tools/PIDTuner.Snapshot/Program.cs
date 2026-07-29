@@ -39,11 +39,16 @@ var thread = new Thread(() =>
         viewModel.SelectedTuningRecommendation = viewModel.TuningRecommendations.FirstOrDefault();
         viewModel.RecommendationReviewNote = "现场确认先小步验证";
         PumpDispatcherUntilComplete(viewModel.AcceptRecommendationAsync());
+        PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
+        Thread.Sleep(1000);
+        PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
+        Thread.Sleep(1000);
+        PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
         viewModel.DismissNotificationCommand.Execute(null);
         var tabControl = FindVisualChild<TabControl>(window);
         if (tabControl is not null)
         {
-            tabControl.SelectedIndex = 0;
+            tabControl.SelectedIndex = 1;
         }
 
         window.UpdateLayout();

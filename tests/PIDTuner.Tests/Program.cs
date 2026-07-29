@@ -3,9 +3,11 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using PIDTuner.Domain.Analysis;
+using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.Services;
 using PIDTuner.Domain.Trends;
 using PIDTuner.Domain.Models;
+using PIDTuner.Domain.Plc;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Desktop.Services;
@@ -34,6 +36,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json recommendation review repository saves and lists reviews", JsonRecommendationReviewRepositorySavesAndListsReviews),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
+    ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
+    ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
@@ -533,6 +537,45 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
 }
 
+static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
+{
+    var directory = CreateTestStorageDirectory();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        new FixedPlcConnectivityProbe(true),
+        testSessionStorageDirectory: directory);
+
+    viewModel.PlcIpAddress = "127.0.0.1";
+
+    await viewModel.CheckPlcCommunicationAsync();
+
+    AssertEqual("PLC 通信检查通过", viewModel.NotificationTitle, "plc communication notification title");
+    AssertContains("127.0.0.1", viewModel.PlcCommunicationStatus);
+    AssertContains("Ping 成功", viewModel.PlcCommunicationStatus);
+}
+
+static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        testSessionStorageDirectory: directory);
+
+    await viewModel.RefreshPlcMonitorAsync();
+    await viewModel.RefreshPlcMonitorAsync();
+
+    AssertEqual(true, viewModel.PlcMonitorTags.Count > 0, "plc monitor tag count");
+    AssertEqual("2", viewModel.PlcMonitorTags[0].ValueText, "second monitor value");
+    AssertEqual(true, viewModel.PlcMonitorTags[0].TrendPoints.Count >= 2, "monitor trend point count");
+    AssertContains("已刷新", viewModel.PlcMonitorStatus);
+}
+
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 {
     var directory = CreateTestStorageDirectory();
@@ -544,10 +587,10 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
         new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
-        sessionRepository,
-        sampleRepository,
-        reviewRepository,
-        directory);
+        testSessionRepository: sessionRepository,
+        pidSampleRepository: sampleRepository,
+        recommendationReviewRepository: reviewRepository,
+        testSessionStorageDirectory: directory);
 
     await viewModel.LoadExampleAsync();
 
@@ -701,5 +744,47 @@ file sealed class NoFileDialogService(
     public string? PickHistorySamplesSaveFile()
     {
         return historySamplesSaveFile;
+    }
+}
+
+file sealed class FixedPlcConnectivityProbe(bool reachable) : IPlcConnectivityProbe
+{
+    public Task<PlcCommunicationCheck> CheckAsync(
+        PlcProjectConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new PlcCommunicationCheck(
+            reachable,
+            configuration.IpAddress,
+            TimeSpan.FromMilliseconds(1),
+            reachable ? "Ping 成功，往返 1 ms。" : "Ping 未成功。",
+            DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+08:00", CultureInfo.InvariantCulture)));
+    }
+}
+
+file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader
+{
+    private int _value;
+
+    public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(
+        PlcProjectConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        _value++;
+        var tag = configuration.Tags.First(item => item.IsEnabled);
+        IReadOnlyList<PlcTagSnapshot> snapshots = new[]
+        {
+            new PlcTagSnapshot(
+                tag.Id,
+                tag.Name,
+                tag.Address,
+                _value,
+                tag.Unit,
+                DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+08:00", CultureInfo.InvariantCulture).AddSeconds(_value),
+                "Good",
+                "Test")
+        };
+
+        return Task.FromResult(snapshots);
     }
 }

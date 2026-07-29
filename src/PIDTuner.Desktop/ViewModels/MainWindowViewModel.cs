@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.Services;
 using PIDTuner.Application.UseCases;
@@ -18,6 +19,7 @@ using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Csv;
 using PIDTuner.Infrastructure.Persistence;
+using PIDTuner.Infrastructure.Plc;
 
 namespace PIDTuner.Desktop.ViewModels;
 
@@ -35,7 +37,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
     private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
+    private readonly IPlcConnectivityProbe _plcConnectivityProbe;
+    private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly string _testSessionStorageDirectory;
+    private readonly DispatcherTimer _monitorTimer = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
@@ -78,20 +83,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
+    private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TagDefinitionViewModel? _selectedTagDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
+    private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
     private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
     private string _recommendationReviewNote = string.Empty;
     private string _recommendationReviewStatus = "尚未记录建议审查。";
+
+    private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
+    private string _plcMonitorStatus = "尚未刷新点位。";
+    private bool _isPlcMonitoring;
 
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
             new JsonPidSampleFieldProfileStore(),
             new JsonPlcProjectConfigurationStore(),
+            new PingPlcConnectivityProbe(),
+            new PreviewPlcTagSnapshotReader(),
             new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
             new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")))
@@ -102,6 +115,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IOpenFileDialogService openFileDialogService,
         IPidSampleFieldProfileStore fieldProfileStore,
         IPlcProjectConfigurationStore plcProjectConfigurationStore,
+        IPlcConnectivityProbe? plcConnectivityProbe = null,
+        IPlcTagSnapshotReader? plcTagSnapshotReader = null,
         ITestSessionRepository? testSessionRepository = null,
         IPidSampleRepository? pidSampleRepository = null,
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
@@ -110,12 +125,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
         _plcProjectConfigurationStore = plcProjectConfigurationStore;
+        _plcConnectivityProbe = plcConnectivityProbe ?? new PingPlcConnectivityProbe();
+        _plcTagSnapshotReader = plcTagSnapshotReader ?? new PreviewPlcTagSnapshotReader();
         _testSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
         _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
         _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
         _recommendationReviewRepository = recommendationReviewRepository
             ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
+        _monitorTimer.Tick += async (_, _) => await RefreshPlcMonitorAsync();
         RefreshFieldDefinitions();
         RefreshTagDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
@@ -123,6 +141,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
         AddTagCommand = new AsyncCommand(AddTagAsync);
         RemoveTagCommand = new AsyncCommand(RemoveTagAsync);
+        CheckPlcCommunicationCommand = new AsyncCommand(CheckPlcCommunicationAsync);
+        RefreshPlcMonitorCommand = new AsyncCommand(RefreshPlcMonitorAsync);
+        TogglePlcMonitoringCommand = new AsyncCommand(TogglePlcMonitoringAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
         AddFieldCommand = new AsyncCommand(AddFieldAsync);
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
@@ -213,6 +234,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcConfigurationStatus;
         private set => SetProperty(ref _plcConfigurationStatus, value);
+    }
+
+    public string PlcCommunicationStatus
+    {
+        get => _plcCommunicationStatus;
+        private set => SetProperty(ref _plcCommunicationStatus, value);
+    }
+
+    public string PlcMonitorStatus
+    {
+        get => _plcMonitorStatus;
+        private set => SetProperty(ref _plcMonitorStatus, value);
+    }
+
+    public bool IsPlcMonitoring
+    {
+        get => _isPlcMonitoring;
+        private set => SetProperty(ref _isPlcMonitoring, value);
     }
 
     public string SampleCount
@@ -365,6 +404,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _recommendationReviews, value);
     }
 
+    public ObservableCollection<PlcTagMonitorViewModel> PlcMonitorTags
+    {
+        get => _plcMonitorTags;
+        private set => SetProperty(ref _plcMonitorTags, value);
+    }
+
     public string RecommendationSummary
     {
         get => _recommendationSummary;
@@ -413,6 +458,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set => SetProperty(ref _selectedTagDefinition, value);
     }
 
+    public PlcTagMonitorViewModel? SelectedPlcMonitorTag
+    {
+        get => _selectedPlcMonitorTag;
+        set => SetProperty(ref _selectedPlcMonitorTag, value);
+    }
+
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadPlcConfigurationCommand { get; }
@@ -422,6 +473,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand AddTagCommand { get; }
 
     public ICommand RemoveTagCommand { get; }
+
+    public ICommand CheckPlcCommunicationCommand { get; }
+
+    public ICommand RefreshPlcMonitorCommand { get; }
+
+    public ICommand TogglePlcMonitoringCommand { get; }
 
     public ICommand LoadFieldProfileCommand { get; }
 
@@ -500,6 +557,81 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify("PLC 配置保存失败", exception.Message, "Error");
         }
+    }
+
+    public async Task CheckPlcCommunicationAsync()
+    {
+        try
+        {
+            var configuration = BuildPlcConfigurationFromForm();
+            PlcCommunicationStatus = $"正在 Ping {configuration.IpAddress} ...";
+            var result = await _plcConnectivityProbe.CheckAsync(configuration, CancellationToken.None);
+            PlcCommunicationStatus = $"{result.CheckedAt:HH:mm:ss} {result.Host}: {result.Message}";
+            Notify(
+                result.IsReachable ? "PLC 通信检查通过" : "PLC 通信检查未通过",
+                PlcCommunicationStatus,
+                result.IsReachable ? "Success" : "Warning");
+        }
+        catch (Exception exception)
+        {
+            Notify("PLC 通信检查失败", exception.Message, "Error");
+        }
+    }
+
+    public async Task RefreshPlcMonitorAsync()
+    {
+        try
+        {
+            var configuration = BuildPlcConfigurationFromForm();
+            var snapshots = await _plcTagSnapshotReader.ReadAsync(configuration, CancellationToken.None);
+            foreach (var snapshot in snapshots)
+            {
+                var existing = PlcMonitorTags.FirstOrDefault(item => item.TagId == snapshot.TagId);
+                if (existing is null)
+                {
+                    PlcMonitorTags.Add(new PlcTagMonitorViewModel(snapshot));
+                    continue;
+                }
+
+                existing.Update(snapshot);
+            }
+
+            var activeIds = snapshots.Select(snapshot => snapshot.TagId).ToHashSet();
+            for (var index = PlcMonitorTags.Count - 1; index >= 0; index--)
+            {
+                if (!activeIds.Contains(PlcMonitorTags[index].TagId))
+                {
+                    PlcMonitorTags.RemoveAt(index);
+                }
+            }
+
+            SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
+            PlcMonitorStatus = snapshots.Count == 0
+                ? "没有启用的监控点位。"
+                : $"已刷新 {snapshots.Count} 个点位，数据源：{snapshots[0].Source}。";
+        }
+        catch (Exception exception)
+        {
+            PlcMonitorStatus = $"刷新失败：{exception.Message}";
+            Notify("PLC 点位刷新失败", exception.Message, "Error");
+        }
+    }
+
+    private async Task TogglePlcMonitoringAsync()
+    {
+        if (IsPlcMonitoring)
+        {
+            _monitorTimer.Stop();
+            IsPlcMonitoring = false;
+            PlcMonitorStatus = "点位监控已停止。";
+            return;
+        }
+
+        _monitorTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(250, PlcDefaultSamplingMilliseconds));
+        await RefreshPlcMonitorAsync();
+        _monitorTimer.Start();
+        IsPlcMonitoring = true;
+        PlcMonitorStatus = $"点位监控运行中，周期 {_monitorTimer.Interval.TotalMilliseconds:0} ms。";
     }
 
     private async Task LoadPlcConfigurationAsync()
@@ -1065,6 +1197,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcTimeoutMilliseconds = configuration.TimeoutMilliseconds;
         PlcDefaultSamplingMilliseconds = configuration.DefaultSamplingMilliseconds;
         RefreshTagDefinitions();
+        PlcMonitorTags.Clear();
+        SelectedPlcMonitorTag = null;
+        PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
     }
 
     private PlcProjectConfiguration BuildPlcConfigurationFromForm()
