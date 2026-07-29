@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly AnalysisWindowParser _analysisWindowParser = new();
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
+    private readonly string _testSessionStorageDirectory;
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
     private PidResponseMetrics? _lastMetrics;
@@ -75,13 +76,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IOpenFileDialogService openFileDialogService,
         IPidSampleFieldProfileStore fieldProfileStore,
         ITestSessionRepository? testSessionRepository = null,
-        IPidSampleRepository? pidSampleRepository = null)
+        IPidSampleRepository? pidSampleRepository = null,
+        string? testSessionStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
-        var localStorageDirectory = Path.Combine(FindRepositoryRoot(), "local", "test-sessions");
-        _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(localStorageDirectory);
-        _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(localStorageDirectory);
+        _testSessionStorageDirectory = Path.GetFullPath(
+            testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
+        _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
+        _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
         RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
@@ -333,7 +336,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await _testSessionRepository.SaveAsync(session, CancellationToken.None);
             await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
             await LoadHistoryAsync(showNotification: false);
-            Notify("试验记录已保存", $"{session.Name}，样本 {samples.Length} 条。", "Success");
+            Notify(
+                "试验记录已保存",
+                string.Join(
+                    Environment.NewLine,
+                    $"{session.Name}，样本 {samples.Length} 条。",
+                    $"目录：{_testSessionStorageDirectory}",
+                    $"索引：{Path.Combine(_testSessionStorageDirectory, "test-sessions.json")}",
+                    $"样本：{Path.Combine(_testSessionStorageDirectory, $"{sessionId:D}.samples.json")}"),
+                "Success");
         }
         catch (Exception exception)
         {
@@ -445,7 +456,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _lastAssessment,
                 stream,
                 CancellationToken.None);
-            Notify("分析结果已导出", Path.GetFileName(fileName), "Success");
+            Notify("分析结果已导出", Path.GetFullPath(fileName), "Success");
         }
         catch (Exception exception)
         {
@@ -496,7 +507,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
             await using var stream = File.Create(fileName);
             await _fieldProfileStore.SaveAsync(_fieldProfile, stream, CancellationToken.None);
-            Notify("字段配置已保存", Path.GetFileName(fileName), "Success");
+            Notify("字段配置已保存", Path.GetFullPath(fileName), "Success");
         }
         catch (Exception exception)
         {

@@ -421,7 +421,8 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
         new NoFileDialogService(),
         new JsonPidSampleFieldProfileStore(),
         sessionRepository,
-        sampleRepository);
+        sampleRepository,
+        directory);
 
     await viewModel.LoadExampleAsync();
 
@@ -433,6 +434,9 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 
     AssertEqual(true, viewModel.IsNotificationVisible, "save session notification visibility");
     AssertEqual("试验记录已保存", viewModel.NotificationTitle, "save session notification title");
+    AssertContains(Path.GetFullPath(directory), viewModel.NotificationMessage);
+    AssertContains(Path.Combine(Path.GetFullPath(directory), "test-sessions.json"), viewModel.NotificationMessage);
+    AssertContains(".samples.json", viewModel.NotificationMessage);
     AssertEqual(1, viewModel.HistorySessions.Count, "history count after save");
 
     viewModel.SelectedHistorySession = viewModel.HistorySessions[0];
