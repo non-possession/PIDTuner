@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
 using PIDTuner.Application.Interfaces;
+using PIDTuner.Application.Services;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
@@ -23,6 +24,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
+    private readonly AnalysisWindowParser _analysisWindowParser = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
@@ -31,6 +33,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _riseTime = "-";
     private string _settlingTime = "-";
     private string _steadyStateError = "-";
+    private string _analysisStartText = string.Empty;
+    private string _analysisEndText = string.Empty;
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
@@ -108,6 +112,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _steadyStateError;
         private set => SetProperty(ref _steadyStateError, value);
+    }
+
+    public string AnalysisStartText
+    {
+        get => _analysisStartText;
+        set => SetProperty(ref _analysisStartText, value);
+    }
+
+    public string AnalysisEndText
+    {
+        get => _analysisEndText;
+        set => SetProperty(ref _analysisEndText, value);
     }
 
     public PointCollection SetPointPoints
@@ -236,7 +252,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await using var stream = File.OpenRead(fileName);
             var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
             var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
-            var result = await useCase.AnalyzeAsync(stream, null, CancellationToken.None);
+            var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
+            var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
 
             SampleCount = result.Samples.Count.ToString(CultureInfo.InvariantCulture);
             OvershootPercent = FormatNullable(result.Metrics.OvershootPercent, "0.### '%'");

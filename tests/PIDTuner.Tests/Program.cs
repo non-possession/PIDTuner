@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using PIDTuner.Domain.Analysis;
+using PIDTuner.Application.Services;
 using PIDTuner.Domain.Trends;
 using PIDTuner.Domain.Models;
 using PIDTuner.Application.UseCases;
@@ -18,7 +19,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields),
     ("configurable csv exchange imports quoted metadata with commas", ConfigurableCsvExchangeImportsQuotedMetadataWithCommas),
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
-    ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields)
+    ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
+    ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows)
 };
 
 var failures = new List<string>();
@@ -274,6 +276,32 @@ static Task FieldProfileEditorAddsUpdatesAndRemovesFields()
     AssertThrows<InvalidOperationException>(
         () => new PidSampleFieldProfileEditor(edited).Add(Field("sp", PidSampleFieldRole.Metadata, PidSampleFieldDataType.String, false)),
         "duplicate field key is rejected");
+
+    return Task.CompletedTask;
+}
+
+static Task AnalysisWindowParserReturnsOptionalValidatedWindows()
+{
+    var parser = new AnalysisWindowParser();
+
+    AssertEqual(null, parser.Parse(null, " "), "empty window");
+
+    var window = parser.Parse(
+        "2026-07-29T10:00:01.0000000+00:00",
+        "2026-07-29T10:00:06.0000000+00:00");
+
+    AssertEqual(
+        DateTimeOffset.Parse("2026-07-29T10:00:01.0000000+00:00", CultureInfo.InvariantCulture),
+        window?.Start,
+        "window start");
+    AssertEqual(
+        DateTimeOffset.Parse("2026-07-29T10:00:06.0000000+00:00", CultureInfo.InvariantCulture),
+        window?.End,
+        "window end");
+
+    AssertThrows<FormatException>(
+        () => parser.Parse("2026-07-29T10:00:06.0000000+00:00", "2026-07-29T10:00:01.0000000+00:00"),
+        "reversed analysis window is rejected");
 
     return Task.CompletedTask;
 }

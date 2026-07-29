@@ -42,6 +42,7 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Orientation="Horizontal">
@@ -65,7 +66,26 @@
                          Foreground="#374151" />
             </StackPanel>
 
-            <UniformGrid Grid.Row="1"
+            <StackPanel Grid.Row="1"
+                        Orientation="Horizontal"
+                        Margin="0,16,0,0">
+              <TextBlock Text="分析开始"
+                         VerticalAlignment="Center"
+                         Foreground="#6B7280" />
+              <TextBox Text="{Binding AnalysisStartText, UpdateSourceTrigger=PropertyChanged}"
+                       Width="260"
+                       Height="28"
+                       Margin="8,0,20,0" />
+              <TextBlock Text="分析结束"
+                         VerticalAlignment="Center"
+                         Foreground="#6B7280" />
+              <TextBox Text="{Binding AnalysisEndText, UpdateSourceTrigger=PropertyChanged}"
+                       Width="260"
+                       Height="28"
+                       Margin="8,0,0,0" />
+            </StackPanel>
+
+            <UniformGrid Grid.Row="2"
                          Columns="5"
                          Margin="0,20,0,0">
               <StackPanel>
@@ -105,7 +125,7 @@
               </StackPanel>
             </UniformGrid>
 
-            <Grid Grid.Row="2"
+            <Grid Grid.Row="3"
                   Margin="0,16,0,0">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

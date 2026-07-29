@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 8.
+Last updated: 2026-07-29, iteration 9.
 
 ## Requirements
 
@@ -55,6 +55,15 @@ samples\offline-step-response.csv
    - SP / PV / MV trend preview
    - current CSV field profile table
 
+Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
+
+```text
+2026-07-29T10:00:01.0000000+00:00
+2026-07-29T10:00:06.0000000+00:00
+```
+
+When both fields are empty, PIDTuner analyzes the full CSV sample range.
+
 ## Edit A Field Profile
 
 On the `分析` tab:
@@ -80,7 +89,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 8 tests pass.
+Current expected result: 9 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -98,6 +107,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - Load a PID sample field profile from JSON.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
+- Analyze either the full CSV range or a user-entered analysis time window.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
