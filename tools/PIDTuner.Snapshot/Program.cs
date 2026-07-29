@@ -36,6 +36,9 @@ var thread = new Thread(() =>
         PumpDispatcherUntilComplete(viewModel.LoadExampleAsync());
         PumpDispatcherUntilComplete(viewModel.SaveTestSessionAsync());
         viewModel.SelectedHistorySession = viewModel.HistorySessions.FirstOrDefault();
+        viewModel.SelectedTuningRecommendation = viewModel.TuningRecommendations.FirstOrDefault();
+        viewModel.RecommendationReviewNote = "现场确认先小步验证";
+        PumpDispatcherUntilComplete(viewModel.AcceptRecommendationAsync());
         var tabControl = FindVisualChild<TabControl>(window);
         if (tabControl is not null)
         {

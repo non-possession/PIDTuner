@@ -5,6 +5,8 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class PidTuningRecommendationViewModel(PidTuningRecommendation recommendation)
 {
+    public PidTuningRecommendation Recommendation { get; } = recommendation;
+
     public string Parameter { get; } = recommendation.Parameter;
 
     public string Direction { get; } = recommendation.Direction.ToString();

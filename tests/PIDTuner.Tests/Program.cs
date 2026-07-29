@@ -31,6 +31,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields),
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
     ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession),
+    ("json recommendation review repository saves and lists reviews", JsonRecommendationReviewRepositorySavesAndListsReviews),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
@@ -436,17 +437,43 @@ static async Task JsonPidSampleRepositorySavesAndLoadsSamplesBySession()
     AssertEqual(sessionId, loaded[0].TestSessionId, "stored sample session id");
 }
 
+static async Task JsonRecommendationReviewRepositorySavesAndListsReviews()
+{
+    var directory = CreateTestStorageDirectory();
+    var repository = new JsonPidRecommendationReviewRepository(directory);
+    var review = new PidRecommendationReview(
+        Guid.Parse("44444444-4444-4444-4444-444444444444"),
+        Guid.Parse("33333333-3333-3333-3333-333333333333"),
+        "offline-step-response",
+        "Kp",
+        PidTuningAdjustmentDirection.Decrease,
+        "建议降低 5% - 10%",
+        PidRecommendationReviewDecision.Accepted,
+        "现场同意小步验证",
+        DateTimeOffset.Parse("2026-07-29T10:10:00.0000000+00:00", CultureInfo.InvariantCulture));
+
+    await repository.SaveAsync(review, CancellationToken.None);
+
+    var reviews = await repository.ListAsync(CancellationToken.None);
+
+    AssertEqual(1, reviews.Count, "stored review count");
+    AssertEqual(PidRecommendationReviewDecision.Accepted, reviews[0].Decision, "stored review decision");
+    AssertEqual("现场同意小步验证", reviews[0].EngineerNote, "stored review note");
+}
+
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 {
     var directory = CreateTestStorageDirectory();
     var sessionRepository = new JsonTestSessionRepository(directory);
     var sampleRepository = new JsonPidSampleRepository(directory);
+    var reviewRepository = new JsonPidRecommendationReviewRepository(directory);
     var exportedHistorySamplesPath = Path.Combine(directory, "history-samples.csv");
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
         new JsonPidSampleFieldProfileStore(),
         sessionRepository,
         sampleRepository,
+        reviewRepository,
         directory);
 
     await viewModel.LoadExampleAsync();
@@ -456,6 +483,12 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
     AssertEqual(true, viewModel.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
     AssertContains("保守调整建议", viewModel.RecommendationSummary);
+    viewModel.SelectedTuningRecommendation = viewModel.TuningRecommendations.First(item => item.Parameter == "Kp");
+    viewModel.RecommendationReviewNote = "现场确认先小步调整";
+    await viewModel.AcceptRecommendationAsync();
+    AssertEqual("建议审查已记录", viewModel.NotificationTitle, "review notification title");
+    AssertEqual(1, viewModel.RecommendationReviews.Count, "recommendation review count");
+    AssertContains("现场确认", viewModel.RecommendationReviews[0].EngineerNote);
 
     await viewModel.SaveTestSessionAsync();
 

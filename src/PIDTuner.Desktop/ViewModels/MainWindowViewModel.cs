@@ -33,12 +33,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly AnalysisWindowParser _analysisWindowParser = new();
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
+    private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
     private readonly string _testSessionStorageDirectory;
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
     private PidResponseMetrics? _lastMetrics;
     private PidResponseAssessment? _lastAssessment;
     private IReadOnlyList<PidSample> _lastSamples = Array.Empty<PidSample>();
+    private Guid? _lastTestSessionId;
     private string _lastSourceFileName = string.Empty;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
@@ -64,17 +66,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
+    private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
+    private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
+    private string _recommendationReviewNote = string.Empty;
+    private string _recommendationReviewStatus = "尚未记录建议审查。";
 
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
             new JsonPidSampleFieldProfileStore(),
             new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
-            new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")))
+            new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
+            new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")))
     {
     }
 
@@ -83,6 +90,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IPidSampleFieldProfileStore fieldProfileStore,
         ITestSessionRepository? testSessionRepository = null,
         IPidSampleRepository? pidSampleRepository = null,
+        IPidRecommendationReviewRepository? recommendationReviewRepository = null,
         string? testSessionStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
@@ -91,6 +99,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
         _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
         _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
+        _recommendationReviewRepository = recommendationReviewRepository
+            ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
         RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
@@ -104,6 +114,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadHistoryCommand = new AsyncCommand(LoadHistoryAsync);
         OpenHistorySessionCommand = new AsyncCommand(OpenHistorySessionAsync);
         ExportHistorySamplesCommand = new AsyncCommand(ExportHistorySamplesAsync);
+        AcceptRecommendationCommand = new AsyncCommand(AcceptRecommendationAsync);
+        DeferRecommendationCommand = new AsyncCommand(DeferRecommendationAsync);
+        LoadRecommendationReviewsCommand = new AsyncCommand(LoadRecommendationReviewsAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -266,10 +279,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _tuningRecommendations, value);
     }
 
+    public ObservableCollection<PidRecommendationReviewViewModel> RecommendationReviews
+    {
+        get => _recommendationReviews;
+        private set => SetProperty(ref _recommendationReviews, value);
+    }
+
     public string RecommendationSummary
     {
         get => _recommendationSummary;
         private set => SetProperty(ref _recommendationSummary, value);
+    }
+
+    public string RecommendationReviewNote
+    {
+        get => _recommendationReviewNote;
+        set => SetProperty(ref _recommendationReviewNote, value);
+    }
+
+    public string RecommendationReviewStatus
+    {
+        get => _recommendationReviewStatus;
+        private set => SetProperty(ref _recommendationReviewStatus, value);
     }
 
     public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
@@ -288,6 +319,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 UpdateSelectedHistoryDetails();
             }
         }
+    }
+
+    public PidTuningRecommendationViewModel? SelectedTuningRecommendation
+    {
+        get => _selectedTuningRecommendation;
+        set => SetProperty(ref _selectedTuningRecommendation, value);
     }
 
     public ICommand ImportCsvCommand { get; }
@@ -313,6 +350,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand OpenHistorySessionCommand { get; }
 
     public ICommand ExportHistorySamplesCommand { get; }
+
+    public ICommand AcceptRecommendationCommand { get; }
+
+    public ICommand DeferRecommendationCommand { get; }
+
+    public ICommand LoadRecommendationReviewsCommand { get; }
 
     public async Task LoadExampleAsync()
     {
@@ -380,6 +423,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             await _testSessionRepository.SaveAsync(session, CancellationToken.None);
             await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
+            _lastTestSessionId = sessionId;
             await LoadHistoryAsync(showNotification: false);
             Notify(
                 "试验记录已保存",
@@ -467,6 +511,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task AcceptRecommendationAsync()
+    {
+        await ReviewRecommendationAsync(PidRecommendationReviewDecision.Accepted);
+    }
+
+    public async Task DeferRecommendationAsync()
+    {
+        await ReviewRecommendationAsync(PidRecommendationReviewDecision.Deferred);
+    }
+
+    public async Task LoadRecommendationReviewsAsync()
+    {
+        try
+        {
+            var reviews = await _recommendationReviewRepository.ListAsync(CancellationToken.None);
+            RecommendationReviews = new ObservableCollection<PidRecommendationReviewViewModel>(
+                reviews
+                    .OrderByDescending(review => review.CreatedAt)
+                    .Select(review => new PidRecommendationReviewViewModel(review)));
+            RecommendationReviewStatus = RecommendationReviews.Count == 0
+                ? "尚无建议审查记录。"
+                : $"已加载 {RecommendationReviews.Count} 条建议审查记录。";
+        }
+        catch (Exception exception)
+        {
+            Notify("建议审查记录加载失败", exception.Message, "Error");
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(Environment.CurrentDirectory);
@@ -515,6 +588,41 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             HistoryStatus = "历史记录加载失败。";
             Notify("历史记录加载失败", exception.Message, "Error");
+        }
+    }
+
+    private async Task ReviewRecommendationAsync(PidRecommendationReviewDecision decision)
+    {
+        if (SelectedTuningRecommendation is null)
+        {
+            Notify("无法记录建议审查", "请先选择一条参数调整建议。", "Warning");
+            return;
+        }
+
+        try
+        {
+            var review = new PidRecommendationReview(
+                Guid.NewGuid(),
+                _lastTestSessionId,
+                string.IsNullOrWhiteSpace(_lastSourceFileName)
+                    ? "current-analysis"
+                    : Path.GetFileNameWithoutExtension(_lastSourceFileName),
+                SelectedTuningRecommendation.Recommendation.Parameter,
+                SelectedTuningRecommendation.Recommendation.Direction,
+                SelectedTuningRecommendation.Recommendation.Adjustment,
+                decision,
+                RecommendationReviewNote.Trim(),
+                DateTimeOffset.Now);
+
+            await _recommendationReviewRepository.SaveAsync(review, CancellationToken.None);
+            RecommendationReviewNote = string.Empty;
+            await LoadRecommendationReviewsAsync();
+            var decisionText = decision == PidRecommendationReviewDecision.Accepted ? "采用" : "暂缓";
+            Notify("建议审查已记录", $"{decisionText}：{review.Parameter} {review.Adjustment}", "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("建议审查记录失败", exception.Message, "Error");
         }
     }
 
@@ -711,6 +819,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _lastAssessment = assessment;
         _lastSamples = samples;
         _lastSourceFileName = sourceName;
+        _lastTestSessionId = samples.Select(sample => sample.TestSessionId).FirstOrDefault(id => id != Guid.Empty);
         UpdateTuningRecommendations(metrics);
         UpdateTrendPreview(samples);
     }
