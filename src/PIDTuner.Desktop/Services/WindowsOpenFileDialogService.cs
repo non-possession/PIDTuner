@@ -40,4 +40,17 @@ public sealed class WindowsOpenFileDialogService : IOpenFileDialogService
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+
+    public string? PickAnalysisResultSaveFile()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出 PID 分析结果",
+            Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*",
+            DefaultExt = ".csv",
+            AddExtension = true
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
 }

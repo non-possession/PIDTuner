@@ -25,9 +25,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
     private readonly PidResponseAssessmentService _assessmentService = new();
+    private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private readonly AnalysisWindowParser _analysisWindowParser = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
+    private AnalysisWindow? _lastAnalysisWindow;
+    private PidResponseMetrics? _lastMetrics;
+    private PidResponseAssessment? _lastAssessment;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
     private string _sampleCount = "-";
@@ -64,6 +68,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AddFieldCommand = new AsyncCommand(AddFieldAsync);
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
         SaveFieldProfileCommand = new AsyncCommand(SaveFieldProfileAsync);
+        ExportAnalysisResultCommand = new AsyncCommand(ExportAnalysisResultAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -182,6 +187,39 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand SaveFieldProfileCommand { get; }
 
+    public ICommand ExportAnalysisResultCommand { get; }
+
+    private async Task ExportAnalysisResultAsync()
+    {
+        if (_lastAnalysisWindow is null || _lastMetrics is null || _lastAssessment is null)
+        {
+            StatusMessage = "请先导入 CSV 并完成一次分析。";
+            return;
+        }
+
+        var fileName = _openFileDialogService.PickAnalysisResultSaveFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = File.Create(fileName);
+            await _analysisResultExporter.ExportAsync(
+                _lastAnalysisWindow,
+                _lastMetrics,
+                _lastAssessment,
+                stream,
+                CancellationToken.None);
+            StatusMessage = $"已导出分析结果：{Path.GetFileName(fileName)}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"分析结果导出失败：{exception.Message}";
+        }
+    }
+
     private Task AddFieldAsync()
     {
         var index = FieldDefinitions.Count + 1;
@@ -284,7 +322,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RiseTime = FormatNullable(result.Metrics.RiseTime);
             SettlingTime = FormatNullable(result.Metrics.SettlingTime);
             SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
-            AssessmentSummary = _assessmentService.Assess(result.Metrics).Summary;
+            var assessment = _assessmentService.Assess(result.Metrics);
+            AssessmentSummary = assessment.Summary;
+            _lastAnalysisWindow = result.Window;
+            _lastMetrics = result.Metrics;
+            _lastAssessment = assessment;
             UpdateTrendPreview(result.Samples);
             StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
         }

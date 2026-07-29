@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 12.
+Last updated: 2026-07-29, iteration 13.
 
 ## Requirements
 
@@ -54,6 +54,7 @@ samples\offline-step-response.csv
    - `稳态误差`
    - SP / PV / MV trend preview
    - current CSV field profile table
+6. Click `导出分析结果` to save the latest analysis window, metrics, severity, and assessment summary to a CSV file.
 
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
@@ -110,7 +111,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - Analyze either the full CSV range or a user-entered analysis time window.
 - Fill and show the active analysis window after CSV import.
 - Show a conservative response assessment summary after analysis.
-- Export analysis result CSV from the infrastructure layer. UI wiring is planned next.
+- Export the latest analysis result CSV from the analysis page.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time
