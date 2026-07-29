@@ -21,6 +21,16 @@ public sealed class PidResponseAssessmentService
             findings.Add("调节时间偏长，响应收敛较慢。");
         }
 
+        if (metrics.HasSustainedOscillation == true)
+        {
+            findings.Add("检测到持续振荡迹象，建议降低激进程度并复核采样区间。");
+        }
+
+        if (metrics.HasOutputSaturation == true)
+        {
+            findings.Add("控制输出存在饱和迹象，建议检查输出上下限和执行机构能力。");
+        }
+
         if (findings.Count == 0)
         {
             return new PidResponseAssessment(

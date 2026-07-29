@@ -64,6 +64,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _riseTime = "-";
     private string _settlingTime = "-";
     private string _steadyStateError = "-";
+    private string _peakProcessValue = "-";
+    private string _peakTime = "-";
+    private string _minimumProcessValue = "-";
+    private string _meanAbsoluteError = "-";
+    private string _meanSquaredError = "-";
+    private string _integralAbsoluteError = "-";
+    private string _outputStandardDeviation = "-";
+    private string _responseFlags = "-";
     private string _analysisStartText = string.Empty;
     private string _analysisEndText = string.Empty;
     private string _activeAnalysisWindow = "-";
@@ -282,6 +290,54 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _steadyStateError;
         private set => SetProperty(ref _steadyStateError, value);
+    }
+
+    public string PeakProcessValue
+    {
+        get => _peakProcessValue;
+        private set => SetProperty(ref _peakProcessValue, value);
+    }
+
+    public string PeakTime
+    {
+        get => _peakTime;
+        private set => SetProperty(ref _peakTime, value);
+    }
+
+    public string MinimumProcessValue
+    {
+        get => _minimumProcessValue;
+        private set => SetProperty(ref _minimumProcessValue, value);
+    }
+
+    public string MeanAbsoluteError
+    {
+        get => _meanAbsoluteError;
+        private set => SetProperty(ref _meanAbsoluteError, value);
+    }
+
+    public string MeanSquaredError
+    {
+        get => _meanSquaredError;
+        private set => SetProperty(ref _meanSquaredError, value);
+    }
+
+    public string IntegralAbsoluteError
+    {
+        get => _integralAbsoluteError;
+        private set => SetProperty(ref _integralAbsoluteError, value);
+    }
+
+    public string OutputStandardDeviation
+    {
+        get => _outputStandardDeviation;
+        private set => SetProperty(ref _outputStandardDeviation, value);
+    }
+
+    public string ResponseFlags
+    {
+        get => _responseFlags;
+        private set => SetProperty(ref _responseFlags, value);
     }
 
     public string AnalysisStartText
@@ -1107,6 +1163,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RiseTime = FormatNullable(metrics.RiseTime);
         SettlingTime = FormatNullable(metrics.SettlingTime);
         SteadyStateError = FormatNullable(metrics.SteadyStateError, "0.###");
+        PeakProcessValue = FormatNullable(metrics.PeakProcessValue, "0.###");
+        PeakTime = FormatNullable(metrics.PeakTime);
+        MinimumProcessValue = FormatNullable(metrics.MinimumProcessValue, "0.###");
+        MeanAbsoluteError = FormatNullable(metrics.MeanAbsoluteError, "0.###");
+        MeanSquaredError = FormatNullable(metrics.MeanSquaredError, "0.###");
+        IntegralAbsoluteError = FormatNullable(metrics.IntegralAbsoluteError, "0.###");
+        OutputStandardDeviation = FormatNullable(metrics.OutputStandardDeviation, "0.###");
+        ResponseFlags = FormatResponseFlags(metrics);
         var assessment = _assessmentService.Assess(metrics);
         AssessmentSummary = assessment.Summary;
         _lastAnalysisWindow = window;
@@ -1152,6 +1216,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private static string FormatNullable(TimeSpan? value)
     {
         return value.HasValue ? value.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatResponseFlags(PidResponseMetrics metrics)
+    {
+        var flags = new List<string>();
+        if (metrics.HasSustainedOscillation == true)
+        {
+            flags.Add("振荡");
+        }
+
+        if (metrics.HasOutputSaturation == true)
+        {
+            flags.Add("输出饱和");
+        }
+
+        return flags.Count == 0 ? "正常" : string.Join(" / ", flags);
     }
 
     private void UpdateTrendPreview(IReadOnlyList<PidSample> samples)

@@ -418,6 +418,7 @@
 
             <UniformGrid Grid.Row="2"
                          Columns="5"
+                         Rows="2"
                          Margin="0,20,0,0">
               <StackPanel>
                 <TextBlock Text="样本数"
@@ -451,6 +452,41 @@
                 <TextBlock Text="稳态误差"
                            Foreground="#6B7280" />
                 <TextBlock Text="{Binding SteadyStateError}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Margin="0,10,0,0">
+                <TextBlock Text="峰值"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding PeakProcessValue}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Margin="0,10,0,0">
+                <TextBlock Text="峰值时间"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding PeakTime}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Margin="0,10,0,0">
+                <TextBlock Text="平均绝对误差"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding MeanAbsoluteError}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Margin="0,10,0,0">
+                <TextBlock Text="误差积分"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding IntegralAbsoluteError}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Margin="0,10,0,0">
+                <TextBlock Text="状态标记"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding ResponseFlags}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>

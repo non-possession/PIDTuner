@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 45.
+Last updated: 2026-07-29, iteration 50.
 
 ## Requirements
 
@@ -90,6 +90,11 @@ samples\offline-step-response.csv
    - `上升时间`
    - `调节时间`
    - `稳态误差`
+   - `峰值`
+   - `峰值时间`
+   - `平均绝对误差`
+   - `误差积分`
+   - `状态标记`
    - SP / PV / MV trend preview
    - current CSV field profile table
 6. Click `导出分析结果` to save the latest analysis window, metrics, severity, and assessment summary to a CSV file.
@@ -180,7 +185,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 20 tests pass.
+Current expected result: 21 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -192,7 +197,7 @@ dotnet run --project .\tools\PIDTuner.Snapshot\PIDTuner.Snapshot.csproj -- .\art
 ```
 
 The snapshot tool renders the WPF window directly, so it does not depend on which desktop window is currently in front.
-It loads the bundled example profile and sample CSV, saves the current test session, records one accepted recommendation review, refreshes PLC tag previews, and then renders the window. The current snapshot view is switched to the real-time monitor page so the tag value table and trend preview are visible.
+It loads the bundled example profile and sample CSV, saves the current test session, records one accepted recommendation review, refreshes PLC tag previews, and then renders the window. The current snapshot view is switched to the analysis page so the expanded PID analysis metrics and trend preview are visible.
 
 ## Current Features
 
@@ -209,6 +214,16 @@ It loads the bundled example profile and sample CSV, saves the current test sess
 - Import offline CSV using the active field profile.
 - Analyze either the full CSV range or a user-entered analysis time window.
 - Fill and show the active analysis window after CSV import.
+- Calculate and display expanded PID response metrics:
+  - peak process value
+  - peak time
+  - minimum process value
+  - mean absolute error
+  - mean squared error
+  - integral absolute error
+  - output standard deviation
+  - sustained oscillation flag
+  - output saturation flag
 - Show a conservative response assessment summary after analysis.
 - Show a dismissible operation message box after imports, exports, saves, and history operations.
 - Show absolute saved file paths in save/export operation messages.
@@ -251,8 +266,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 45 snapshot:
+Iteration 50 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-45-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-50-rendered.png
 ```

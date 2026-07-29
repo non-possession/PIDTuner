@@ -29,6 +29,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
+    ("response assessment flags oscillation and output saturation", ResponseAssessmentFlagsOscillationAndOutputSaturation),
     ("tuning recommendation service suggests conservative adjustments", TuningRecommendationServiceSuggestsConservativeAdjustments),
     ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields),
     ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
@@ -94,6 +95,15 @@ static Task AnalysisCalculatesCoreMetrics()
     AssertEqual(TimeSpan.FromSeconds(2), metrics.RiseTime, "rise time");
     AssertEqual(TimeSpan.FromSeconds(5), metrics.SettlingTime, "settling time");
     AssertClose(0.5, metrics.SteadyStateError, 0.001, "steady-state error");
+    AssertClose(112, metrics.PeakProcessValue, 0.001, "peak process value");
+    AssertEqual(TimeSpan.FromSeconds(3), metrics.PeakTime, "peak time");
+    AssertClose(0, metrics.MinimumProcessValue, 0.001, "minimum process value");
+    AssertClose(26.642, metrics.MeanAbsoluteError, 0.001, "mean absolute error");
+    AssertClose(1979.178, metrics.MeanSquaredError, 0.001, "mean squared error");
+    AssertClose(136.25, metrics.IntegralAbsoluteError, 0.001, "integral absolute error");
+    AssertClose(17.800, metrics.OutputStandardDeviation, 0.001, "output standard deviation");
+    AssertEqual(false, metrics.HasSustainedOscillation, "sustained oscillation");
+    AssertEqual(false, metrics.HasOutputSaturation, "output saturation");
 
     return Task.CompletedTask;
 }
@@ -347,6 +357,24 @@ static Task ResponseAssessmentFlagsHighOvershootAndSteadyStateError()
     return Task.CompletedTask;
 }
 
+static Task ResponseAssessmentFlagsOscillationAndOutputSaturation()
+{
+    var service = new PidResponseAssessmentService();
+    var assessment = service.Assess(new PidResponseMetrics(
+        OvershootPercent: 4,
+        RiseTime: TimeSpan.FromSeconds(3),
+        SettlingTime: TimeSpan.FromSeconds(8),
+        SteadyStateError: 0.2,
+        HasSustainedOscillation: true,
+        HasOutputSaturation: true));
+
+    AssertEqual(PidResponseSeverity.Warning, assessment.Severity, "oscillation assessment severity");
+    AssertContains("持续振荡", assessment.Summary);
+    AssertContains("饱和", assessment.Summary);
+
+    return Task.CompletedTask;
+}
+
 static Task TuningRecommendationServiceSuggestsConservativeAdjustments()
 {
     var service = new PidTuningRecommendationService();
@@ -375,7 +403,20 @@ static async Task AnalysisResultCsvExporterWritesStableFields()
     var window = new AnalysisWindow(
         DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture),
         DateTimeOffset.Parse("2026-07-29T10:00:06.0000000+00:00", CultureInfo.InvariantCulture));
-    var metrics = new PidResponseMetrics(12, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), 0.5);
+    var metrics = new PidResponseMetrics(
+        12,
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(5),
+        0.5,
+        PeakProcessValue: 112,
+        PeakTime: TimeSpan.FromSeconds(3),
+        MinimumProcessValue: 0,
+        MeanAbsoluteError: 22.928,
+        MeanSquaredError: 2062.035,
+        IntegralAbsoluteError: 138.25,
+        OutputStandardDeviation: 17.292,
+        HasSustainedOscillation: false,
+        HasOutputSaturation: false);
     var assessment = new PidResponseAssessment(
         PidResponseSeverity.Warning,
         "超调偏高，可能需要降低比例增益或增强阻尼。",
@@ -389,8 +430,8 @@ static async Task AnalysisResultCsvExporterWritesStableFields()
     var exportedBytes = output.ToArray();
     AssertUtf8Bom(exportedBytes, "analysis result CSV export encoding");
     var csv = Encoding.UTF8.GetString(exportedBytes);
-    AssertContains("window_start,window_end,overshoot_percent,rise_time_seconds,settling_time_seconds,steady_state_error,severity,summary", csv);
-    AssertContains("2026-07-29T10:00:00.0000000+00:00,2026-07-29T10:00:06.0000000+00:00,12,2,5,0.5,Warning", csv);
+    AssertContains("window_start,window_end,overshoot_percent,rise_time_seconds,settling_time_seconds,steady_state_error,peak_process_value,peak_time_seconds,minimum_process_value,mean_absolute_error,mean_squared_error,integral_absolute_error,output_standard_deviation,has_sustained_oscillation,has_output_saturation,severity,summary", csv);
+    AssertContains("2026-07-29T10:00:00.0000000+00:00,2026-07-29T10:00:06.0000000+00:00,12,2,5,0.5,112,3,0,22.928,2062.035,138.25,17.292,False,False,Warning", csv);
     AssertContains("\"超调偏高，可能需要降低比例增益或增强阻尼。\"", csv);
 }
 
