@@ -809,22 +809,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var intervalMilliseconds = ResolveRecordingIntervalMilliseconds(configuration, enabledTags);
             var frames = new List<IReadOnlyList<PlcTagSnapshot>>();
             var stopwatch = Stopwatch.StartNew();
+            var nextDue = TimeSpan.Zero;
             PlcMonitorStatus = $"正在记录 1s 点位数据，周期 {intervalMilliseconds} ms。";
 
-            while (stopwatch.Elapsed < TimeSpan.FromSeconds(1))
+            await using var session = await OpenPlcSnapshotSessionAsync(configuration, CancellationToken.None);
+            while (nextDue < TimeSpan.FromSeconds(1))
             {
-                var snapshots = await _plcTagSnapshotReader.ReadAsync(configuration, CancellationToken.None);
-                frames.Add(snapshots);
-                ApplyPlcMonitorSnapshots(snapshots);
+                var wait = nextDue - stopwatch.Elapsed;
+                if (wait > TimeSpan.Zero)
+                {
+                    await Task.Delay(wait);
+                }
 
-                var remaining = TimeSpan.FromSeconds(1) - stopwatch.Elapsed;
-                if (remaining <= TimeSpan.Zero)
+                if (stopwatch.Elapsed >= TimeSpan.FromSeconds(1))
                 {
                     break;
                 }
 
-                var delay = TimeSpan.FromMilliseconds(intervalMilliseconds);
-                await Task.Delay(remaining < delay ? remaining : delay);
+                var snapshots = await session.ReadAsync(CancellationToken.None);
+                frames.Add(snapshots);
+                ApplyPlcMonitorSnapshots(snapshots);
+                nextDue += TimeSpan.FromMilliseconds(intervalMilliseconds);
             }
 
             _lastPlcRecordingFrames = frames;
@@ -845,6 +850,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcMonitorStatus = $"1s 记录失败：{exception.Message}";
             Notify("PLC 1s 记录失败", exception.Message, "Error");
         }
+    }
+
+    private async Task<IPlcTagSnapshotReadSession> OpenPlcSnapshotSessionAsync(
+        PlcProjectConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        if (_plcTagSnapshotReader is IPlcTagSnapshotSessionReader sessionReader)
+        {
+            return await sessionReader.OpenSessionAsync(configuration, cancellationToken);
+        }
+
+        return new SingleReadSnapshotSession(_plcTagSnapshotReader, configuration);
     }
 
     private async Task<string> SavePlcRecordingAsync(
@@ -873,6 +890,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CancellationToken.None);
 
         return Path.GetFullPath(filePath);
+    }
+
+    private sealed class SingleReadSnapshotSession(
+        IPlcTagSnapshotReader reader,
+        PlcProjectConfiguration configuration) : IPlcTagSnapshotReadSession
+    {
+        public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(CancellationToken cancellationToken)
+        {
+            return reader.ReadAsync(configuration, cancellationToken);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
     }
 
     private async Task LoadPlcConfigurationAsync()

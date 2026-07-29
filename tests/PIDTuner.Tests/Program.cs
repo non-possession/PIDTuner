@@ -737,18 +737,19 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     }
 
     viewModel.TagDefinitions[0].IsEnabled = true;
-    viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
+    viewModel.TagDefinitions[0].SamplingMilliseconds = 50;
     viewModel.TagDefinitions[1].IsEnabled = true;
     viewModel.TagDefinitions[1].SamplingMilliseconds = 500;
-    viewModel.PlcMinimumSamplingMilliseconds = 200;
+    viewModel.PlcMinimumSamplingMilliseconds = 50;
 
     await viewModel.RecordPlcOneSecondAsync();
 
-    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 4, "recorded frame count");
+    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 18, "recorded frame count");
     AssertEqual(true, viewModel.LastPlcRecordingFrames.All(frame => frame.Count == 2), "recorded frame tag count");
-    AssertEqual(true, reader.ReadCount >= 4, "plc reader call count");
+    AssertEqual(1, reader.OpenSessionCount, "plc reader session open count");
+    AssertEqual(true, reader.SessionReadCount >= 18, "plc session read count");
     AssertEqual("PLC 1s 记录完成", viewModel.NotificationTitle, "plc recording notification title");
-    AssertContains("周期 200 ms", viewModel.PlcMonitorStatus);
+    AssertContains("周期 50 ms", viewModel.PlcMonitorStatus);
     AssertContains("2 个点位", viewModel.PlcMonitorStatus);
     var recordingPath = Directory.GetFiles(Path.Combine(directory, "plc-recordings"), "plc-recording-*.json").Single();
     AssertContains(Path.GetFullPath(recordingPath), viewModel.NotificationMessage);
@@ -980,17 +981,34 @@ file sealed class FixedPlcConnectivityProbe(bool reachable) : IPlcConnectivityPr
     }
 }
 
-file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader
+file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcTagSnapshotSessionReader
 {
     private int _value;
 
     public int ReadCount { get; private set; }
+
+    public int OpenSessionCount { get; private set; }
+
+    public int SessionReadCount { get; private set; }
 
     public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(
         PlcProjectConfiguration configuration,
         CancellationToken cancellationToken)
     {
         ReadCount++;
+        return CaptureAsync(configuration);
+    }
+
+    public Task<IPlcTagSnapshotReadSession> OpenSessionAsync(
+        PlcProjectConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        OpenSessionCount++;
+        return Task.FromResult<IPlcTagSnapshotReadSession>(new Session(this, configuration));
+    }
+
+    private Task<IReadOnlyList<PlcTagSnapshot>> CaptureAsync(PlcProjectConfiguration configuration)
+    {
         _value++;
         var timestamp = DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+08:00", CultureInfo.InvariantCulture)
             .AddMilliseconds(_value * 200);
@@ -1008,5 +1026,21 @@ file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader
             .ToArray();
 
         return Task.FromResult(snapshots);
+    }
+
+    private sealed class Session(
+        SequencePlcTagSnapshotReader reader,
+        PlcProjectConfiguration configuration) : IPlcTagSnapshotReadSession
+    {
+        public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(CancellationToken cancellationToken)
+        {
+            reader.SessionReadCount++;
+            return reader.CaptureAsync(configuration);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
     }
 }

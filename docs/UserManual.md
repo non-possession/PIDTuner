@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 67.
+Last updated: 2026-07-29, iteration 68.
 
 ## Requirements
 
@@ -79,6 +79,8 @@ When the one-second recorder finishes, PIDTuner automatically stops recording an
 ```text
 local\plc-recordings
 ```
+
+During one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the whole recording window. This removes the previous per-frame TCP/S7 connection setup cost. The recorded frame count can still be lower than `1000 / interval` if the PLC or enabled tag reads take longer than the requested interval.
 
 Important current boundary: Siemens S7 tag values are now read through the built-in S7 reader when protocol is `Siemens S7`. `Preview` remains available for offline UI validation. PLC writeback is still not enabled.
 
