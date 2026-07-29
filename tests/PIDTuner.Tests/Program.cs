@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using PIDTuner.Domain.Analysis;
+using PIDTuner.Domain.Trends;
 using PIDTuner.Domain.Models;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Domain.Configuration;
@@ -14,7 +15,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("csv exchange imports and exports stable pid sample fields", CsvExchangeRoundTripsSamples),
     ("offline csv use case imports samples and analyzes the requested window", OfflineCsvUseCaseAnalyzesRequestedWindow),
     ("field profile store loads project metadata from json", FieldProfileStoreLoadsProjectMetadata),
-    ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields)
+    ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields),
+    ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples)
 };
 
 var failures = new List<string>();
@@ -181,6 +183,32 @@ time,setpoint_c,actual_c,output_pct,operator_note
     AssertClose(75.2, imported[0].ProcessValue, 0.001, "renamed PV");
     AssertClose(41.5, imported[0].ManipulatedValue, 0.001, "renamed MV");
     AssertEqual("start of trial", imported[0].ExtraFields?["operator_note"], "extra metadata");
+}
+
+static Task TrendSeriesBuilderNormalizesPidSamples()
+{
+    var sessionId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+    var start = new DateTimeOffset(2026, 7, 29, 10, 0, 0, TimeSpan.Zero);
+    var samples = new[]
+    {
+        Sample(start, 100, 10, 0, sessionId),
+        Sample(start.AddSeconds(1), 100, 55, 50, sessionId),
+        Sample(start.AddSeconds(2), 100, 100, 100, sessionId)
+    };
+
+    var builder = new PidTrendSeriesBuilder();
+    var trend = builder.Build(samples);
+
+    AssertEqual(3, trend.SetPoint.Points.Count, "SP point count");
+    AssertEqual(3, trend.ProcessValue.Points.Count, "PV point count");
+    AssertEqual(3, trend.ManipulatedValue.Points.Count, "MV point count");
+    AssertClose(0, trend.ProcessValue.Points[0].NormalizedX, 0.001, "first normalized X");
+    AssertClose(0.5, trend.ProcessValue.Points[1].NormalizedX, 0.001, "middle normalized X");
+    AssertClose(1, trend.ProcessValue.Points[2].NormalizedX, 0.001, "last normalized X");
+    AssertClose(0.1, trend.ProcessValue.Points[0].NormalizedY, 0.001, "first normalized Y");
+    AssertClose(1, trend.ProcessValue.Points[2].NormalizedY, 0.001, "last normalized Y");
+
+    return Task.CompletedTask;
 }
 
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
