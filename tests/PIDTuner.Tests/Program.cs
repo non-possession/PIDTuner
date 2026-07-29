@@ -9,6 +9,7 @@ using PIDTuner.Domain.Configuration;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Csv;
 using PIDTuner.Infrastructure.Configuration;
+using PIDTuner.Infrastructure.Persistence;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
@@ -22,7 +23,9 @@ var tests = new (string Name, Func<Task> Run)[]
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
-    ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields)
+    ("analysis result csv exporter writes stable fields", AnalysisResultCsvExporterWritesStableFields),
+    ("json test session repository saves and lists sessions", JsonTestSessionRepositorySavesAndListsSessions),
+    ("json pid sample repository saves and loads samples by session", JsonPidSampleRepositorySavesAndLoadsSamplesBySession)
 };
 
 var failures = new List<string>();
@@ -355,9 +358,65 @@ static async Task AnalysisResultCsvExporterWritesStableFields()
     AssertContains("\"超调偏高，可能需要降低比例增益或增强阻尼。\"", csv);
 }
 
+static async Task JsonTestSessionRepositorySavesAndListsSessions()
+{
+    var directory = CreateTestStorageDirectory();
+    var repository = new JsonTestSessionRepository(directory);
+    var sessionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    var projectId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+    var session = new TestSession(
+        sessionId,
+        projectId,
+        "cold-start-step",
+        DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse("2026-07-29T10:00:06.0000000+00:00", CultureInfo.InvariantCulture),
+        "Pump A",
+        "Cold start",
+        "Baseline PID");
+
+    await repository.SaveAsync(session, CancellationToken.None);
+    await repository.SaveAsync(session with { Notes = "Updated notes" }, CancellationToken.None);
+
+    var sessions = await repository.ListAsync(CancellationToken.None);
+
+    AssertEqual(1, sessions.Count, "stored session count");
+    AssertEqual("cold-start-step", sessions[0].Name, "stored session name");
+    AssertEqual("Updated notes", sessions[0].Notes, "stored session update");
+}
+
+static async Task JsonPidSampleRepositorySavesAndLoadsSamplesBySession()
+{
+    var directory = CreateTestStorageDirectory();
+    var repository = new JsonPidSampleRepository(directory);
+    var sessionId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    var start = DateTimeOffset.Parse("2026-07-29T10:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+
+    var samples = new[]
+    {
+        Sample(start, 100, 80, 20, sessionId),
+        Sample(start.AddSeconds(1), 100, 95, 35, sessionId)
+    };
+
+    await repository.SaveBatchAsync(samples, CancellationToken.None);
+
+    var loaded = await repository.GetBySessionAsync(sessionId, CancellationToken.None);
+
+    AssertEqual(2, loaded.Count, "stored sample count");
+    AssertClose(95, loaded[1].ProcessValue, 0.001, "stored sample PV");
+    AssertEqual(sessionId, loaded[0].TestSessionId, "stored sample session id");
+}
+
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
 {
     return new PidSample(timestamp, sp, pv, mv, 1.2, 0.4, 0.1, true, sessionId, null);
+}
+
+static string CreateTestStorageDirectory()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "pidtuner-tests", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    return directory;
 }
 
 static void AssertEqual<T>(T expected, T actual, string name)

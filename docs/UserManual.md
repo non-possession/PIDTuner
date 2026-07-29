@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 15.
+Last updated: 2026-07-29, iteration 16.
 
 ## Requirements
 
@@ -59,6 +59,13 @@ samples\offline-step-response.csv
    - SP / PV / MV trend preview
    - current CSV field profile table
 6. Click `导出分析结果` to save the latest analysis window, metrics, severity, and assessment summary to a CSV file.
+7. Click `保存试验记录` to save the current offline session metadata and samples under:
+
+```text
+local\test-sessions
+```
+
+The saved files are JSON files used by the current local persistence adapter. This keeps the UI and application layer ready for a later SQLite adapter.
 
 Optional: before importing CSV, fill `分析开始` and `分析结束` with ISO 8601 timestamps such as:
 
@@ -94,7 +101,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 11 tests pass.
+Current expected result: 13 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -118,6 +125,7 @@ It loads the bundled example profile and sample CSV before rendering, so the ima
 - Fill and show the active analysis window after CSV import.
 - Show a conservative response assessment summary after analysis.
 - Export the latest analysis result CSV from the analysis page.
+- Save the latest offline analysis as a local test session record.
 - Calculate basic PID response metrics:
   - overshoot
   - rise time

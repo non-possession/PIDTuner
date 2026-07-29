@@ -12,10 +12,12 @@ using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Configuration;
+using PIDTuner.Domain.Models;
 using PIDTuner.Domain.Trends;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Csv;
+using PIDTuner.Infrastructure.Persistence;
 
 namespace PIDTuner.Desktop.ViewModels;
 
@@ -28,10 +30,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private readonly AnalysisWindowParser _analysisWindowParser = new();
+    private readonly ITestSessionRepository _testSessionRepository;
+    private readonly IPidSampleRepository _pidSampleRepository;
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
     private PidResponseMetrics? _lastMetrics;
     private PidResponseAssessment? _lastAssessment;
+    private IReadOnlyList<PidSample> _lastSamples = Array.Empty<PidSample>();
+    private string _lastSourceFileName = string.Empty;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
     private string _sampleCount = "-";
@@ -52,16 +58,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
-            new JsonPidSampleFieldProfileStore())
+            new JsonPidSampleFieldProfileStore(),
+            new JsonTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
+            new JsonPidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")))
     {
     }
 
     public MainWindowViewModel(
         IOpenFileDialogService openFileDialogService,
-        IPidSampleFieldProfileStore fieldProfileStore)
+        IPidSampleFieldProfileStore fieldProfileStore,
+        ITestSessionRepository? testSessionRepository = null,
+        IPidSampleRepository? pidSampleRepository = null)
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
+        var localStorageDirectory = Path.Combine(FindRepositoryRoot(), "local", "test-sessions");
+        _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(localStorageDirectory);
+        _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(localStorageDirectory);
         RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
@@ -69,6 +82,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
         SaveFieldProfileCommand = new AsyncCommand(SaveFieldProfileAsync);
         ExportAnalysisResultCommand = new AsyncCommand(ExportAnalysisResultAsync);
+        SaveTestSessionCommand = new AsyncCommand(SaveTestSessionAsync);
         LoadExampleCommand = new AsyncCommand(LoadExampleAsync);
     }
 
@@ -190,6 +204,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand ExportAnalysisResultCommand { get; }
 
+    public ICommand SaveTestSessionCommand { get; }
+
     public ICommand LoadExampleCommand { get; }
 
     public async Task LoadExampleAsync()
@@ -269,6 +285,49 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception exception)
         {
             StatusMessage = $"分析结果导出失败：{exception.Message}";
+        }
+    }
+
+    private async Task SaveTestSessionAsync()
+    {
+        if (_lastAnalysisWindow is null || _lastSamples.Count == 0)
+        {
+            StatusMessage = "请先导入 CSV 并完成一次分析。";
+            return;
+        }
+
+        try
+        {
+            var sessionId = _lastSamples
+                .Select(sample => sample.TestSessionId)
+                .FirstOrDefault(id => id != Guid.Empty);
+
+            if (sessionId == Guid.Empty)
+            {
+                sessionId = Guid.NewGuid();
+            }
+
+            var samples = _lastSamples
+                .Select(sample => sample with { TestSessionId = sessionId })
+                .ToArray();
+
+            var session = new TestSession(
+                sessionId,
+                Guid.Empty,
+                string.IsNullOrWhiteSpace(_lastSourceFileName) ? $"offline-session-{sessionId:N}" : Path.GetFileNameWithoutExtension(_lastSourceFileName),
+                _lastAnalysisWindow.Start,
+                _lastAnalysisWindow.End,
+                null,
+                "Offline CSV analysis",
+                $"Profile: {_fieldProfile.ProfileName}");
+
+            await _testSessionRepository.SaveAsync(session, CancellationToken.None);
+            await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
+            StatusMessage = $"已保存试验记录：{session.Name}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"试验记录保存失败：{exception.Message}";
         }
     }
 
@@ -389,6 +448,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _lastAnalysisWindow = result.Window;
         _lastMetrics = result.Metrics;
         _lastAssessment = assessment;
+        _lastSamples = result.Samples;
+        _lastSourceFileName = fileName;
         UpdateTrendPreview(result.Samples);
         StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
     }
