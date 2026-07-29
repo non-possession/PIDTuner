@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -33,6 +34,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
+    private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
 
     public MainWindowViewModel()
         : this(
@@ -47,6 +49,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
+        RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
     }
@@ -115,6 +118,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _manipulatedValuePoints, value);
     }
 
+    public ObservableCollection<PidSampleFieldDefinitionViewModel> FieldDefinitions
+    {
+        get => _fieldDefinitions;
+        private set => SetProperty(ref _fieldDefinitions, value);
+    }
+
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadFieldProfileCommand { get; }
@@ -132,6 +141,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await using var stream = File.OpenRead(fileName);
             _fieldProfile = await _fieldProfileStore.LoadAsync(stream, CancellationToken.None);
             CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
+            RefreshFieldDefinitions();
             StatusMessage = $"已加载字段配置：{Path.GetFileName(fileName)}";
         }
         catch (Exception exception)
@@ -189,8 +199,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private static PointCollection ToPointCollection(TrendSeries series)
     {
-        const double width = 720;
-        const double height = 240;
+        const double width = 520;
+        const double height = 160;
 
         var points = series.Points
             .Select(point => new System.Windows.Point(
@@ -198,6 +208,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 height - point.NormalizedY * height));
 
         return new PointCollection(points);
+    }
+
+    private void RefreshFieldDefinitions()
+    {
+        FieldDefinitions = new ObservableCollection<PidSampleFieldDefinitionViewModel>(
+            _fieldProfile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
