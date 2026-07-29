@@ -638,6 +638,8 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
 
     viewModel.PlcConfigurationName = "line-a-temperature-loop";
     viewModel.PlcIpAddress = "10.10.0.5";
+    viewModel.PlcDefaultSamplingMilliseconds = 1000;
+    viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
 
     await viewModel.SavePlcConfigurationAsync();
 
@@ -649,6 +651,8 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     var saved = await new JsonPlcProjectConfigurationStore().LoadAsync(input, CancellationToken.None);
     AssertEqual("line-a-temperature-loop", saved.Name, "saved plc configuration name");
     AssertEqual("10.10.0.5", saved.IpAddress, "saved plc ip address");
+    AssertEqual(1000, saved.DefaultSamplingMilliseconds, "saved default sampling milliseconds");
+    AssertEqual(TimeSpan.FromMilliseconds(200), saved.Tags[0].SamplingInterval, "saved tag sampling interval");
     AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
 }
 

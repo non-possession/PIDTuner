@@ -38,7 +38,7 @@ public sealed class TagDefinitionViewModel
 
     public bool IsEnabled { get; set; }
 
-    public static TagDefinitionViewModel CreateNew(int index)
+    public static TagDefinitionViewModel CreateNew(int index, int samplingMilliseconds = 500)
     {
         return new TagDefinitionViewModel(new TagDefinition(
             Guid.NewGuid(),
@@ -49,7 +49,7 @@ public sealed class TagDefinitionViewModel
             1,
             null,
             "new tag",
-            TimeSpan.FromMilliseconds(500),
+            TimeSpan.FromMilliseconds(samplingMilliseconds),
             true));
     }
 

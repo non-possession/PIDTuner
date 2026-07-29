@@ -180,7 +180,7 @@
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="8"
-                         Text="采样 ms"
+                         Text="默认采样 ms"
                          Foreground="#6B7280"
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
@@ -242,7 +242,7 @@
                 <DataGridTextColumn Header="单位"
                                     Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
                                     Width="70" />
-                <DataGridTextColumn Header="采样 ms"
+                <DataGridTextColumn Header="点位采样 ms"
                                     Binding="{Binding SamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                     Width="80" />
                 <DataGridTextColumn Header="描述"

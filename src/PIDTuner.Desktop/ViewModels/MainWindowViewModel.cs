@@ -764,7 +764,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private Task AddTagAsync()
     {
-        var tag = TagDefinitionViewModel.CreateNew(TagDefinitions.Count + 1);
+        var tag = TagDefinitionViewModel.CreateNew(TagDefinitions.Count + 1, PlcDefaultSamplingMilliseconds);
         TagDefinitions.Add(tag);
         SelectedTagDefinition = tag;
         PlcConfigurationStatus = "已新增点位，请保存 PLC 配置。";
