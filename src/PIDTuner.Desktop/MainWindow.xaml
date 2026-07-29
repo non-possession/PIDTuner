@@ -49,6 +49,11 @@
                       Content="导入字段配置"
                       Width="120"
                       Height="36" />
+              <Button Command="{Binding SaveFieldProfileCommand}"
+                      Content="保存字段配置"
+                      Width="120"
+                      Height="36"
+                      Margin="12,0,0,0" />
               <Button Command="{Binding ImportCsvCommand}"
                       Content="导入 CSV"
                       Width="120"
@@ -178,8 +183,9 @@
 
               <DataGrid Grid.Row="2"
                         ItemsSource="{Binding FieldDefinitions}"
+                        SelectedItem="{Binding SelectedFieldDefinition}"
                         AutoGenerateColumns="False"
-                        IsReadOnly="True"
+                        IsReadOnly="False"
                         Width="760"
                         Height="150"
                         Margin="0,10,0,0"
@@ -188,25 +194,40 @@
                         HeadersVisibility="Column">
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="字段"
-                                      Binding="{Binding Key}"
+                                      Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
                                       Width="78" />
                   <DataGridTextColumn Header="显示名"
-                                      Binding="{Binding DisplayName}"
+                                      Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
                                       Width="78" />
                   <DataGridTextColumn Header="类型"
-                                      Binding="{Binding DataType}"
+                                      Binding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"
                                       Width="78" />
-                  <DataGridTextColumn Header="必填"
-                                      Binding="{Binding Required}"
-                                      Width="44" />
+                  <DataGridCheckBoxColumn Header="必填"
+                                          Binding="{Binding Required, UpdateSourceTrigger=PropertyChanged}"
+                                          Width="44" />
                   <DataGridTextColumn Header="单位"
-                                      Binding="{Binding Unit}"
+                                      Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"
                                       Width="44" />
                   <DataGridTextColumn Header="角色"
-                                      Binding="{Binding Role}"
+                                      Binding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
                                       Width="82" />
                 </DataGrid.Columns>
               </DataGrid>
+
+              <StackPanel Grid.Row="2"
+                          Orientation="Horizontal"
+                          Margin="776,10,0,0"
+                          HorizontalAlignment="Left">
+                <Button Command="{Binding AddFieldCommand}"
+                        Content="新增字段"
+                        Width="96"
+                        Height="32" />
+                <Button Command="{Binding RemoveFieldCommand}"
+                        Content="删除字段"
+                        Width="96"
+                        Height="32"
+                        Margin="10,0,0,0" />
+              </StackPanel>
             </Grid>
           </Grid>
         </TabItem>

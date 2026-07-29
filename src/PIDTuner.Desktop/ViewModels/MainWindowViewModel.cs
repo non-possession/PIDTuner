@@ -35,6 +35,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
+    private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
 
     public MainWindowViewModel()
         : this(
@@ -52,6 +53,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadFieldProfileCommand = new AsyncCommand(LoadFieldProfileAsync);
+        AddFieldCommand = new AsyncCommand(AddFieldAsync);
+        RemoveFieldCommand = new AsyncCommand(RemoveFieldAsync);
+        SaveFieldProfileCommand = new AsyncCommand(SaveFieldProfileAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -124,9 +128,72 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _fieldDefinitions, value);
     }
 
+    public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
+    {
+        get => _selectedFieldDefinition;
+        set => SetProperty(ref _selectedFieldDefinition, value);
+    }
+
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadFieldProfileCommand { get; }
+
+    public ICommand AddFieldCommand { get; }
+
+    public ICommand RemoveFieldCommand { get; }
+
+    public ICommand SaveFieldProfileCommand { get; }
+
+    private Task AddFieldAsync()
+    {
+        var index = FieldDefinitions.Count + 1;
+        while (FieldDefinitions.Any(field => string.Equals(field.Key, $"metadata_{index}", StringComparison.OrdinalIgnoreCase)))
+        {
+            index++;
+        }
+
+        var field = PidSampleFieldDefinitionViewModel.CreateNew(index);
+        FieldDefinitions.Add(field);
+        SelectedFieldDefinition = field;
+        StatusMessage = "已新增字段，请编辑后保存字段配置。";
+        return Task.CompletedTask;
+    }
+
+    private Task RemoveFieldAsync()
+    {
+        if (SelectedFieldDefinition is null)
+        {
+            StatusMessage = "请先选择要删除的字段。";
+            return Task.CompletedTask;
+        }
+
+        FieldDefinitions.Remove(SelectedFieldDefinition);
+        SelectedFieldDefinition = null;
+        StatusMessage = "已删除字段，请保存字段配置。";
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveFieldProfileAsync()
+    {
+        var fileName = _openFileDialogService.PickFieldProfileSaveFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            _fieldProfile = BuildFieldProfileFromGrid();
+            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
+            await using var stream = File.Create(fileName);
+            await _fieldProfileStore.SaveAsync(_fieldProfile, stream, CancellationToken.None);
+            StatusMessage = $"已保存字段配置：{Path.GetFileName(fileName)}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"字段配置保存失败：{exception.Message}";
+        }
+    }
 
     private async Task LoadFieldProfileAsync()
     {
@@ -214,6 +281,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         FieldDefinitions = new ObservableCollection<PidSampleFieldDefinitionViewModel>(
             _fieldProfile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
+    }
+
+    private PidSampleFieldProfile BuildFieldProfileFromGrid()
+    {
+        var fields = FieldDefinitions.Select(field => field.ToDefinition()).ToArray();
+        var duplicateKey = fields
+            .GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicateKey is not null)
+        {
+            throw new InvalidOperationException($"字段 key 重复：{duplicateKey.Key}");
+        }
+
+        return _fieldProfile with { Fields = fields };
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

@@ -16,7 +16,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("offline csv use case imports samples and analyzes the requested window", OfflineCsvUseCaseAnalyzesRequestedWindow),
     ("field profile store loads project metadata from json", FieldProfileStoreLoadsProjectMetadata),
     ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields),
-    ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples)
+    ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
+    ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields)
 };
 
 var failures = new List<string>();
@@ -211,6 +212,43 @@ static Task TrendSeriesBuilderNormalizesPidSamples()
     return Task.CompletedTask;
 }
 
+static Task FieldProfileEditorAddsUpdatesAndRemovesFields()
+{
+    var profile = new PidSampleFieldProfile(
+        1,
+        "editable-profile",
+        "Editable field profile",
+        new[]
+        {
+            Field("timestamp", PidSampleFieldRole.SampleTime, PidSampleFieldDataType.DateTimeOffset, true),
+            Field("sp", PidSampleFieldRole.SetPoint, PidSampleFieldDataType.Double, true)
+        });
+
+    var editor = new PidSampleFieldProfileEditor(profile)
+        .Add(Field("operator_note", PidSampleFieldRole.Metadata, PidSampleFieldDataType.String, false))
+        .Update(new PidSampleFieldDefinition(
+            "sp",
+            "Setpoint C",
+            PidSampleFieldDataType.Double,
+            true,
+            "degC",
+            PidSampleFieldRole.SetPoint))
+        .Remove("operator_note");
+
+    var edited = editor.ToProfile();
+
+    AssertEqual(2, edited.Fields.Count, "edited field count");
+    AssertEqual("Setpoint C", edited.Fields.Single(field => field.Key == "sp").DisplayName, "updated display name");
+    AssertEqual("degC", edited.Fields.Single(field => field.Key == "sp").Unit, "updated unit");
+    AssertEqual(false, edited.Fields.Any(field => field.Key == "operator_note"), "removed metadata field");
+
+    AssertThrows<InvalidOperationException>(
+        () => new PidSampleFieldProfileEditor(edited).Add(Field("sp", PidSampleFieldRole.Metadata, PidSampleFieldDataType.String, false)),
+        "duplicate field key is rejected");
+
+    return Task.CompletedTask;
+}
+
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
 {
     return new PidSample(timestamp, sp, pv, mv, 1.2, 0.4, 0.1, true, sessionId, null);
@@ -239,6 +277,21 @@ static void AssertContains(string expected, string actual)
     {
         throw new InvalidOperationException($"Expected exported CSV to contain: {expected}");
     }
+}
+
+static void AssertThrows<TException>(Action action, string name)
+    where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException($"{name}: expected {typeof(TException).Name}");
 }
 
 static PidSampleFieldDefinition Field(

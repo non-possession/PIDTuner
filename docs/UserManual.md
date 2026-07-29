@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 5.
+Last updated: 2026-07-29, iteration 6.
 
 ## Requirements
 
@@ -55,6 +55,24 @@ samples\offline-step-response.csv
    - SP / PV / MV trend preview
    - current CSV field profile table
 
+## Edit A Field Profile
+
+On the `分析` tab:
+
+1. Click `导入字段配置` to load an existing JSON profile, or use the default profile already shown.
+2. Edit the field table directly:
+   - `字段`: stable CSV column key.
+   - `显示名`: user-facing name.
+   - `类型`: one of `String`, `Boolean`, `Double`, `Guid`, `DateTimeOffset`.
+   - `必填`: checked means the CSV must contain this field.
+   - `单位`: optional engineering unit.
+   - `角色`: one of `Metadata`, `SampleTime`, `SetPoint`, `ProcessValue`, `ManipulatedValue`, `Kp`, `KiOrTi`, `KdOrTd`, `ConnectionState`, `TestSession`, `ParameterSet`.
+3. Click `新增字段` to add a metadata field.
+4. Select a field row and click `删除字段` to remove it.
+5. Click `保存字段配置` to write the edited profile to a JSON file.
+
+After saving, use the saved JSON as the field profile for CSV imports in the same PID tuning project.
+
 ## Run Tests
 
 ```powershell
@@ -62,7 +80,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 6 tests pass.
+Current expected result: 7 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -78,6 +96,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 ## Current Features
 
 - Load a PID sample field profile from JSON.
+- Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
 - Calculate basic PID response metrics:
   - overshoot
@@ -93,7 +112,7 @@ The snapshot tool renders the WPF window directly, so it does not depend on whic
 - No SQLite persistence yet.
 - No real charting library yet; the trend preview is a lightweight WPF polyline preview.
 - CSV parsing currently supports simple comma-separated values without quoted commas.
-- Field profiles can be loaded but not edited inside the UI yet.
+- Field profile editing currently uses text cells for enum values; invalid enum text is reported when saving.
 
 ## Iteration Reporting Rule
 

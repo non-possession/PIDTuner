@@ -5,4 +5,6 @@ public interface IOpenFileDialogService
     string? PickCsvFile();
 
     string? PickFieldProfileFile();
+
+    string? PickFieldProfileSaveFile();
 }
