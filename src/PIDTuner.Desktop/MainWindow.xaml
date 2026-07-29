@@ -43,6 +43,7 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Orientation="Horizontal">
@@ -133,7 +134,13 @@
               </StackPanel>
             </UniformGrid>
 
-            <Grid Grid.Row="3"
+            <TextBlock Grid.Row="3"
+                       Text="{Binding AssessmentSummary}"
+                       Margin="0,12,0,0"
+                       Foreground="#374151"
+                       TextWrapping="Wrap" />
+
+            <Grid Grid.Row="4"
                   Margin="0,16,0,0">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

@@ -10,6 +10,7 @@ using PIDTuner.Application.Services;
 using PIDTuner.Application.UseCases;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
+using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Trends;
 using PIDTuner.Infrastructure.Analysis;
@@ -23,6 +24,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
+    private readonly PidResponseAssessmentService _assessmentService = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private readonly AnalysisWindowParser _analysisWindowParser = new();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
@@ -36,6 +38,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _analysisStartText = string.Empty;
     private string _analysisEndText = string.Empty;
     private string _activeAnalysisWindow = "-";
+    private string _assessmentSummary = "-";
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
@@ -131,6 +134,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _activeAnalysisWindow;
         private set => SetProperty(ref _activeAnalysisWindow, value);
+    }
+
+    public string AssessmentSummary
+    {
+        get => _assessmentSummary;
+        private set => SetProperty(ref _assessmentSummary, value);
     }
 
     public PointCollection SetPointPoints
@@ -275,6 +284,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RiseTime = FormatNullable(result.Metrics.RiseTime);
             SettlingTime = FormatNullable(result.Metrics.SettlingTime);
             SteadyStateError = FormatNullable(result.Metrics.SteadyStateError, "0.###");
+            AssessmentSummary = _assessmentService.Assess(result.Metrics).Summary;
             UpdateTrendPreview(result.Samples);
             StatusMessage = $"已完成离线分析：{Path.GetFileName(fileName)}";
         }

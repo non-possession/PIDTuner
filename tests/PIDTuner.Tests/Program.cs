@@ -20,7 +20,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("configurable csv exchange imports quoted metadata with commas", ConfigurableCsvExchangeImportsQuotedMetadataWithCommas),
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
-    ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows)
+    ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
+    ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError)
 };
 
 var failures = new List<string>();
@@ -302,6 +303,27 @@ static Task AnalysisWindowParserReturnsOptionalValidatedWindows()
     AssertThrows<FormatException>(
         () => parser.Parse("2026-07-29T10:00:06.0000000+00:00", "2026-07-29T10:00:01.0000000+00:00"),
         "reversed analysis window is rejected");
+
+    return Task.CompletedTask;
+}
+
+static Task ResponseAssessmentFlagsHighOvershootAndSteadyStateError()
+{
+    var service = new PidResponseAssessmentService();
+    var assessment = service.Assess(new PidResponseMetrics(
+        OvershootPercent: 18,
+        RiseTime: TimeSpan.FromSeconds(2),
+        SettlingTime: TimeSpan.FromSeconds(12),
+        SteadyStateError: 3.2));
+
+    AssertEqual(PidResponseSeverity.Warning, assessment.Severity, "assessment severity");
+    AssertContains("超调偏高", assessment.Summary);
+    AssertContains("稳态误差偏大", assessment.Summary);
+    AssertEqual(2, assessment.Findings.Count, "assessment finding count");
+
+    var normal = service.Assess(new PidResponseMetrics(2, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), 0.1));
+    AssertEqual(PidResponseSeverity.Normal, normal.Severity, "normal severity");
+    AssertContains("未发现明显异常", normal.Summary);
 
     return Task.CompletedTask;
 }
