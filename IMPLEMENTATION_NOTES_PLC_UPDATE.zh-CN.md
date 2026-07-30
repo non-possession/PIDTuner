@@ -40,3 +40,21 @@
 ## 后续讨论重点
 
 PLC 控制参数写回暂不实施。记录数据可视化和回放会等用户提供待整合项目后再进入设计和实现讨论。
+
+## 实时趋势可视化补充
+
+本轮开始接入 `WPFHistoricalTrend` 项目的图表工作台思想，但没有直接搬运整套窗口。PIDTuner 当前实现选择在 Desktop 层新增 `PlcTrendChartAdapter`，用 `ScottPlot.WPF` 渲染实时监控页中的多点位趋势。
+
+关键实现点：
+
+- `MainWindowViewModel` 在每次应用 PLC 快照后触发 `PlcSnapshotsApplied` 事件。
+- `MainWindow.xaml.cs` 监听该事件，将 `PlcTagSnapshot` 帧交给图表适配器。
+- `PlcTrendChartAdapter` 在内存中按 `TagId` 保存最近趋势点，并按当前窗口渲染可见点位。
+- 实时监控表格新增“趋势”列，用户可以逐点控制是否显示曲线。
+- 实时趋势支持 `10s`、`30s`、`1min`、`5min` 窗口切换，并支持鼠标悬停查看光标附近的点位值。
+
+当前边界：
+
+- 这一步只做实时趋势，不做历史回放。
+- PLC 趋势长历史 SQLite 持久化尚未接入。
+- 回放功能会在后续结合用户提供的项目继续设计。

@@ -233,4 +233,14 @@ dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 
 ## Next Technical Priority
 
-The next high-value work is recording data visualization and replay design. Siemens S7 connection reuse and multi-tag batch reading are now in place, and connection checks report the failing communication stage where possible.
+The next high-value work is recording data replay design. Siemens S7 connection reuse, multi-tag batch reading, and live ScottPlot trend visualization are now in place, and connection checks report the failing communication stage where possible.
+
+## Live PLC Trend Visualization
+
+The real-time monitor page now uses `ScottPlot.WPF` through a Desktop-layer adapter:
+
+- `src/PIDTuner.Desktop/Services/PlcTrendChartAdapter.cs` keeps an in-memory per-tag trend buffer and renders visible PLC tags as multi-series lines.
+- `MainWindowViewModel` raises `PlcSnapshotsApplied` after each monitor frame, keeping ScottPlot out of the ViewModel and domain layers.
+- `MainWindow.xaml.cs` listens to snapshot and tag visibility changes, then refreshes the chart, applies the selected time window, and shows hover summaries.
+
+This keeps the current PLC read path centered on `PlcTagSnapshot` while giving the UI a richer trend surface.

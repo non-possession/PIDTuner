@@ -198,6 +198,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public event Action<IReadOnlyList<PlcTagSnapshot>>? PlcSnapshotsApplied;
+
     public string Title { get; } = "PIDTuner";
 
     public IReadOnlyList<string> AvailableFieldDataTypes { get; } =
@@ -746,6 +748,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
+        PlcSnapshotsApplied?.Invoke(snapshots);
     }
 
     private static int ResolveRecordingIntervalMilliseconds(

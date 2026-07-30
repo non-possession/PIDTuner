@@ -70,7 +70,9 @@ On the `实时监控` tab:
 2. Click `刷新点位` to read one snapshot of the enabled tag list.
 3. Click `启动/停止` to refresh repeatedly using the configured default sampling interval.
 4. Click `记录 1s` to record enabled readable tags in memory for one second.
-5. Select a tag row to view its recent trend preview.
+5. Use the `趋势` checkbox in the tag table to show or hide each tag on the real-time trend chart.
+6. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window.
+7. Hover the trend chart to see the nearest visible tag values around the cursor time.
 
 Repeated monitoring currently uses the project-level default sampling interval with the configured `最小采样 ms` as the lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, also bounded by `最小采样 ms`. For example, if `最小采样 ms` is 200, enabled tag A is 200 ms, and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
 
@@ -257,7 +259,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
 - Start and stop repeated tag monitoring at the configured sampling interval.
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
-- Show a selected tag's recent value trend.
+- Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
@@ -302,8 +304,8 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 ## Current Limitations
 
 - Siemens S7 read support is intentionally narrow: current DB address parsing covers `DBX`, `DBB`, `DBW`, and `DBD`. PLC writeback is still disabled.
-- No SQLite persistence yet.
-- No real charting library yet; the trend preview is a lightweight WPF polyline preview.
+- No SQLite persistence for PLC trend history yet.
+- PLC recording playback is not integrated yet; the current ScottPlot chart is focused on live monitoring.
 - CSV parsing supports quoted fields with commas and escaped double quotes on a single line.
 - Field profile editing uses dropdowns for field type and semantic role.
 

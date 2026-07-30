@@ -30,6 +30,7 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
     private string _timestampText = "-";
     private string _quality = string.Empty;
     private string _source = string.Empty;
+    private bool _isTrendVisible = true;
     private PointCollection _trendPoints = new();
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -56,6 +57,12 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
     {
         get => _source;
         private set => SetProperty(ref _source, value);
+    }
+
+    public bool IsTrendVisible
+    {
+        get => _isTrendVisible;
+        set => SetProperty(ref _isTrendVisible, value);
     }
 
     public PointCollection TrendPoints
