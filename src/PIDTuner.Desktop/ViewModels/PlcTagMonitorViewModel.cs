@@ -20,11 +20,27 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
 
     public Guid TagId { get; }
 
-    public string Name { get; }
+    private string _name = string.Empty;
+    private string _address = string.Empty;
+    private string _unit = string.Empty;
 
-    public string Address { get; }
+    public string Name
+    {
+        get => _name;
+        private set => SetProperty(ref _name, value);
+    }
 
-    public string Unit { get; }
+    public string Address
+    {
+        get => _address;
+        private set => SetProperty(ref _address, value);
+    }
+
+    public string Unit
+    {
+        get => _unit;
+        private set => SetProperty(ref _unit, value);
+    }
 
     private string _valueText = "-";
     private string _timestampText = "-";
@@ -75,6 +91,9 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
 
     public void Update(PlcTagSnapshot snapshot)
     {
+        Name = snapshot.Name;
+        Address = snapshot.Address;
+        Unit = snapshot.Unit ?? string.Empty;
         ValueText = snapshot.Value?.ToString("0.###") ?? "-";
         TimestampText = snapshot.Timestamp.ToString("HH:mm:ss");
         Quality = snapshot.Quality;

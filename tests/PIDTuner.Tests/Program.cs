@@ -746,6 +746,10 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertEqual(true, viewModel.PlcMonitorTags.Count > 0, "plc monitor tag count");
     AssertEqual("2", viewModel.PlcMonitorTags[0].ValueText, "second monitor value");
     AssertEqual(true, viewModel.PlcMonitorTags[0].TrendPoints.Count >= 2, "monitor trend point count");
+    var editedAddress = "DB1.DBD120";
+    viewModel.TagDefinitions[0].Address = editedAddress;
+    await viewModel.RefreshPlcMonitorAsync();
+    AssertEqual(editedAddress, viewModel.PlcMonitorTags[0].Address, "monitor address after configuration edit");
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
