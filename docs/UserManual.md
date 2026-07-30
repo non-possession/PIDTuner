@@ -78,6 +78,8 @@ On the `实时监控` tab:
 10. Click `上一帧` or `下一帧` for manual replay stepping.
 11. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
 
+The real-time trend chart is the primary working area on this page. The visible tag table sits below the chart as a compact monitoring and visibility-control panel.
+
 Repeated monitoring currently uses the project-level default sampling interval with the configured `最小采样 ms` as the lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, also bounded by `最小采样 ms`. For example, if `最小采样 ms` is 200, enabled tag A is 200 ms, and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
 
 When the one-second recorder finishes, PIDTuner automatically stops recording and shows a notification with the frame count, enabled tag count, snapshot count, effective recording interval, and the absolute JSON save path. Recordings are saved under:
