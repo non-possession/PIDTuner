@@ -154,7 +154,8 @@ Current S7 scope:
 
 - DB bit, byte, word, and double-word address parsing.
 - Boolean, Int16, Int32, Float, and numeric Double display reads.
-- The current reader still sends one read PDU per tag. Batch reads should extend the PDU construction area around `BuildReadRequest`.
+- Multi-tag reads use Siemens S7 multi-variable read PDUs. `SiemensS7Client` splits requests into batches of up to 16 items, constructs one S7ANY descriptor per tag, and unpacks each returned data item back into a per-tag result.
+- Connection checks now distinguish TCP 102 connection failures, ISO-on-TCP handshake failures, and S7 Setup Communication failures. Timeout failures caused by the configured PLC timeout are reported as communication-stage failures instead of user cancellation.
 
 ### 5. High-Frequency One-Second Recording And Connection Reuse
 
@@ -199,7 +200,7 @@ This has two effects:
 - Recording no longer reconnects to the PLC for every frame.
 - Scheduling uses absolute due times such as `0ms, 50ms, 100ms...` instead of `read duration + delay`.
 
-If a real PLC still cannot reach `1000 / interval` frames, the bottleneck is usually PLC response time, network latency, enabled tag count, or sequential per-tag reads. The next optimization is true Siemens S7 multi-tag batch reading.
+If a real PLC still cannot reach `1000 / interval` frames, the bottleneck is now usually PLC response time, network latency, enabled tag count, or the configured batch count. Sequential per-tag S7 read PDUs are no longer used inside a session frame.
 
 ### 6. Local Persistence And User Feedback
 
@@ -232,4 +233,4 @@ dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 
 ## Next Technical Priority
 
-The next high-value improvement is Siemens S7 multi-tag batch reading. Connection reuse is already in place for the recording window; the remaining bottleneck is sequential per-tag PDUs inside each frame. Batch reading should extend `SiemensS7Client` request construction and response unpacking while preserving the `IPlcTagSnapshotReadSession` interface.
+The next high-value work is recording data visualization and replay design. Siemens S7 connection reuse and multi-tag batch reading are now in place, and connection checks report the failing communication stage where possible.

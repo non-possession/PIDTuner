@@ -80,7 +80,9 @@ When the one-second recorder finishes, PIDTuner automatically stops recording an
 local\plc-recordings
 ```
 
-During one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the whole recording window. This removes the previous per-frame TCP/S7 connection setup cost. The recorded frame count can still be lower than `1000 / interval` if the PLC or enabled tag reads take longer than the requested interval.
+During one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the whole recording window. Within each frame, enabled readable tags are now read through Siemens S7 multi-variable batch requests, split into batches of up to 16 items. This removes both the previous per-frame TCP/S7 connection setup cost and most per-tag request overhead. The recorded frame count can still be lower than `1000 / interval` if the PLC, network, or configured tag count takes longer than the requested interval.
+
+When Siemens S7 communication checks fail, the notification now identifies the failing stage where possible: empty IP, TCP 102 connection, ISO-on-TCP handshake, or S7 Setup Communication. This helps separate basic network reachability from protocol-level PLC configuration problems.
 
 Important current boundary: Siemens S7 tag values are now read through the built-in S7 reader when protocol is `Siemens S7`. `Preview` remains available for offline UI validation. PLC writeback is still not enabled.
 
@@ -250,8 +252,8 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Edit PLC project connection metadata.
 - Edit, add, remove, and save PLC tag definitions.
 - Check configured PLC IP reachability with Ping.
-- Check Siemens S7 communication through TCP 102 and S7 setup handshake.
-- Read enabled Siemens S7 DB tag values for real-time monitor snapshots.
+- Check Siemens S7 communication through TCP 102, ISO-on-TCP, and S7 setup handshake with stage-specific failure messages.
+- Read enabled Siemens S7 DB tag values for real-time monitor snapshots using multi-variable batch requests.
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
 - Start and stop repeated tag monitoring at the configured sampling interval.
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.

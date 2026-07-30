@@ -1,12 +1,13 @@
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Domain.Configuration;
+using PIDTuner.Domain.Models;
 using PIDTuner.Domain.Plc;
 
 namespace PIDTuner.Infrastructure.Plc;
 
 /// <summary>
 /// Siemens S7 snapshot reader. Single refreshes still return one frame, while high-frequency
-/// recording opens a read session to reuse the TCP/S7 connection across frames.
+/// recording opens a read session to reuse the TCP/S7 connection and batch tag reads across frames.
 /// </summary>
 public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcTagSnapshotSessionReader
 {
@@ -32,9 +33,10 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
         PlcProjectConfiguration configuration,
         CancellationToken cancellationToken)
     {
-        // The session captures the enabled tag set once so every recorded frame has the same shape.
+        // The session captures and parses the enabled tag set once so every recorded frame has the same shape.
         var enabledTags = configuration.Tags
-            .Where(tag => tag.IsEnabled && tag.AccessMode != Domain.Models.TagAccessMode.WriteOnly)
+            .Where(tag => tag.IsEnabled && tag.AccessMode != TagAccessMode.WriteOnly)
+            .Select(ParseTag)
             .ToArray();
         var client = new SiemensS7Client();
 
@@ -52,32 +54,56 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
 
     private sealed class SiemensS7PlcTagSnapshotReadSession(
         SiemensS7Client client,
-        IReadOnlyList<Domain.Models.TagDefinition> enabledTags) : IPlcTagSnapshotReadSession
+        IReadOnlyList<ParsedTag> enabledTags) : IPlcTagSnapshotReadSession
     {
         public async Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(CancellationToken cancellationToken)
         {
-            var snapshots = new List<PlcTagSnapshot>();
+            var snapshots = new PlcTagSnapshot[enabledTags.Count];
+            var readableTags = enabledTags
+                .Select((tag, index) => new { Tag = tag, Index = index })
+                .Where(item => item.Tag.Address is not null)
+                .ToArray();
 
-            // The connection is reused; only tag read PDUs are sent for each frame.
-            foreach (var tag in enabledTags)
+            foreach (var item in enabledTags.Select((tag, index) => new { Tag = tag, Index = index }))
             {
-                try
+                if (item.Tag.ParseError is not null)
                 {
-                    var address = S7AddressParser.Parse(tag.Address, tag.DataType);
-                    var value = await client.ReadNumericAsync(address, cancellationToken);
-                    snapshots.Add(new PlcTagSnapshot(
-                        tag.Id,
-                        tag.Name,
-                        tag.Address,
-                        value.HasValue ? Math.Round(value.Value * tag.Scale, 3) : null,
-                        tag.Unit,
-                        DateTimeOffset.Now,
-                        "Good",
-                        "Siemens S7"));
+                    snapshots[item.Index] = SiemensS7PlcTagSnapshotReader.Failed(
+                        item.Tag.Definition,
+                        $"地址解析失败：{item.Tag.ParseError}",
+                        "Siemens S7");
                 }
-                catch (Exception exception) when (exception is not OperationCanceledException)
+            }
+
+            if (readableTags.Length == 0)
+            {
+                return snapshots;
+            }
+
+            try
+            {
+                // One session read now sends batched S7 variable reads instead of one request per tag.
+                var results = await client.ReadNumericBatchAsync(
+                    readableTags.Select(item => item.Tag.Address!).ToArray(),
+                    cancellationToken);
+
+                for (var index = 0; index < readableTags.Length; index++)
                 {
-                    snapshots.Add(SiemensS7PlcTagSnapshotReader.Failed(tag, $"读取失败：{exception.Message}", "Siemens S7"));
+                    var item = readableTags[index];
+                    var result = results[index];
+                    snapshots[item.Index] = result.Error is null
+                        ? Good(item.Tag.Definition, result.Value)
+                        : Failed(item.Tag.Definition, $"读取失败：{result.Error}", "Siemens S7");
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                foreach (var item in readableTags)
+                {
+                    snapshots[item.Index] = SiemensS7PlcTagSnapshotReader.Failed(
+                        item.Tag.Definition,
+                        $"批量读取失败：{exception.Message}",
+                        "Siemens S7");
                 }
             }
 
@@ -90,7 +116,32 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
         }
     }
 
-    private static PlcTagSnapshot Failed(Domain.Models.TagDefinition tag, string quality, string source)
+    private static ParsedTag ParseTag(TagDefinition tag)
+    {
+        try
+        {
+            return new ParsedTag(tag, S7AddressParser.Parse(tag.Address, tag.DataType), null);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new ParsedTag(tag, null, exception.Message);
+        }
+    }
+
+    private static PlcTagSnapshot Good(TagDefinition tag, double? value)
+    {
+        return new PlcTagSnapshot(
+            tag.Id,
+            tag.Name,
+            tag.Address,
+            value.HasValue ? Math.Round(value.Value * tag.Scale, 3) : null,
+            tag.Unit,
+            DateTimeOffset.Now,
+            "Good",
+            "Siemens S7");
+    }
+
+    private static PlcTagSnapshot Failed(TagDefinition tag, string quality, string source)
     {
         return new PlcTagSnapshot(
             tag.Id,
@@ -102,4 +153,6 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
             quality,
             source);
     }
+
+    private sealed record ParsedTag(TagDefinition Definition, S7Address? Address, string? ParseError);
 }

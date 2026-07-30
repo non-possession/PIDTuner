@@ -5,12 +5,31 @@ using PIDTuner.Domain.Models;
 
 namespace PIDTuner.Infrastructure.Plc;
 
+internal enum SiemensS7ConnectionStage
+{
+    TcpConnect,
+    IsoOnTcpHandshake,
+    S7SetupCommunication
+}
+
+internal sealed class SiemensS7ConnectionException(
+    SiemensS7ConnectionStage stage,
+    string message,
+    Exception? innerException = null) : InvalidOperationException(message, innerException)
+{
+    public SiemensS7ConnectionStage Stage { get; } = stage;
+}
+
+internal sealed record S7ReadResult(S7Address Address, double? Value, string? Error);
+
 /// <summary>
 /// Minimal Siemens S7 TCP client for DB reads. It owns the socket/session handshake and exposes
-/// typed numeric reads to higher-level snapshot readers.
+/// typed numeric and batched reads to higher-level snapshot readers.
 /// </summary>
 public sealed class SiemensS7Client : IAsyncDisposable
 {
+    internal const int MaxReadItemsPerRequest = 16;
+
     private TcpClient? _client;
     private NetworkStream? _stream;
     private ushort _sequence = 1;
@@ -20,32 +39,100 @@ public sealed class SiemensS7Client : IAsyncDisposable
         _client = new TcpClient();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Math.Max(250, configuration.TimeoutMilliseconds));
-        await _client.ConnectAsync(configuration.IpAddress, 102, timeout.Token);
+
+        try
+        {
+            await _client.ConnectAsync(configuration.IpAddress, 102, timeout.Token);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.TcpConnect,
+                $"TCP 102 连接超时：{configuration.TimeoutMilliseconds} ms 内未建立连接。",
+                exception);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.TcpConnect,
+                $"TCP 102 连接失败：{exception.Message}",
+                exception);
+        }
+
         _stream = _client.GetStream();
 
         // ISO-on-TCP connection request, followed by S7 setup communication negotiation.
-        await SendAsync(BuildConnectionRequest(configuration.Rack, configuration.Slot), timeout.Token);
-        _ = await ReceiveAsync(timeout.Token);
-        await SendAsync(BuildSetupCommunicationRequest(), timeout.Token);
-        _ = await ReceiveAsync(timeout.Token);
+        try
+        {
+            await SendAsync(BuildConnectionRequest(configuration.Rack, configuration.Slot), timeout.Token);
+            _ = await ReceiveAsync(timeout.Token);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.IsoOnTcpHandshake,
+                $"ISO-on-TCP 握手超时：{configuration.TimeoutMilliseconds} ms 内未收到响应。",
+                exception);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.IsoOnTcpHandshake,
+                $"ISO-on-TCP 握手失败：{exception.Message}",
+                exception);
+        }
+
+        try
+        {
+            await SendAsync(BuildSetupCommunicationRequest(), timeout.Token);
+            _ = await ReceiveAsync(timeout.Token);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.S7SetupCommunication,
+                $"S7 Setup Communication 超时：{configuration.TimeoutMilliseconds} ms 内未收到响应。",
+                exception);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ConnectionException(
+                SiemensS7ConnectionStage.S7SetupCommunication,
+                $"S7 Setup Communication 失败：{exception.Message}",
+                exception);
+        }
     }
 
     public async Task<double?> ReadNumericAsync(S7Address address, CancellationToken cancellationToken)
     {
-        var request = BuildReadRequest(address);
-        await SendAsync(request, cancellationToken);
-        var response = await ReceiveAsync(cancellationToken);
-        var payload = ExtractReadPayload(response);
-
-        return address.DataType switch
+        var result = (await ReadNumericBatchAsync(new[] { address }, cancellationToken))[0];
+        if (result.Error is not null)
         {
-            PlcDataType.Boolean => ((payload[0] >> (address.BitOffset ?? 0)) & 0x01) == 1 ? 1 : 0,
-            PlcDataType.Int16 => BinaryPrimitives.ReadInt16BigEndian(payload),
-            PlcDataType.Int32 => BinaryPrimitives.ReadInt32BigEndian(payload),
-            PlcDataType.Float => BinaryPrimitives.ReadSingleBigEndian(payload),
-            PlcDataType.Double => BinaryPrimitives.ReadSingleBigEndian(payload),
-            _ => throw new NotSupportedException($"Unsupported PLC data type: {address.DataType}.")
-        };
+            throw new InvalidOperationException(result.Error);
+        }
+
+        return result.Value;
+    }
+
+    internal async Task<IReadOnlyList<S7ReadResult>> ReadNumericBatchAsync(
+        IReadOnlyList<S7Address> addresses,
+        CancellationToken cancellationToken)
+    {
+        if (addresses.Count == 0)
+        {
+            return Array.Empty<S7ReadResult>();
+        }
+
+        var results = new List<S7ReadResult>(addresses.Count);
+        foreach (var chunk in addresses.Chunk(MaxReadItemsPerRequest))
+        {
+            var request = BuildReadRequest(chunk);
+            await SendAsync(request, cancellationToken);
+            var response = await ReceiveAsync(cancellationToken);
+            results.AddRange(ExtractReadResults(response, chunk));
+        }
+
+        return results;
     }
 
     public async ValueTask DisposeAsync()
@@ -115,11 +202,18 @@ public sealed class SiemensS7Client : IAsyncDisposable
         };
     }
 
-    private byte[] BuildReadRequest(S7Address address)
+    private byte[] BuildReadRequest(IReadOnlyList<S7Address> addresses)
     {
+        if (addresses.Count is <= 0 or > MaxReadItemsPerRequest)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(addresses),
+                $"S7 batch read supports 1 to {MaxReadItemsPerRequest} items per request.");
+        }
+
         var sequence = _sequence++;
-        // Current reader builds one variable read request per tag; batch reads can extend this PDU shape later.
-        var request = new byte[31];
+        var parameterLength = 2 + 12 * addresses.Count;
+        var request = new byte[17 + parameterLength];
         request[0] = 0x03;
         request[1] = 0x00;
         BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(2, 2), (ushort)request.Length);
@@ -129,24 +223,39 @@ public sealed class SiemensS7Client : IAsyncDisposable
         request[7] = 0x32;
         request[8] = 0x01;
         BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(11, 2), sequence);
-        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(13, 2), 0x000E);
+        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(13, 2), (ushort)parameterLength);
         request[17] = 0x04;
-        request[18] = 0x01;
-        request[19] = 0x12;
-        request[20] = 0x0A;
-        request[21] = 0x10;
-        request[22] = address.DataType == PlcDataType.Boolean ? (byte)0x01 : (byte)0x02;
-        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(23, 2), (ushort)(address.DataType == PlcDataType.Boolean ? 1 : address.ReadByteCount));
-        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(25, 2), (ushort)address.DataBlock);
-        request[27] = 0x84;
-        var bitAddress = address.BitAddress;
-        request[28] = (byte)((bitAddress >> 16) & 0xFF);
-        request[29] = (byte)((bitAddress >> 8) & 0xFF);
-        request[30] = (byte)(bitAddress & 0xFF);
+        request[18] = (byte)addresses.Count;
+
+        // Every variable item is a 12-byte S7ANY descriptor inside the same read parameter block.
+        for (var index = 0; index < addresses.Count; index++)
+        {
+            WriteReadItem(request.AsSpan(19 + index * 12, 12), addresses[index]);
+        }
+
         return request;
     }
 
-    private static byte[] ExtractReadPayload(byte[] response)
+    private static void WriteReadItem(Span<byte> item, S7Address address)
+    {
+        item[0] = 0x12;
+        item[1] = 0x0A;
+        item[2] = 0x10;
+        item[3] = address.DataType == PlcDataType.Boolean ? (byte)0x01 : (byte)0x02;
+        BinaryPrimitives.WriteUInt16BigEndian(
+            item[4..6],
+            (ushort)(address.DataType == PlcDataType.Boolean ? 1 : address.ReadByteCount));
+        BinaryPrimitives.WriteUInt16BigEndian(item[6..8], (ushort)address.DataBlock);
+        item[8] = 0x84;
+        var bitAddress = address.BitAddress;
+        item[9] = (byte)((bitAddress >> 16) & 0xFF);
+        item[10] = (byte)((bitAddress >> 8) & 0xFF);
+        item[11] = (byte)(bitAddress & 0xFF);
+    }
+
+    private static IReadOnlyList<S7ReadResult> ExtractReadResults(
+        byte[] response,
+        IReadOnlyList<S7Address> addresses)
     {
         const int s7Offset = 7;
         if (response.Length < s7Offset + 12 || response[s7Offset] != 0x32)
@@ -160,28 +269,65 @@ public sealed class SiemensS7Client : IAsyncDisposable
         // S7 read data begins after the transport header, S7 header, and parameter section.
         var dataOffset = s7Offset + headerLength + parameterLength;
 
-        if (response.Length < dataOffset + 4)
+        var results = new List<S7ReadResult>(addresses.Count);
+        var offset = dataOffset;
+        for (var index = 0; index < addresses.Count; index++)
         {
-            throw new InvalidOperationException("S7 read response does not contain data.");
+            if (response.Length < offset + 4)
+            {
+                throw new InvalidOperationException("S7 read response does not contain data.");
+            }
+
+            var address = addresses[index];
+            var returnCode = response[offset];
+            var transportSize = response[offset + 1];
+            var reportedLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(offset + 2, 2));
+            var byteCount = transportSize == 0x03
+                ? 1
+                : (reportedLength + 7) / 8;
+            var payloadOffset = offset + 4;
+            if (response.Length < payloadOffset + byteCount)
+            {
+                throw new InvalidOperationException("S7 read response payload is truncated.");
+            }
+
+            if (returnCode != 0xFF)
+            {
+                results.Add(new S7ReadResult(address, null, $"S7 read failed with return code 0x{returnCode:X2}."));
+            }
+            else
+            {
+                try
+                {
+                    var value = DecodeNumericPayload(address, response.AsSpan(payloadOffset, byteCount));
+                    results.Add(new S7ReadResult(address, value, null));
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    results.Add(new S7ReadResult(address, null, exception.Message));
+                }
+            }
+
+            offset = payloadOffset + byteCount;
+            if (index < addresses.Count - 1 && offset % 2 != 0)
+            {
+                offset++;
+            }
         }
 
-        var returnCode = response[dataOffset];
-        if (returnCode != 0xFF)
-        {
-            throw new InvalidOperationException($"S7 read failed with return code 0x{returnCode:X2}.");
-        }
+        return results;
+    }
 
-        var transportSize = response[dataOffset + 1];
-        var reportedLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(dataOffset + 2, 2));
-        var byteCount = transportSize == 0x03
-            ? 1
-            : (reportedLength + 7) / 8;
-        var payloadOffset = dataOffset + 4;
-        if (response.Length < payloadOffset + byteCount)
+    private static double DecodeNumericPayload(S7Address address, ReadOnlySpan<byte> payload)
+    {
+        return address.DataType switch
         {
-            throw new InvalidOperationException("S7 read response payload is truncated.");
-        }
-
-        return response.AsSpan(payloadOffset, byteCount).ToArray();
+            PlcDataType.Boolean => ((payload[0] >> (address.BitOffset ?? 0)) & 0x01) == 1 ? 1 : 0,
+            PlcDataType.Int16 => BinaryPrimitives.ReadInt16BigEndian(payload),
+            PlcDataType.Int32 => BinaryPrimitives.ReadInt32BigEndian(payload),
+            PlcDataType.Float => BinaryPrimitives.ReadSingleBigEndian(payload),
+            PlcDataType.Double => BinaryPrimitives.ReadSingleBigEndian(payload),
+            _ => throw new NotSupportedException($"Unsupported PLC data type: {address.DataType}.")
+        };
     }
 }

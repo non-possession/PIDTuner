@@ -1,0 +1,42 @@
+# PIDTuner PLC 通信优化补充说明
+
+## Siemens S7 多点批量读取
+
+本轮已经将实时监控和 1 秒记录中的 Siemens S7 读取路径从“复用连接但逐点发送读取 PDU”优化为“复用连接并按批发送 multi-variable read PDU”。
+
+关键实现点：
+
+- `SiemensS7Client` 新增批量读取路径，同一批请求最多包含 16 个 S7ANY 点位描述。
+- `SiemensS7PlcTagSnapshotReader` 在打开读取会话时预解析启用点位，避免每帧重复解析地址。
+- 每次刷新时，可读点位会进入批量读取；地址解析失败、单点读取失败、整批读取失败会分别写入对应 `PlcTagSnapshot.Quality`。
+- `IPlcTagSnapshotReadSession` 接口保持不变，因此 UI 和记录调度层不需要感知底层读取方式变化。
+
+核心代码位置：
+
+- `src/PIDTuner.Infrastructure/Plc/SiemensS7Client.cs`
+- `src/PIDTuner.Infrastructure/Plc/SiemensS7PlcTagSnapshotReader.cs`
+
+## 连接失败阶段区分
+
+本轮增强了 Siemens S7 通信检查失败信息。现在可以区分：
+
+- PLC IP 地址为空。
+- TCP 102 端口连接失败或连接超时。
+- ISO-on-TCP 握手失败或超时。
+- S7 Setup Communication 失败或超时。
+
+关键实现点：
+
+- `SiemensS7Client.ConnectAsync()` 在每个通信阶段捕获异常，并抛出带阶段信息的 `SiemensS7ConnectionException`。
+- `SiemensS7ConnectivityProbe` 将阶段信息转换为用户可读提示。
+- 由配置超时触发的 `OperationCanceledException` 会归类到对应通信阶段；真正的用户取消仍然保留取消语义。
+
+核心代码位置：
+
+- `src/PIDTuner.Infrastructure/Plc/SiemensS7Client.cs`
+- `src/PIDTuner.Infrastructure/Plc/SiemensS7ConnectivityProbe.cs`
+- `src/PIDTuner.Infrastructure/Plc/PingPlcConnectivityProbe.cs`
+
+## 后续讨论重点
+
+PLC 控制参数写回暂不实施。记录数据可视化和回放会等用户提供待整合项目后再进入设计和实现讨论。

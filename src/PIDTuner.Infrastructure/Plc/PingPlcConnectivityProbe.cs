@@ -43,7 +43,7 @@ public sealed class PingPlcConnectivityProbe : IPlcConnectivityProbe
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            return Failed(configuration.IpAddress, TimeSpan.Zero, exception.Message);
+            return Failed(configuration.IpAddress, TimeSpan.Zero, $"Ping 检查失败：{exception.Message}");
         }
     }
 
