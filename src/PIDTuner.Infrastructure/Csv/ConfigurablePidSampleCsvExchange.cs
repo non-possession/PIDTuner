@@ -6,10 +6,15 @@ using PIDTuner.Domain.Models;
 
 namespace PIDTuner.Infrastructure.Csv;
 
+/// <summary>
+/// CSV adapter driven by a field profile. The profile lets each PID project rename or add
+/// columns without changing the domain model or the analysis use case.
+/// </summary>
 public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile fieldProfile) : ICsvSampleExchange
 {
     public async Task<IReadOnlyList<PidSample>> ImportAsync(Stream csvStream, CancellationToken cancellationToken)
     {
+        // Accept UTF-8 with or without BOM; exports intentionally include BOM for spreadsheet compatibility.
         using var reader = new StreamReader(csvStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
         var headerLine = await reader.ReadLineAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(headerLine))
@@ -18,6 +23,7 @@ public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile field
         }
 
         var headers = SplitCsvLine(headerLine);
+        // Header lookup is case-insensitive so plant CSV files can vary casing without a new parser.
         var headerIndexes = headers
             .Select((header, index) => new { Header = header, Index = index })
             .ToDictionary(item => item.Header, item => item.Index, StringComparer.OrdinalIgnoreCase);
@@ -79,6 +85,7 @@ public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile field
     {
         var extraFields = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
+        // Metadata and PID parameter columns are preserved even when they are not core SP/PV/MV fields.
         foreach (var field in fieldProfile.Fields.Where(field => field.Role is PidSampleFieldRole.Metadata or PidSampleFieldRole.PidParameter))
         {
             extraFields[field.Key] = GetField(fields, headerIndexes, field.Key);
@@ -130,6 +137,7 @@ public sealed class ConfigurablePidSampleCsvExchange(PidSampleFieldProfile field
             {
                 if (inQuotes && index + 1 < line.Length && line[index + 1] == '"')
                 {
+                    // CSV escapes a literal quote as two adjacent quote characters.
                     field.Append('"');
                     index++;
                     continue;

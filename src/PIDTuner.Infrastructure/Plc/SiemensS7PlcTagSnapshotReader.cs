@@ -4,6 +4,10 @@ using PIDTuner.Domain.Plc;
 
 namespace PIDTuner.Infrastructure.Plc;
 
+/// <summary>
+/// Siemens S7 snapshot reader. Single refreshes still return one frame, while high-frequency
+/// recording opens a read session to reuse the TCP/S7 connection across frames.
+/// </summary>
 public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcTagSnapshotSessionReader
 {
     public async Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(
@@ -28,6 +32,7 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
         PlcProjectConfiguration configuration,
         CancellationToken cancellationToken)
     {
+        // The session captures the enabled tag set once so every recorded frame has the same shape.
         var enabledTags = configuration.Tags
             .Where(tag => tag.IsEnabled && tag.AccessMode != Domain.Models.TagAccessMode.WriteOnly)
             .ToArray();
@@ -53,6 +58,7 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
         {
             var snapshots = new List<PlcTagSnapshot>();
 
+            // The connection is reused; only tag read PDUs are sent for each frame.
             foreach (var tag in enabledTags)
             {
                 try

@@ -4,6 +4,10 @@ using PIDTuner.Domain.Models;
 
 namespace PIDTuner.Infrastructure.Analysis;
 
+/// <summary>
+/// Offline PID step-response analyzer. It keeps the math independent from UI and file formats
+/// so the same metrics can be reused for imported CSV, saved history, and future live captures.
+/// </summary>
 public sealed class BasicPidAnalysisService : IPidAnalysisService
 {
     private const double SettlingTolerance = 0.02;
@@ -11,6 +15,7 @@ public sealed class BasicPidAnalysisService : IPidAnalysisService
 
     public PidResponseMetrics Analyze(IReadOnlyList<PidSample> samples, AnalysisWindow window)
     {
+        // Analysis operates only on samples that contain both SP and PV inside the requested window.
         var selected = samples
             .Where(sample => window.Contains(sample.Timestamp))
             .Where(sample => sample.SetPoint.HasValue && sample.ProcessValue.HasValue)
@@ -38,6 +43,7 @@ public sealed class BasicPidAnalysisService : IPidAnalysisService
 
         if (Math.Abs(responseSpan) < double.Epsilon)
         {
+            // A flat setpoint has no meaningful rise time or overshoot, but error metrics still matter.
             return new PidResponseMetrics(
                 null,
                 null,
@@ -113,6 +119,7 @@ public sealed class BasicPidAnalysisService : IPidAnalysisService
 
         for (var index = 0; index < samples.Count; index++)
         {
+            // Settling time is the first sample after which all remaining PV values stay within tolerance.
             var remainsSettled = samples
                 .Skip(index)
                 .All(sample => Math.Abs(sample.ProcessValue!.Value - target) <= tolerance);
@@ -168,6 +175,7 @@ public sealed class BasicPidAnalysisService : IPidAnalysisService
         for (var index = 1; index < samples.Count; index++)
         {
             var seconds = (samples[index].Timestamp - samples[index - 1].Timestamp).TotalSeconds;
+            // Trapezoidal integration handles uneven sample spacing from CSV or live capture.
             integral += (values[index - 1] + values[index]) / 2 * seconds;
         }
 

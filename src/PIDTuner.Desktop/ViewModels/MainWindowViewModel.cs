@@ -812,6 +812,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var nextDue = TimeSpan.Zero;
             PlcMonitorStatus = $"正在记录 1s 点位数据，周期 {intervalMilliseconds} ms。";
 
+            // Open one reader session for the whole recording window to avoid per-frame PLC reconnect cost.
             await using var session = await OpenPlcSnapshotSessionAsync(configuration, CancellationToken.None);
             while (nextDue < TimeSpan.FromSeconds(1))
             {
@@ -829,6 +830,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 var snapshots = await session.ReadAsync(CancellationToken.None);
                 frames.Add(snapshots);
                 ApplyPlcMonitorSnapshots(snapshots);
+                // Absolute scheduling targets 0ms, N ms, 2N ms... instead of "read duration + delay".
                 nextDue += TimeSpan.FromMilliseconds(intervalMilliseconds);
             }
 

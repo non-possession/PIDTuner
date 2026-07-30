@@ -5,6 +5,10 @@ using PIDTuner.Domain.Models;
 
 namespace PIDTuner.Infrastructure.Plc;
 
+/// <summary>
+/// Minimal Siemens S7 TCP client for DB reads. It owns the socket/session handshake and exposes
+/// typed numeric reads to higher-level snapshot readers.
+/// </summary>
 public sealed class SiemensS7Client : IAsyncDisposable
 {
     private TcpClient? _client;
@@ -19,6 +23,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         await _client.ConnectAsync(configuration.IpAddress, 102, timeout.Token);
         _stream = _client.GetStream();
 
+        // ISO-on-TCP connection request, followed by S7 setup communication negotiation.
         await SendAsync(BuildConnectionRequest(configuration.Rack, configuration.Slot), timeout.Token);
         _ = await ReceiveAsync(timeout.Token);
         await SendAsync(BuildSetupCommunicationRequest(), timeout.Token);
@@ -113,6 +118,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
     private byte[] BuildReadRequest(S7Address address)
     {
         var sequence = _sequence++;
+        // Current reader builds one variable read request per tag; batch reads can extend this PDU shape later.
         var request = new byte[31];
         request[0] = 0x03;
         request[1] = 0x00;
@@ -151,6 +157,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         var rosctr = response[s7Offset + 1];
         var parameterLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(s7Offset + 6, 2));
         var headerLength = rosctr == 0x03 ? 12 : 10;
+        // S7 read data begins after the transport header, S7 header, and parameter section.
         var dataOffset = s7Offset + headerLength + parameterLength;
 
         if (response.Length < dataOffset + 4)
