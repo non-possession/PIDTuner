@@ -68,15 +68,17 @@ On the `实时监控` tab:
 
 1. Click `检查通信` to Ping the configured PLC IP.
 2. Click `刷新点位` to read one snapshot of the enabled tag list.
-3. Click `启动/停止` to refresh repeatedly using the configured default sampling interval.
-4. Click `记录 1s` to record enabled readable tags in memory for one second.
-5. Use the `趋势` checkbox in the tag table to show or hide each tag on the real-time trend chart.
-6. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window.
-7. Hover the trend chart to see the nearest visible tag values around the cursor time.
-8. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
-9. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
-10. Click `上一帧` or `下一帧` for manual replay stepping.
-11. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
+3. Click `实时趋势` to return the chart to live monitoring mode.
+4. Click `历史趋势` to show a full saved PLC recording on the same chart. If no recording is loaded yet, PIDTuner asks for a PLC recording JSON file first.
+5. Click `启动/停止` to refresh repeatedly using the configured default sampling interval.
+6. Click `记录 1s` to record enabled readable tags in memory for one second.
+7. Use the `趋势` checkbox in the tag table to show or hide each tag on the trend chart.
+8. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window. These window buttons return the chart to live trend mode.
+9. Hover the trend chart to see the nearest visible tag values around the cursor time.
+10. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
+11. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
+12. Click `上一帧` or `下一帧` for manual replay stepping.
+13. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
 
 The real-time trend chart is the primary working area on this page. The visible tag table sits below the chart as a compact monitoring and visibility-control panel.
 

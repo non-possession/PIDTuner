@@ -835,6 +835,15 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.StepPlcReplayBackwardAsync();
     AssertContains("第 1/", loader.PlcReplayStatus);
     AssertEqual(true, resetCount >= 2, "backward replay trend reset count");
+
+    await loader.ShowPlcHistoricalTrendAsync();
+    AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical plc trend mode");
+    AssertContains("历史", loader.PlcTrendModeStatus);
+    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+
+    loader.UsePlcLiveTrendMode();
+    AssertEqual(false, loader.IsPlcHistoricalTrendMode, "live plc trend mode");
+    AssertContains("实时", loader.PlcTrendModeStatus);
 }
 
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()

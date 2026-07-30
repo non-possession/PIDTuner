@@ -122,9 +122,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
     private string _plcReplayStatus = "尚未加载 PLC 记录。";
+    private string _plcTrendModeStatus = "当前趋势：实时";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
     private bool _isPlcReplayRunning;
+    private bool _isPlcHistoricalTrendMode;
 
     private string _parameterSetStatus = "尚未保存参数方案。";
 
@@ -186,6 +188,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         TogglePlcMonitoringCommand = new AsyncCommand(TogglePlcMonitoringAsync);
         RecordPlcOneSecondCommand = new AsyncCommand(RecordPlcOneSecondAsync);
         LoadPlcRecordingCommand = new AsyncCommand(LoadPlcRecordingAsync);
+        ShowPlcLiveTrendCommand = new AsyncCommand(ShowPlcLiveTrendAsync);
+        ShowPlcHistoricalTrendCommand = new AsyncCommand(ShowPlcHistoricalTrendAsync);
         TogglePlcReplayCommand = new AsyncCommand(TogglePlcReplayAsync);
         StepPlcReplayBackwardCommand = new AsyncCommand(StepPlcReplayBackwardAsync);
         StepPlcReplayForwardCommand = new AsyncCommand(StepPlcReplayForwardAsync);
@@ -315,6 +319,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcReplayStatus;
         private set => SetProperty(ref _plcReplayStatus, value);
+    }
+
+    public string PlcTrendModeStatus
+    {
+        get => _plcTrendModeStatus;
+        private set => SetProperty(ref _plcTrendModeStatus, value);
+    }
+
+    public bool IsPlcHistoricalTrendMode
+    {
+        get => _isPlcHistoricalTrendMode;
+        private set => SetProperty(ref _isPlcHistoricalTrendMode, value);
     }
 
     public string PlcReplaySpeedText => $"{_plcReplaySpeedMultiplier:0.##}x";
@@ -633,6 +649,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand LoadPlcRecordingCommand { get; }
 
+    public ICommand ShowPlcLiveTrendCommand { get; }
+
+    public ICommand ShowPlcHistoricalTrendCommand { get; }
+
     public ICommand TogglePlcReplayCommand { get; }
 
     public ICommand StepPlcReplayBackwardCommand { get; }
@@ -759,6 +779,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
+            if (IsPlcHistoricalTrendMode)
+            {
+                IsPlcHistoricalTrendMode = false;
+                PlcTrendModeStatus = "当前趋势：实时";
+                PlcMonitorTags.Clear();
+                SelectedPlcMonitorTag = null;
+                PlcTrendResetRequested?.Invoke();
+            }
+
             var configuration = BuildPlcConfigurationFromForm();
             var snapshots = await _plcTagSnapshotReader.ReadAsync(configuration, CancellationToken.None);
             ApplyPlcMonitorSnapshots(snapshots);
@@ -910,6 +939,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LoadPlcRecordingAsync()
     {
+        await LoadPlcRecordingAsync(showFullHistory: false);
+    }
+
+    private async Task LoadPlcRecordingAsync(bool showFullHistory)
+    {
         var fileName = _openFileDialogService.PickPlcRecordingFile();
         if (string.IsNullOrWhiteSpace(fileName))
         {
@@ -940,7 +974,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcMonitorTags.Clear();
             SelectedPlcMonitorTag = null;
             PlcTrendResetRequested?.Invoke();
-            ApplyPlcReplayFrame(0, advance: true);
+            if (showFullHistory)
+            {
+                ShowLoadedPlcHistoricalTrend();
+            }
+            else
+            {
+                IsPlcHistoricalTrendMode = false;
+                PlcTrendModeStatus = "当前趋势：实时";
+                ApplyPlcReplayFrame(0, advance: true);
+            }
 
             PlcMonitorStatus =
                 $"已加载 PLC 记录：{recording.FrameCount} 帧，{recording.SnapshotCount} 条快照，周期 {_loadedPlcReplayIntervalMilliseconds} ms。";
@@ -954,6 +997,37 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify("PLC 记录加载失败", exception.Message, "Error");
         }
+    }
+
+    public async Task ShowPlcLiveTrendAsync()
+    {
+        StopPlcReplay();
+        UsePlcLiveTrendMode();
+        PlcMonitorTags.Clear();
+        SelectedPlcMonitorTag = null;
+        PlcTrendResetRequested?.Invoke();
+        await RefreshPlcMonitorAsync();
+    }
+
+    public void UsePlcLiveTrendMode()
+    {
+        IsPlcHistoricalTrendMode = false;
+        PlcTrendModeStatus = "当前趋势：实时";
+    }
+
+    public async Task ShowPlcHistoricalTrendAsync()
+    {
+        StopPlcReplay();
+        if (_loadedPlcReplayFrames.Count == 0)
+        {
+            await LoadPlcRecordingAsync(showFullHistory: true);
+            return;
+        }
+
+        PlcMonitorTags.Clear();
+        SelectedPlcMonitorTag = null;
+        PlcTrendResetRequested?.Invoke();
+        ShowLoadedPlcHistoricalTrend();
     }
 
     public Task TogglePlcReplayAsync()
@@ -1086,6 +1160,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         _plcReplayDisplayedFrameIndex = targetFrameIndex;
         _plcReplayNextFrameIndex = Math.Min(targetFrameIndex + 1, _loadedPlcReplayFrames.Count);
+    }
+
+    private void ShowLoadedPlcHistoricalTrend()
+    {
+        if (_loadedPlcReplayFrames.Count == 0)
+        {
+            return;
+        }
+
+        IsPlcHistoricalTrendMode = true;
+        PlcTrendModeStatus = "当前趋势：历史";
+        for (var index = 0; index < _loadedPlcReplayFrames.Count; index++)
+        {
+            ApplyPlcMonitorSnapshots(_loadedPlcReplayFrames[index]);
+        }
+
+        _plcReplayDisplayedFrameIndex = _loadedPlcReplayFrames.Count - 1;
+        _plcReplayNextFrameIndex = _loadedPlcReplayFrames.Count;
+        PlcMonitorStatus = $"历史趋势已显示：{_loadedPlcReplayFrames.Count} 帧。";
+        UpdatePlcReplayStatus("历史趋势");
     }
 
     private bool EnsurePlcReplayLoaded()

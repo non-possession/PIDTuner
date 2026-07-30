@@ -30,6 +30,7 @@ public sealed class PlcTrendChartAdapter
     ];
 
     private TimeSpan _visibleWindow = TimeSpan.FromSeconds(30);
+    private bool _showFullHistory;
 
     public PlcTrendChartAdapter(WpfPlot plot)
     {
@@ -41,6 +42,12 @@ public sealed class PlcTrendChartAdapter
     {
         get => _visibleWindow;
         set => _visibleWindow = value < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : value;
+    }
+
+    public bool ShowFullHistory
+    {
+        get => _showFullHistory;
+        set => _showFullHistory = value;
     }
 
     public void Clear()
@@ -84,14 +91,15 @@ public sealed class PlcTrendChartAdapter
         _plot.Plot.Clear();
         ConfigurePlot();
 
-        var latest = GetLatestTimestamp();
-        if (latest is null)
+        var range = GetTimestampRange();
+        if (range is null)
         {
             _plot.Refresh();
             return;
         }
 
-        var windowStart = latest.Value - VisibleWindow;
+        var latest = range.Value.Latest;
+        var windowStart = ShowFullHistory ? range.Value.Earliest : latest - VisibleWindow;
         var colorIndex = 0;
         foreach (var tag in monitorTags.Where(tag => tag.IsTrendVisible))
         {
@@ -101,7 +109,7 @@ public sealed class PlcTrendChartAdapter
             }
 
             var visiblePoints = points
-                .Where(point => point.Timestamp >= windowStart && point.Timestamp <= latest.Value)
+                .Where(point => point.Timestamp >= windowStart && point.Timestamp <= latest)
                 .ToArray();
             if (visiblePoints.Length == 0)
             {
@@ -119,7 +127,7 @@ public sealed class PlcTrendChartAdapter
         }
 
         _plot.Plot.Axes.DateTimeTicksBottom();
-        _plot.Plot.Axes.SetLimitsX(windowStart.LocalDateTime.ToOADate(), latest.Value.LocalDateTime.ToOADate());
+        _plot.Plot.Axes.SetLimitsX(windowStart.LocalDateTime.ToOADate(), latest.LocalDateTime.ToOADate());
         if (monitorTags.Any(tag => tag.IsTrendVisible && _pointsByTag.ContainsKey(tag.TagId)))
         {
             _plot.Plot.Axes.AutoScaleY();
@@ -174,6 +182,7 @@ public sealed class PlcTrendChartAdapter
     {
         ConfigurePlotFonts();
         _plot.Plot.Title("PLC 实时趋势");
+        _plot.Plot.Title(ShowFullHistory ? "PLC 历史趋势" : "PLC 实时趋势");
         _plot.Plot.XLabel("时间");
         _plot.Plot.YLabel("点位值");
         _plot.Plot.ShowLegend();
@@ -229,14 +238,14 @@ public sealed class PlcTrendChartAdapter
         }
     }
 
-    private DateTimeOffset? GetLatestTimestamp()
+    private (DateTimeOffset Earliest, DateTimeOffset Latest)? GetTimestampRange()
     {
         var points = _pointsByTag.Values
             .Where(points => points.Count > 0)
-            .Select(points => points[^1].Timestamp)
+            .SelectMany(points => points.Select(point => point.Timestamp))
             .ToArray();
 
-        return points.Length == 0 ? null : points.Max();
+        return points.Length == 0 ? null : (points.Min(), points.Max());
     }
 
     private readonly record struct PlcTrendPoint(DateTimeOffset Timestamp, double Value);

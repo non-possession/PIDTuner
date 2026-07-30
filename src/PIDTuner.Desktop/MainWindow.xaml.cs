@@ -1,6 +1,6 @@
-using System.Windows;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Desktop.ViewModels;
 using PIDTuner.Domain.Plc;
@@ -20,19 +20,21 @@ public partial class MainWindow : Window
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
         _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
         _viewModel.PlcMonitorTags.CollectionChanged += PlcMonitorTags_CollectionChanged;
-        PlcTrendStatusTextBlock.Text = "趋势窗口：30s";
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void ResetPlcTrendChart()
     {
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.Clear();
-        PlcTrendStatusTextBlock.Text = $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void ApplyPlcTrendSnapshots(IReadOnlyList<PlcTagSnapshot> snapshots)
     {
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.PlcMonitorTags);
-        PlcTrendStatusTextBlock.Text = $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void PlcMonitorTags_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -53,6 +55,7 @@ public partial class MainWindow : Window
             }
         }
 
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
     }
 
@@ -60,27 +63,37 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible))
         {
+            _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
             _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
         }
     }
 
-    private void PlcTrendWindow10Seconds_Click(object sender, RoutedEventArgs e) =>
-        SetPlcTrendWindow(TimeSpan.FromSeconds(10));
+    private async void PlcTrendWindow10Seconds_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromSeconds(10));
 
-    private void PlcTrendWindow30Seconds_Click(object sender, RoutedEventArgs e) =>
-        SetPlcTrendWindow(TimeSpan.FromSeconds(30));
+    private async void PlcTrendWindow30Seconds_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromSeconds(30));
 
-    private void PlcTrendWindow1Minute_Click(object sender, RoutedEventArgs e) =>
-        SetPlcTrendWindow(TimeSpan.FromMinutes(1));
+    private async void PlcTrendWindow1Minute_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(1));
 
-    private void PlcTrendWindow5Minutes_Click(object sender, RoutedEventArgs e) =>
-        SetPlcTrendWindow(TimeSpan.FromMinutes(5));
+    private async void PlcTrendWindow5Minutes_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(5));
 
-    private void SetPlcTrendWindow(TimeSpan window)
+    private async Task SetPlcTrendWindowAsync(TimeSpan window)
     {
+        var wasHistoricalTrendMode = _viewModel.IsPlcHistoricalTrendMode;
+        _viewModel.UsePlcLiveTrendMode();
         _plcTrendChartAdapter.VisibleWindow = window;
+        _plcTrendChartAdapter.ShowFullHistory = false;
+        if (wasHistoricalTrendMode)
+        {
+            await _viewModel.ShowPlcLiveTrendAsync();
+            return;
+        }
+
         _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
-        PlcTrendStatusTextBlock.Text = $"趋势窗口：{FormatTrendWindow(window)}";
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void PlcTrendPlot_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
@@ -97,7 +110,14 @@ public partial class MainWindow : Window
 
     private void PlcTrendPlot_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        PlcTrendStatusTextBlock.Text = $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
+    private string BuildTrendStatusText()
+    {
+        return _viewModel.IsPlcHistoricalTrendMode
+            ? "历史趋势：完整记录"
+            : $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
     }
 
     private static string FormatTrendWindow(TimeSpan window)
