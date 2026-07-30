@@ -309,7 +309,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
             }
 
             offset = payloadOffset + byteCount;
-            if (index < addresses.Count - 1 && offset % 2 != 0)
+            // S7 pads odd-length data items before the next result item; absolute packet offset is irrelevant.
+            if (index < addresses.Count - 1 && byteCount % 2 != 0)
             {
                 offset++;
             }

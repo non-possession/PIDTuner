@@ -1,6 +1,8 @@
+using System.Buffers.Binary;
 using System.IO;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Application.Interfaces;
@@ -39,6 +41,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("pid parameter set extractor captures latest PID values", PidParameterSetExtractorCapturesLatestPidValues),
     ("json pid parameter set repository saves and lists sets", JsonPidParameterSetRepositorySavesAndListsSets),
     ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
+    ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
@@ -584,6 +587,32 @@ static Task S7AddressParserMapsDbOffsetsAndBits()
     return Task.CompletedTask;
 }
 
+static Task S7ReadResponseParserHandlesAdjacentMultiRealItems()
+{
+    var addresses = new[]
+    {
+        S7AddressParser.Parse("DB1.DBD0", PlcDataType.Float),
+        S7AddressParser.Parse("DB1.DBD4", PlcDataType.Float)
+    };
+    var response = BuildS7ReadResponseWithTwoAdjacentRealItems(1.25f, 2.5f);
+    var method = typeof(SiemensS7Client).GetMethod(
+        "ExtractReadResults",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("ExtractReadResults method was not found.");
+
+    var results = ((System.Collections.IEnumerable)(method.Invoke(null, new object[] { response, addresses })
+        ?? throw new InvalidOperationException("ExtractReadResults returned null.")))
+        .Cast<object>()
+        .ToArray();
+
+    AssertEqual(2, results.Length, "s7 parsed result count");
+    AssertClose(1.25, GetS7ReadResultValue(results[0]), 0.001, "first batched REAL");
+    AssertClose(2.5, GetS7ReadResultValue(results[1]), 0.001, "second batched REAL");
+    AssertEqual(null, GetS7ReadResultError(results[0]), "first batched REAL error");
+    AssertEqual(null, GetS7ReadResultError(results[1]), "second batched REAL error");
+    return Task.CompletedTask;
+}
+
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
 {
     var store = new JsonPlcProjectConfigurationStore();
@@ -962,6 +991,44 @@ static void AssertThrows<TException>(Action action, string name)
     }
 
     throw new InvalidOperationException($"{name}: expected {typeof(TException).Name}");
+}
+
+static byte[] BuildS7ReadResponseWithTwoAdjacentRealItems(float first, float second)
+{
+    var response = new byte[37];
+    response[0] = 0x03;
+    response[1] = 0x00;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(2, 2), (ushort)response.Length);
+    response[4] = 0x02;
+    response[5] = 0xF0;
+    response[6] = 0x80;
+    response[7] = 0x32;
+    response[8] = 0x03;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(13, 2), 2);
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(15, 2), 16);
+    response[19] = 0x04;
+    response[20] = 0x02;
+    WriteS7RealReadItem(response.AsSpan(21, 8), first);
+    WriteS7RealReadItem(response.AsSpan(29, 8), second);
+    return response;
+}
+
+static void WriteS7RealReadItem(Span<byte> item, float value)
+{
+    item[0] = 0xFF;
+    item[1] = 0x04;
+    BinaryPrimitives.WriteUInt16BigEndian(item[2..4], 32);
+    BinaryPrimitives.WriteSingleBigEndian(item[4..8], value);
+}
+
+static double? GetS7ReadResultValue(object result)
+{
+    return (double?)result.GetType().GetProperty("Value")?.GetValue(result);
+}
+
+static string? GetS7ReadResultError(object result)
+{
+    return (string?)result.GetType().GetProperty("Error")?.GetValue(result);
 }
 
 static PidSampleFieldDefinition Field(
