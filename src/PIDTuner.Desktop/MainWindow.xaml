@@ -300,6 +300,16 @@
                       Width="96"
                       Height="36"
                       Margin="0,0,12,8" />
+              <Button Command="{Binding StepPlcReplayBackwardCommand}"
+                      Content="上一帧"
+                      Width="76"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding StepPlcReplayForwardCommand}"
+                      Content="下一帧"
+                      Width="76"
+                      Height="36"
+                      Margin="0,0,12,8" />
               <TextBlock Text="{Binding PlcMonitorStatus}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"
@@ -364,7 +374,7 @@
                 </Grid.RowDefinitions>
 
                 <DockPanel>
-                  <StackPanel Orientation="Horizontal">
+                  <WrapPanel DockPanel.Dock="Left">
                     <Button Content="10s"
                             Width="48"
                             Height="28"
@@ -383,8 +393,32 @@
                     <Button Content="5min"
                             Width="56"
                             Height="28"
+                            Margin="0,0,16,0"
                             Click="PlcTrendWindow5Minutes_Click" />
-                  </StackPanel>
+                    <Button Command="{Binding SetPlcReplaySpeedHalfCommand}"
+                            Content="0.5x"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,8,0" />
+                    <Button Command="{Binding SetPlcReplaySpeedNormalCommand}"
+                            Content="1x"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,8,0" />
+                    <Button Command="{Binding SetPlcReplaySpeedDoubleCommand}"
+                            Content="2x"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,8,0" />
+                    <Button Command="{Binding SetPlcReplaySpeedFiveCommand}"
+                            Content="5x"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,16,0" />
+                    <TextBlock Text="{Binding PlcReplayStatus}"
+                               VerticalAlignment="Center"
+                               Foreground="#374151" />
+                  </WrapPanel>
                   <TextBlock x:Name="PlcTrendStatusTextBlock"
                              Margin="18,0,0,0"
                              VerticalAlignment="Center"

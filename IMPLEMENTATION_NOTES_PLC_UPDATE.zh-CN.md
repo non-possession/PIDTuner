@@ -69,3 +69,10 @@ PLC 控制参数写回暂不实施。记录数据可视化和回放会等用户�
 - `PlcTrendResetRequested` 用于在加载记录或重新回放时清空旧趋势。
 
 当前回放对象是 `local/plc-recordings` 下的 JSON 记录文件；长历史 SQLite 趋势存储仍留到后续单独设计。
+## 本轮补充：PLC 回放控制
+
+PLC 记录回放现在增加了更完整的人工控制能力：
+
+- `TogglePlcReplayAsync()` 会根据记录文件原始采样周期和当前播放倍率计算实际定时器间隔。
+- `StepPlcReplayForwardAsync()` 用于单帧前进；`StepPlcReplayBackwardAsync()` 会清空点位表和趋势图，再重建到目标帧，避免曲线中保留未来帧数据。
+- `PlcReplayStatus` 在实时监控页展示当前帧、总帧数、原始周期、播放间隔和倍率。

@@ -791,6 +791,17 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, resetCount, "loaded plc trend reset count");
     AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
     AssertContains(Path.GetFullPath(recordingPath), loader.NotificationMessage);
+    AssertContains("第 1/", loader.PlcReplayStatus);
+
+    await loader.SetPlcReplaySpeedAsync(2d);
+    AssertContains("速度 2x", loader.PlcReplayStatus);
+
+    await loader.StepPlcReplayForwardAsync();
+    AssertContains("第 2/", loader.PlcReplayStatus);
+
+    await loader.StepPlcReplayBackwardAsync();
+    AssertContains("第 1/", loader.PlcReplayStatus);
+    AssertEqual(true, resetCount >= 2, "backward replay trend reset count");
 }
 
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()

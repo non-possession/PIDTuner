@@ -250,7 +250,9 @@ This keeps the current PLC read path centered on `PlcTagSnapshot` while giving t
 Saved PLC recording JSON files are loaded back into the real-time monitor page rather than a separate replay-only UI:
 
 - `MainWindowViewModel.LoadPlcRecordingAsync()` deserializes the recording file and previews the first frame.
-- `TogglePlcReplayAsync()` starts or pauses a replay timer using the recording interval.
+- `TogglePlcReplayAsync()` starts or pauses a replay timer using the recording interval and selected playback speed.
+- `StepPlcReplayForwardAsync()` applies the next frame incrementally, while `StepPlcReplayBackwardAsync()` rebuilds the monitor table and trend chart up to the target frame so future points are not left on screen.
+- `PlcReplayStatus` exposes the current frame, total frame count, original interval, effective playback interval, and selected speed.
 - Each replay frame calls the same `ApplyPlcMonitorSnapshots()` path used by live PLC monitoring.
 - `PlcTrendResetRequested` clears the chart before a loaded recording is previewed or restarted.
 
