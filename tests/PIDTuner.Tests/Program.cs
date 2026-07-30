@@ -44,6 +44,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
     ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
+    ("main view model loads saved plc recording for replay", MainViewModelLoadsSavedPlcRecordingForReplay),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
 };
 
@@ -756,6 +757,42 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     AssertContains("\"frameCount\"", File.ReadAllText(recordingPath));
 }
 
+static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
+{
+    var directory = CreateTestStorageDirectory();
+    var recordingDirectory = Path.Combine(directory, "plc-recordings");
+    var recorder = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: new SequencePlcTagSnapshotReader(),
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: recordingDirectory);
+
+    await recorder.RecordPlcOneSecondAsync();
+    var recordingPath = Directory.GetFiles(recordingDirectory, "plc-recording-*.json").Single();
+
+    var loader = new MainWindowViewModel(
+        new NoFileDialogService(plcRecordingFile: recordingPath),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: recordingDirectory);
+
+    var resetCount = 0;
+    var appliedCount = 0;
+    loader.PlcTrendResetRequested += () => resetCount++;
+    loader.PlcSnapshotsApplied += _ => appliedCount++;
+
+    await loader.LoadPlcRecordingAsync();
+
+    AssertEqual(true, loader.LastPlcRecordingFrames.Count > 0, "loaded plc recording frame count");
+    AssertEqual(true, loader.PlcMonitorTags.Count > 0, "loaded plc monitor tag count");
+    AssertEqual(1, resetCount, "loaded plc trend reset count");
+    AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
+    AssertContains(Path.GetFullPath(recordingPath), loader.NotificationMessage);
+}
+
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 {
     var directory = CreateTestStorageDirectory();
@@ -928,7 +965,8 @@ static PidSampleFieldDefinition Field(
 file sealed class NoFileDialogService(
     string? historySamplesSaveFile = null,
     string? plcProjectConfigurationFile = null,
-    string? plcProjectConfigurationSaveFile = null) : IOpenFileDialogService
+    string? plcProjectConfigurationSaveFile = null,
+    string? plcRecordingFile = null) : IOpenFileDialogService
 {
     public string? PickCsvFile()
     {
@@ -963,6 +1001,11 @@ file sealed class NoFileDialogService(
     public string? PickHistorySamplesSaveFile()
     {
         return historySamplesSaveFile;
+    }
+
+    public string? PickPlcRecordingFile()
+    {
+        return plcRecordingFile;
     }
 }
 

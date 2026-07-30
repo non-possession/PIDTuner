@@ -290,6 +290,16 @@
                       Width="96"
                       Height="36"
                       Margin="0,0,12,8" />
+              <Button Command="{Binding LoadPlcRecordingCommand}"
+                      Content="打开记录"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding TogglePlcReplayCommand}"
+                      Content="播放/暂停"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
               <TextBlock Text="{Binding PlcMonitorStatus}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"

@@ -15,4 +15,6 @@ public interface IOpenFileDialogService
     string? PickPlcProjectConfigurationFile();
 
     string? PickPlcProjectConfigurationSaveFile();
+
+    string? PickPlcRecordingFile();
 }

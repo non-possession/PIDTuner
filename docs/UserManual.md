@@ -73,6 +73,8 @@ On the `实时监控` tab:
 5. Use the `趋势` checkbox in the tag table to show or hide each tag on the real-time trend chart.
 6. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window.
 7. Hover the trend chart to see the nearest visible tag values around the cursor time.
+8. Click `打开记录` to load a saved PLC recording JSON file.
+9. Click `播放/暂停` to replay the loaded PLC recording frame by frame using the interval stored in the recording file.
 
 Repeated monitoring currently uses the project-level default sampling interval with the configured `最小采样 ms` as the lower bound. The one-second recorder uses the fastest enabled tag sampling interval as its base, also bounded by `最小采样 ms`. For example, if `最小采样 ms` is 200, enabled tag A is 200 ms, and enabled tag B is 500 ms, the recorder reads the full enabled tag group about five times in one second and stores each group as one in-memory frame.
 
@@ -260,6 +262,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Start and stop repeated tag monitoring at the configured sampling interval.
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
+- Load and replay saved PLC recording JSON files through the same monitor table and trend chart.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.
 - Import offline CSV using the active field profile.
@@ -305,7 +308,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 
 - Siemens S7 read support is intentionally narrow: current DB address parsing covers `DBX`, `DBB`, `DBW`, and `DBD`. PLC writeback is still disabled.
 - No SQLite persistence for PLC trend history yet.
-- PLC recording playback is not integrated yet; the current ScottPlot chart is focused on live monitoring.
+- PLC recording playback currently uses saved JSON recording files; long-history SQLite trend storage is not integrated yet.
 - CSV parsing supports quoted fields with commas and escaped double quotes on a single line.
 - Field profile editing uses dropdowns for field type and semantic role.
 

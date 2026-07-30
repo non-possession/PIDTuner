@@ -233,7 +233,7 @@ dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 
 ## Next Technical Priority
 
-The next high-value work is recording data replay design. Siemens S7 connection reuse, multi-tag batch reading, and live ScottPlot trend visualization are now in place, and connection checks report the failing communication stage where possible.
+The next high-value work is long-history trend storage design. Siemens S7 connection reuse, multi-tag batch reading, live ScottPlot trend visualization, and JSON recording replay are now in place, and connection checks report the failing communication stage where possible.
 
 ## Live PLC Trend Visualization
 
@@ -244,3 +244,14 @@ The real-time monitor page now uses `ScottPlot.WPF` through a Desktop-layer adap
 - `MainWindow.xaml.cs` listens to snapshot and tag visibility changes, then refreshes the chart, applies the selected time window, and shows hover summaries.
 
 This keeps the current PLC read path centered on `PlcTagSnapshot` while giving the UI a richer trend surface.
+
+## PLC Recording Replay
+
+Saved PLC recording JSON files are loaded back into the real-time monitor page rather than a separate replay-only UI:
+
+- `MainWindowViewModel.LoadPlcRecordingAsync()` deserializes the recording file and previews the first frame.
+- `TogglePlcReplayAsync()` starts or pauses a replay timer using the recording interval.
+- Each replay frame calls the same `ApplyPlcMonitorSnapshots()` path used by live PLC monitoring.
+- `PlcTrendResetRequested` clears the chart before a loaded recording is previewed or restarted.
+
+The immediate benefit is that live data and replayed data share the monitor table, tag visibility checkboxes, and ScottPlot trend adapter.

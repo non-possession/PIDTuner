@@ -43,6 +43,14 @@ public sealed class PlcTrendChartAdapter
         set => _visibleWindow = value < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : value;
     }
 
+    public void Clear()
+    {
+        _pointsByTag.Clear();
+        _plot.Plot.Clear();
+        ConfigurePlot();
+        _plot.Refresh();
+    }
+
     public void AppendSnapshots(
         IReadOnlyList<PlcTagSnapshot> snapshots,
         IReadOnlyList<PlcTagMonitorViewModel> monitorTags)

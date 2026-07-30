@@ -58,3 +58,14 @@ PLC 控制参数写回暂不实施。记录数据可视化和回放会等用户�
 - 这一步只做实时趋势，不做历史回放。
 - PLC 趋势长历史 SQLite 持久化尚未接入。
 - 回放功能会在后续结合用户提供的项目继续设计。
+
+## PLC 记录回放补充
+
+本轮已加入保存记录的基础回放能力。回放没有另起一套图表链路，而是复用实时监控页：
+
+- `LoadPlcRecordingAsync()` 读取已保存的 PLC 记录 JSON 文件，并预览第一帧。
+- `TogglePlcReplayAsync()` 使用记录文件里的采样周期启动或暂停回放定时器。
+- 每个回放帧都会进入 `ApplyPlcMonitorSnapshots()`，因此点位表、质量信息和 ScottPlot 趋势图都与实时监控共享同一套更新路径。
+- `PlcTrendResetRequested` 用于在加载记录或重新回放时清空旧趋势。
+
+当前回放对象是 `local/plc-recordings` 下的 JSON 记录文件；长历史 SQLite 趋势存储仍留到后续单独设计。

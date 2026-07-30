@@ -91,4 +91,16 @@ public sealed class WindowsOpenFileDialogService : IOpenFileDialogService
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+
+    public string? PickPlcRecordingFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择 PLC 记录文件",
+            Filter = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*",
+            Multiselect = false
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
 }

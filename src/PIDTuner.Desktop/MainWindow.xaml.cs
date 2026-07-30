@@ -18,8 +18,15 @@ public partial class MainWindow : Window
         _viewModel = (MainWindowViewModel)DataContext;
         _plcTrendChartAdapter = new PlcTrendChartAdapter(PlcTrendPlot);
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
+        _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
         _viewModel.PlcMonitorTags.CollectionChanged += PlcMonitorTags_CollectionChanged;
         PlcTrendStatusTextBlock.Text = "趋势窗口：30s";
+    }
+
+    private void ResetPlcTrendChart()
+    {
+        _plcTrendChartAdapter.Clear();
+        PlcTrendStatusTextBlock.Text = $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
     }
 
     private void ApplyPlcTrendSnapshots(IReadOnlyList<PlcTagSnapshot> snapshots)
