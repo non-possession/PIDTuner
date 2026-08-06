@@ -121,6 +121,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
+    private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private string _plcReplayStatus = "尚未加载 PLC 记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
@@ -313,6 +314,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcMonitorStatus;
         private set => SetProperty(ref _plcMonitorStatus, value);
+    }
+
+    public string PlcAcquisitionDiagnosticsStatus
+    {
+        get => _plcAcquisitionDiagnosticsStatus;
+        private set => SetProperty(ref _plcAcquisitionDiagnosticsStatus, value);
     }
 
     public string PlcReplayStatus
@@ -856,6 +863,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             : PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     }
 
+    private static PlcAcquisitionFrameState ClassifyAcquisitionFrame(
+        DateTimeOffset plannedTimestampUtc,
+        DateTimeOffset requestStartedTimestampUtc,
+        int intervalMilliseconds)
+    {
+        var lateThresholdMilliseconds = Math.Max(5, intervalMilliseconds * 0.2d);
+        return (requestStartedTimestampUtc - plannedTimestampUtc).TotalMilliseconds > lateThresholdMilliseconds
+            ? PlcAcquisitionFrameState.Late
+            : PlcAcquisitionFrameState.Normal;
+    }
+
+    private static string FormatAcquisitionDiagnosticsSummary(PlcAcquisitionDiagnosticsSummary summary)
+    {
+        if (summary.FrameCount == 0)
+        {
+            return "诊断：未记录采集帧。";
+        }
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "诊断：调度延迟 avg {0:0.#} ms / P95 {1:0.#} ms / max {2:0.#} ms；读取耗时 avg {3:0.#} ms / P95 {4:0.#} ms；迟到 {5} 帧。",
+            summary.AverageScheduleDelayMilliseconds,
+            summary.P95ScheduleDelayMilliseconds,
+            summary.MaxScheduleDelayMilliseconds,
+            summary.AverageReadDurationMilliseconds,
+            summary.P95ReadDurationMilliseconds,
+            summary.LateFrameCount);
+    }
+
     private async Task TogglePlcMonitoringAsync()
     {
         if (IsPlcMonitoring)
@@ -891,9 +927,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             var intervalMilliseconds = ResolveRecordingIntervalMilliseconds(configuration, enabledTags);
             var frames = new List<IReadOnlyList<PlcTagSnapshot>>();
+            var diagnostics = new List<PlcAcquisitionFrameDiagnostics>();
             var stopwatch = Stopwatch.StartNew();
+            var startedAtUtc = DateTimeOffset.UtcNow;
             var nextDue = TimeSpan.Zero;
             PlcMonitorStatus = $"正在记录 1s 点位数据，周期 {intervalMilliseconds} ms。";
+            PlcAcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
 
             // Open one reader session for the whole recording window to avoid per-frame PLC reconnect cost.
             await using var session = await OpenPlcSnapshotSessionAsync(configuration, CancellationToken.None);
@@ -910,23 +949,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     break;
                 }
 
+                var frameIndex = frames.Count;
+                var plannedTimestampUtc = startedAtUtc.Add(nextDue);
+                var requestStartedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
                 var snapshots = await session.ReadAsync(CancellationToken.None);
+                var responseReceivedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
                 frames.Add(snapshots);
+                var bufferedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
                 ApplyPlcMonitorSnapshots(snapshots);
+                var uiPresentedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
+                diagnostics.Add(new PlcAcquisitionFrameDiagnostics(
+                    frameIndex,
+                    plannedTimestampUtc,
+                    requestStartedTimestampUtc,
+                    responseReceivedTimestampUtc,
+                    bufferedTimestampUtc,
+                    uiPresentedTimestampUtc,
+                    snapshots.Count,
+                    ClassifyAcquisitionFrame(plannedTimestampUtc, requestStartedTimestampUtc, intervalMilliseconds)));
                 // Absolute scheduling targets 0ms, N ms, 2N ms... instead of "read duration + delay".
                 nextDue += TimeSpan.FromMilliseconds(intervalMilliseconds);
             }
 
             _lastPlcRecordingFrames = frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
-            var recordingPath = await SavePlcRecordingAsync(configuration, intervalMilliseconds, frames);
+            var diagnosticsSummary = PlcAcquisitionDiagnostics.Summarize(diagnostics);
+            var recordingPath = await SavePlcRecordingAsync(configuration, intervalMilliseconds, frames, diagnostics);
             var snapshotCount = frames.Sum(frame => frame.Count);
             PlcMonitorStatus = $"1s 记录完成：{frames.Count} 组，{enabledTags.Length} 个点位，共 {snapshotCount} 条快照，周期 {intervalMilliseconds} ms。";
+            var diagnosticsText = FormatAcquisitionDiagnosticsSummary(diagnosticsSummary);
+            PlcAcquisitionDiagnosticsStatus = diagnosticsText;
             Notify(
                 "PLC 1s 记录完成",
                 string.Join(
                     Environment.NewLine,
                     PlcMonitorStatus,
+                    diagnosticsText,
                     $"保存位置：{recordingPath}"),
                 "Success");
         }
@@ -1242,7 +1300,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task<string> SavePlcRecordingAsync(
         PlcProjectConfiguration configuration,
         int intervalMilliseconds,
-        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames,
+        IReadOnlyList<PlcAcquisitionFrameDiagnostics> diagnostics)
     {
         Directory.CreateDirectory(_plcRecordingStorageDirectory);
         var fileName = $"plc-recording-{DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}.json";
@@ -1256,7 +1315,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             intervalMilliseconds,
             frames.Count,
             frames.Sum(frame => frame.Count),
-            frames);
+            frames,
+            diagnostics);
 
         await JsonSerializer.SerializeAsync(
             stream,
@@ -2113,5 +2173,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         int IntervalMilliseconds,
         int FrameCount,
         int SnapshotCount,
-        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> Frames);
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> Frames,
+        IReadOnlyList<PlcAcquisitionFrameDiagnostics>? Diagnostics = null);
 }

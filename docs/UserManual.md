@@ -92,6 +92,8 @@ local\plc-recordings
 
 During one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the whole recording window. Within each frame, enabled readable tags are now read through Siemens S7 multi-variable batch requests, split into batches of up to 16 items. This removes both the previous per-frame TCP/S7 connection setup cost and most per-tag request overhead. The recorded frame count can still be lower than `1000 / interval` if the PLC, network, or configured tag count takes longer than the requested interval.
 
+The monitor table shows tag timestamps with millisecond precision. After `记录 1s`, the real-time monitor page also shows the latest acquisition diagnostics summary, including schedule delay, P95 delay, read duration, and late frame count.
+
 When Siemens S7 communication checks fail, the notification now identifies the failing stage where possible: empty IP, TCP 102 connection, ISO-on-TCP handshake, or S7 Setup Communication. This helps separate basic network reachability from protocol-level PLC configuration problems.
 
 Important current boundary: Siemens S7 tag values are now read through the built-in S7 reader when protocol is `Siemens S7`. `Preview` remains available for offline UI validation. PLC writeback is still not enabled.
@@ -267,6 +269,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
 - Start and stop repeated tag monitoring at the configured sampling interval.
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
+- Show one-second acquisition diagnostics on the real-time monitor page and persist frame-level diagnostics in the saved PLC recording JSON.
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
 - Load and replay saved PLC recording JSON files through the same monitor table and trend chart, with frame progress, manual stepping, and playback speed control.
 - Load the bundled example profile and sample CSV with one button.

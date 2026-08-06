@@ -42,10 +42,12 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json pid parameter set repository saves and lists sets", JsonPidParameterSetRepositorySavesAndListsSets),
     ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
+    ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
+    ("plc monitor row displays milliseconds", PlcMonitorRowDisplaysMilliseconds),
     ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
     ("main view model loads saved plc recording for replay", MainViewModelLoadsSavedPlcRecordingForReplay),
     ("main view model shows notifications and refreshes history", MainViewModelShowsNotificationsAndRefreshesHistory)
@@ -613,6 +615,32 @@ static Task S7ReadResponseParserHandlesAdjacentMultiRealItems()
     return Task.CompletedTask;
 }
 
+static Task PlcAcquisitionDiagnosticsSummarizesFrameTiming()
+{
+    var start = new DateTimeOffset(2026, 8, 5, 9, 0, 0, TimeSpan.Zero);
+    var frames = new[]
+    {
+        DiagnosticFrame(0, start, plannedMs: 0, requestMs: 1, responseMs: 8, bufferedMs: 9, uiMs: 10, snapshots: 2, PlcAcquisitionFrameState.Normal),
+        DiagnosticFrame(1, start, plannedMs: 100, requestMs: 106, responseMs: 121, bufferedMs: 123, uiMs: 128, snapshots: 2, PlcAcquisitionFrameState.Late),
+        DiagnosticFrame(2, start, plannedMs: 200, requestMs: 204, responseMs: 214, bufferedMs: 215, uiMs: 219, snapshots: 2, PlcAcquisitionFrameState.Normal)
+    };
+
+    var summary = PlcAcquisitionDiagnostics.Summarize(frames);
+
+    AssertEqual(3, summary.FrameCount, "diagnostic frame count");
+    AssertEqual(6, summary.SnapshotCount, "diagnostic snapshot count");
+    AssertClose(3.667, summary.AverageScheduleDelayMilliseconds, 0.001, "average schedule delay");
+    AssertClose(6, summary.P95ScheduleDelayMilliseconds, 0.001, "p95 schedule delay");
+    AssertClose(6, summary.MaxScheduleDelayMilliseconds, 0.001, "max schedule delay");
+    AssertClose(10.667, summary.AverageReadDurationMilliseconds, 0.001, "average read duration");
+    AssertClose(15, summary.P95ReadDurationMilliseconds, 0.001, "p95 read duration");
+    AssertEqual(1, summary.LateFrameCount, "late frame count");
+    AssertEqual(0, summary.TimeoutFrameCount, "timeout frame count");
+    AssertEqual(0, summary.DroppedFrameCount, "dropped frame count");
+
+    return Task.CompletedTask;
+}
+
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
 {
     var store = new JsonPlcProjectConfigurationStore();
@@ -753,6 +781,23 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
+static Task PlcMonitorRowDisplaysMilliseconds()
+{
+    var snapshot = new PlcTagSnapshot(
+        Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        "PV",
+        "DB1.DBD8",
+        42.5,
+        "degC",
+        new DateTimeOffset(2026, 8, 6, 10, 11, 12, 345, TimeSpan.Zero),
+        "Good",
+        "Test");
+    var row = new PlcTagMonitorViewModel(snapshot);
+
+    AssertEqual("10:11:12.345", row.TimestampText, "plc monitor timestamp milliseconds");
+    return Task.CompletedTask;
+}
+
 static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval()
 {
     var directory = CreateTestStorageDirectory();
@@ -785,9 +830,12 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     AssertEqual("PLC 1s 记录完成", viewModel.NotificationTitle, "plc recording notification title");
     AssertContains("周期 50 ms", viewModel.PlcMonitorStatus);
     AssertContains("2 个点位", viewModel.PlcMonitorStatus);
+    AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
     var recordingPath = Directory.GetFiles(Path.Combine(directory, "plc-recordings"), "plc-recording-*.json").Single();
     AssertContains(Path.GetFullPath(recordingPath), viewModel.NotificationMessage);
+    AssertContains("诊断：调度延迟", viewModel.NotificationMessage);
     AssertContains("\"frameCount\"", File.ReadAllText(recordingPath));
+    AssertContains("\"diagnostics\"", File.ReadAllText(recordingPath));
 }
 
 static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
@@ -949,6 +997,28 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
 {
     return new PidSample(timestamp, sp, pv, mv, 1.2, 0.4, 0.1, true, sessionId, null);
+}
+
+static PlcAcquisitionFrameDiagnostics DiagnosticFrame(
+    int frameIndex,
+    DateTimeOffset start,
+    int plannedMs,
+    int requestMs,
+    int responseMs,
+    int bufferedMs,
+    int uiMs,
+    int snapshots,
+    PlcAcquisitionFrameState state)
+{
+    return new PlcAcquisitionFrameDiagnostics(
+        frameIndex,
+        start.AddMilliseconds(plannedMs),
+        start.AddMilliseconds(requestMs),
+        start.AddMilliseconds(responseMs),
+        start.AddMilliseconds(bufferedMs),
+        start.AddMilliseconds(uiMs),
+        snapshots,
+        state);
 }
 
 static string CreateTestStorageDirectory()

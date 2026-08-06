@@ -95,7 +95,7 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
         Address = snapshot.Address;
         Unit = snapshot.Unit ?? string.Empty;
         ValueText = snapshot.Value?.ToString("0.###") ?? "-";
-        TimestampText = snapshot.Timestamp.ToString("HH:mm:ss");
+        TimestampText = snapshot.Timestamp.ToString("HH:mm:ss.fff");
         Quality = snapshot.Quality;
         Source = snapshot.Source;
 
