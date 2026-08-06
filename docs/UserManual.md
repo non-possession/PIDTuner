@@ -70,7 +70,7 @@ On the `实时监控` tab:
 2. Click `刷新点位` to read one snapshot of the enabled tag list.
 3. Click `实时趋势` to return the chart to live monitoring mode.
 4. Click `历史趋势` to show a full saved PLC recording on the same chart. If no recording is loaded yet, PIDTuner asks for a PLC recording JSON file first.
-5. Click `启动/停止` to refresh repeatedly using the configured default sampling interval.
+5. Click `启动/停止` to start or stop background live acquisition using the configured default sampling interval.
 6. Click `记录 1s` to record enabled readable tags in memory for one second.
 7. Use the `趋势` checkbox in the tag table to show or hide each tag on the trend chart.
 8. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window. These window buttons return the chart to live trend mode.
@@ -90,7 +90,7 @@ When the one-second recorder finishes, PIDTuner automatically stops recording an
 local\plc-recordings
 ```
 
-During one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the whole recording window. Within each frame, enabled readable tags are now read through Siemens S7 multi-variable batch requests, split into batches of up to 16 items. This removes both the previous per-frame TCP/S7 connection setup cost and most per-tag request overhead. The recorded frame count can still be lower than `1000 / interval` if the PLC, network, or configured tag count takes longer than the requested interval.
+During live monitoring and one-second recording, Siemens S7 monitoring opens one read session and reuses that connection for the active acquisition window. Live monitoring now runs PLC reads on a background acquisition loop using the configured sampling interval, while the WPF UI refreshes from an in-memory buffer every 250 ms. Within each acquisition frame, enabled readable tags are read through Siemens S7 multi-variable batch requests, split into batches of up to 16 items. This removes both the previous per-frame TCP/S7 connection setup cost and most per-tag request overhead. The recorded frame count can still be lower than `1000 / interval` if the PLC, network, or configured tag count takes longer than the requested interval.
 
 The monitor table shows tag timestamps with millisecond precision. After `记录 1s`, the real-time monitor page also shows the latest acquisition diagnostics summary, including schedule delay, P95 delay, read duration, and late frame count.
 
@@ -267,7 +267,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Check Siemens S7 communication through TCP 102, ISO-on-TCP, and S7 setup handshake with stage-specific failure messages.
 - Read enabled Siemens S7 DB tag values for real-time monitor snapshots using multi-variable batch requests.
 - Refresh enabled PLC tag snapshots through an application-level reader interface.
-- Start and stop repeated tag monitoring at the configured sampling interval.
+- Start and stop background live PLC acquisition at the configured sampling interval while refreshing the UI from an in-memory buffer.
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
 - Show one-second acquisition diagnostics on the real-time monitor page and persist frame-level diagnostics in the saved PLC recording JSON.
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.

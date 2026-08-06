@@ -47,6 +47,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
+    ("main view model reuses a plc session while live monitoring", MainViewModelReusesPlcSessionWhileLiveMonitoring),
     ("plc monitor row displays milliseconds", PlcMonitorRowDisplaysMilliseconds),
     ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
     ("main view model loads saved plc recording for replay", MainViewModelLoadsSavedPlcRecordingForReplay),
@@ -781,6 +782,31 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
+static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
+    viewModel.PlcDefaultSamplingMilliseconds = 50;
+    viewModel.PlcMinimumSamplingMilliseconds = 50;
+
+    await viewModel.TogglePlcMonitoringAsync();
+    await WaitUntilAsync(() => reader.SessionReadCount >= 3);
+    await viewModel.RefreshPlcMonitorAsync();
+    await viewModel.TogglePlcMonitoringAsync();
+
+    AssertEqual(1, reader.OpenSessionCount, "live monitor session open count");
+    AssertEqual(true, reader.SessionReadCount >= 3, "live monitor session read count");
+    AssertEqual(0, reader.ReadCount, "live monitor single read count");
+    AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
+}
+
 static Task PlcMonitorRowDisplaysMilliseconds()
 {
     var snapshot = new PlcTagSnapshot(
@@ -1026,6 +1052,16 @@ static string CreateTestStorageDirectory()
     var directory = Path.Combine(Path.GetTempPath(), "pidtuner-tests", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(directory);
     return directory;
+}
+
+static async Task WaitUntilAsync(Func<bool> condition)
+{
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+    while (!condition())
+    {
+        timeout.Token.ThrowIfCancellationRequested();
+        await Task.Delay(10, timeout.Token);
+    }
 }
 
 static void AssertEqual<T>(T expected, T actual, string name)
