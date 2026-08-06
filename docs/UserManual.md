@@ -74,11 +74,14 @@ On the `实时监控` tab:
 6. Click `记录 1s` to record enabled readable tags in memory for one second.
 7. Use the `趋势` checkbox in the tag table to show or hide each tag on the trend chart.
 8. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window. These window buttons return the chart to live trend mode.
-9. Hover the trend chart to see the nearest visible tag values around the cursor time.
-10. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
-11. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
-12. Click `上一帧` or `下一帧` for manual replay stepping.
-13. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
+9. Click `暂停滚动` to freeze the live chart view while background PLC acquisition continues. Click `恢复滚动` to redraw the latest live window.
+10. In historical trend mode, edit the two history time fields and click `应用区间` to show only that static time range. Click `全量历史` to restore the full loaded recording.
+11. Use mouse zoom and pan on the trend chart for X/Y scale inspection, and click `适配Y` to re-fit the vertical scale.
+12. Hover the trend chart to see the nearest visible tag values around the cursor time.
+13. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
+14. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
+15. Click `上一帧` or `下一帧` for manual replay stepping.
+16. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
 
 The real-time trend chart is the primary working area on this page. The visible tag table sits below the chart as a compact monitoring and visibility-control panel.
 
@@ -271,6 +274,8 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
 - Show one-second acquisition diagnostics on the real-time monitor page and persist frame-level diagnostics in the saved PLC recording JSON.
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
+- Pause and resume live trend scrolling without stopping background PLC acquisition.
+- Show loaded PLC recordings as static historical trends with editable time range filtering and Y-axis auto-fit.
 - Load and replay saved PLC recording JSON files through the same monitor table and trend chart, with frame progress, manual stepping, and playback speed control.
 - Load the bundled example profile and sample CSV with one button.
 - Edit, add, remove, and save PID sample field profiles from the analysis page.

@@ -22,12 +22,14 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
     {
         await StopAsync();
 
-        var effectiveInterval = interval <= TimeSpan.Zero
-            ? TimeSpan.FromMilliseconds(100)
-            : interval;
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "PLC acquisition interval must be greater than zero.");
+        }
+
         _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _session = await openSessionAsync(configuration, _cancellation.Token);
-        _runTask = RunAsync(_session, effectiveInterval, buffer, _cancellation.Token);
+        _runTask = RunAsync(_session, interval, buffer, _cancellation.Token);
     }
 
     public async Task StopAsync()

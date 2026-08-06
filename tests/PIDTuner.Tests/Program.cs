@@ -43,11 +43,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
+    ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
     ("main view model reuses a plc session while live monitoring", MainViewModelReusesPlcSessionWhileLiveMonitoring),
+    ("main view model toggles live trend scrolling pause", MainViewModelTogglesLiveTrendScrollingPause),
     ("plc monitor row displays milliseconds", PlcMonitorRowDisplaysMilliseconds),
     ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
     ("main view model loads saved plc recording for replay", MainViewModelLoadsSavedPlcRecordingForReplay),
@@ -642,6 +644,19 @@ static Task PlcAcquisitionDiagnosticsSummarizesFrameTiming()
     return Task.CompletedTask;
 }
 
+static async Task PlcAcquisitionEngineRejectsInvalidInterval()
+{
+    var reader = new SequencePlcTagSnapshotReader();
+    var engine = new PlcAcquisitionEngine(reader.OpenSessionAsync);
+    var buffer = new PlcSampleBuffer();
+
+    await AssertThrowsAsync<ArgumentOutOfRangeException>(
+        () => engine.StartAsync(PlcProjectConfiguration.CreateDefault(), TimeSpan.Zero, buffer, CancellationToken.None),
+        "plc acquisition engine zero interval");
+
+    AssertEqual(0, reader.OpenSessionCount, "invalid interval should not open plc session");
+}
+
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
 {
     var store = new JsonPlcProjectConfigurationStore();
@@ -807,6 +822,44 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
     AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
 }
 
+static async Task MainViewModelTogglesLiveTrendScrollingPause()
+{
+    var directory = CreateTestStorageDirectory();
+    var recordingDirectory = Path.Combine(directory, "plc-recordings");
+    var recorder = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: new SequencePlcTagSnapshotReader(),
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: recordingDirectory);
+    await recorder.RecordPlcOneSecondAsync();
+    var recordingPath = Directory.GetFiles(recordingDirectory, "plc-recording-*.json").Single();
+
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(plcRecordingFile: recordingPath),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: recordingDirectory);
+
+    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "initial live trend pause state");
+    AssertEqual("暂停滚动", viewModel.PlcLiveTrendPauseButtonText, "initial live trend pause button text");
+
+    await viewModel.TogglePlcLiveTrendPauseAsync();
+    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "paused live trend state");
+    AssertEqual("恢复滚动", viewModel.PlcLiveTrendPauseButtonText, "paused live trend pause button text");
+    AssertContains("暂停", viewModel.PlcTrendModeStatus);
+
+    await viewModel.TogglePlcLiveTrendPauseAsync();
+    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "resumed live trend state");
+    AssertEqual("暂停滚动", viewModel.PlcLiveTrendPauseButtonText, "resumed live trend pause button text");
+
+    await viewModel.ShowPlcHistoricalTrendAsync();
+    await viewModel.TogglePlcLiveTrendPauseAsync();
+    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "historical trend ignores live pause toggle");
+}
+
 static Task PlcMonitorRowDisplaysMilliseconds()
 {
     var snapshot = new PlcTagSnapshot(
@@ -913,6 +966,17 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.ShowPlcHistoricalTrendAsync();
     AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical plc trend mode");
     AssertContains("历史", loader.PlcTrendModeStatus);
+    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+
+    var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
+    var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
+    loader.PlcHistoricalRangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
+    loader.PlcHistoricalRangeEndText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
+    await loader.ApplyPlcHistoricalRangeAsync();
+    AssertContains("1/", loader.PlcMonitorStatus);
+    AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical range keeps trend mode");
+
+    await loader.ResetPlcHistoricalRangeAsync();
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
 
     loader.UsePlcLiveTrendMode();
@@ -1103,6 +1167,21 @@ static void AssertThrows<TException>(Action action, string name)
     try
     {
         action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException($"{name}: expected {typeof(TException).Name}");
+}
+
+static async Task AssertThrowsAsync<TException>(Func<Task> action, string name)
+    where TException : Exception
+{
+    try
+    {
+        await action();
     }
     catch (TException)
     {

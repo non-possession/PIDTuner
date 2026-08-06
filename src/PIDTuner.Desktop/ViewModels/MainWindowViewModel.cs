@@ -128,10 +128,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private string _plcReplayStatus = "尚未加载 PLC 记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
+    private string _plcHistoricalRangeStartText = string.Empty;
+    private string _plcHistoricalRangeEndText = string.Empty;
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
     private bool _isPlcReplayRunning;
     private bool _isPlcHistoricalTrendMode;
+    private bool _isPlcLiveTrendPaused;
 
     private string _parameterSetStatus = "尚未保存参数方案。";
 
@@ -196,6 +199,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadPlcRecordingCommand = new AsyncCommand(LoadPlcRecordingAsync);
         ShowPlcLiveTrendCommand = new AsyncCommand(ShowPlcLiveTrendAsync);
         ShowPlcHistoricalTrendCommand = new AsyncCommand(ShowPlcHistoricalTrendAsync);
+        TogglePlcLiveTrendPauseCommand = new AsyncCommand(TogglePlcLiveTrendPauseAsync);
+        ApplyPlcHistoricalRangeCommand = new AsyncCommand(ApplyPlcHistoricalRangeAsync);
+        ResetPlcHistoricalRangeCommand = new AsyncCommand(ResetPlcHistoricalRangeAsync);
         TogglePlcReplayCommand = new AsyncCommand(TogglePlcReplayAsync);
         StepPlcReplayBackwardCommand = new AsyncCommand(StepPlcReplayBackwardAsync);
         StepPlcReplayForwardCommand = new AsyncCommand(StepPlcReplayForwardAsync);
@@ -339,11 +345,37 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _plcTrendModeStatus, value);
     }
 
+    public string PlcHistoricalRangeStartText
+    {
+        get => _plcHistoricalRangeStartText;
+        set => SetProperty(ref _plcHistoricalRangeStartText, value);
+    }
+
+    public string PlcHistoricalRangeEndText
+    {
+        get => _plcHistoricalRangeEndText;
+        set => SetProperty(ref _plcHistoricalRangeEndText, value);
+    }
+
     public bool IsPlcHistoricalTrendMode
     {
         get => _isPlcHistoricalTrendMode;
         private set => SetProperty(ref _isPlcHistoricalTrendMode, value);
     }
+
+    public bool IsPlcLiveTrendPaused
+    {
+        get => _isPlcLiveTrendPaused;
+        private set
+        {
+            if (SetProperty(ref _isPlcLiveTrendPaused, value))
+            {
+                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
+            }
+        }
+    }
+
+    public string PlcLiveTrendPauseButtonText => IsPlcLiveTrendPaused ? "恢复滚动" : "暂停滚动";
 
     public string PlcReplaySpeedText => $"{_plcReplaySpeedMultiplier:0.##}x";
 
@@ -665,6 +697,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand ShowPlcHistoricalTrendCommand { get; }
 
+    public ICommand TogglePlcLiveTrendPauseCommand { get; }
+
+    public ICommand ApplyPlcHistoricalRangeCommand { get; }
+
+    public ICommand ResetPlcHistoricalRangeCommand { get; }
+
     public ICommand TogglePlcReplayCommand { get; }
 
     public ICommand StepPlcReplayBackwardCommand { get; }
@@ -794,6 +832,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (IsPlcHistoricalTrendMode)
             {
                 IsPlcHistoricalTrendMode = false;
+                IsPlcLiveTrendPaused = false;
                 PlcTrendModeStatus = "当前趋势：实时";
                 PlcMonitorTags.Clear();
                 SelectedPlcMonitorTag = null;
@@ -1077,6 +1116,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _plcReplayDisplayedFrameIndex = -1;
             _lastPlcRecordingFrames = recording.Frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
+            SetPlcHistoricalRangeTextFromFrames(recording.Frames);
 
             PlcMonitorTags.Clear();
             SelectedPlcMonitorTag = null;
@@ -1088,6 +1128,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             else
             {
                 IsPlcHistoricalTrendMode = false;
+                IsPlcLiveTrendPaused = false;
                 PlcTrendModeStatus = "当前趋势：实时";
                 ApplyPlcReplayFrame(0, advance: true);
             }
@@ -1120,7 +1161,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public void UsePlcLiveTrendMode()
     {
         IsPlcHistoricalTrendMode = false;
+        IsPlcLiveTrendPaused = false;
         PlcTrendModeStatus = "当前趋势：实时";
+    }
+
+    public Task TogglePlcLiveTrendPauseAsync()
+    {
+        if (IsPlcHistoricalTrendMode)
+        {
+            return Task.CompletedTask;
+        }
+
+        IsPlcLiveTrendPaused = !IsPlcLiveTrendPaused;
+        PlcTrendModeStatus = IsPlcLiveTrendPaused
+            ? "当前趋势：实时（滚动已暂停）"
+            : "当前趋势：实时";
+        return Task.CompletedTask;
     }
 
     public async Task ShowPlcHistoricalTrendAsync()
@@ -1137,6 +1193,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectedPlcMonitorTag = null;
         PlcTrendResetRequested?.Invoke();
         ShowLoadedPlcHistoricalTrend();
+    }
+
+    public Task ApplyPlcHistoricalRangeAsync()
+    {
+        if (!EnsurePlcReplayLoaded())
+        {
+            return Task.CompletedTask;
+        }
+
+        var isStartValid = TryParseOptionalTimestamp(PlcHistoricalRangeStartText, out var start, out var startError);
+        var isEndValid = TryParseOptionalTimestamp(PlcHistoricalRangeEndText, out var end, out var endError);
+        if (!isStartValid || !isEndValid)
+        {
+            Notify("历史趋势区间无效", startError ?? endError ?? "请输入可识别的时间。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        if (start.HasValue && end.HasValue && start > end)
+        {
+            Notify("历史趋势区间无效", "开始时间不能晚于结束时间。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        var selectedFrames = FilterPlcReplayFrames(start, end);
+        if (selectedFrames.Count == 0)
+        {
+            Notify("历史趋势区间无数据", "当前时间范围内没有 PLC 记录帧。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        PlcMonitorTags.Clear();
+        SelectedPlcMonitorTag = null;
+        PlcTrendResetRequested?.Invoke();
+        ShowLoadedPlcHistoricalTrend(selectedFrames);
+        return Task.CompletedTask;
+    }
+
+    public Task ResetPlcHistoricalRangeAsync()
+    {
+        if (!EnsurePlcReplayLoaded())
+        {
+            return Task.CompletedTask;
+        }
+
+        SetPlcHistoricalRangeTextFromFrames(_loadedPlcReplayFrames);
+        PlcMonitorTags.Clear();
+        SelectedPlcMonitorTag = null;
+        PlcTrendResetRequested?.Invoke();
+        ShowLoadedPlcHistoricalTrend();
+        return Task.CompletedTask;
     }
 
     public Task TogglePlcReplayAsync()
@@ -1273,22 +1379,98 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ShowLoadedPlcHistoricalTrend()
     {
-        if (_loadedPlcReplayFrames.Count == 0)
+        ShowLoadedPlcHistoricalTrend(_loadedPlcReplayFrames);
+    }
+
+    private void ShowLoadedPlcHistoricalTrend(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+    {
+        if (frames.Count == 0)
         {
             return;
         }
 
         IsPlcHistoricalTrendMode = true;
+        IsPlcLiveTrendPaused = false;
         PlcTrendModeStatus = "当前趋势：历史";
-        for (var index = 0; index < _loadedPlcReplayFrames.Count; index++)
+        for (var index = 0; index < frames.Count; index++)
         {
-            ApplyPlcMonitorSnapshots(_loadedPlcReplayFrames[index]);
+            ApplyPlcMonitorSnapshots(frames[index]);
         }
 
-        _plcReplayDisplayedFrameIndex = _loadedPlcReplayFrames.Count - 1;
+        _plcReplayDisplayedFrameIndex = Math.Max(0, _loadedPlcReplayFrames.Count - 1);
         _plcReplayNextFrameIndex = _loadedPlcReplayFrames.Count;
-        PlcMonitorStatus = $"历史趋势已显示：{_loadedPlcReplayFrames.Count} 帧。";
+        PlcMonitorStatus = $"历史趋势已显示：{frames.Count}/{_loadedPlcReplayFrames.Count} 帧。";
         UpdatePlcReplayStatus("历史趋势");
+    }
+
+    private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> FilterPlcReplayFrames(
+        DateTimeOffset? start,
+        DateTimeOffset? end)
+    {
+        return _loadedPlcReplayFrames
+            .Where(frame =>
+            {
+                var timestamp = FrameTimestamp(frame);
+                return timestamp.HasValue &&
+                    (!start.HasValue || timestamp.Value >= start.Value) &&
+                    (!end.HasValue || timestamp.Value <= end.Value);
+            })
+            .ToArray();
+    }
+
+    private void SetPlcHistoricalRangeTextFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+    {
+        var timestamps = frames
+            .Select(FrameTimestamp)
+            .Where(timestamp => timestamp.HasValue)
+            .Select(timestamp => timestamp!.Value)
+            .Order()
+            .ToArray();
+        if (timestamps.Length == 0)
+        {
+            PlcHistoricalRangeStartText = string.Empty;
+            PlcHistoricalRangeEndText = string.Empty;
+            return;
+        }
+
+        PlcHistoricalRangeStartText = FormatPlcHistoricalRangeTimestamp(timestamps[0]);
+        PlcHistoricalRangeEndText = FormatPlcHistoricalRangeTimestamp(timestamps[^1]);
+    }
+
+    private static DateTimeOffset? FrameTimestamp(IReadOnlyList<PlcTagSnapshot> frame)
+    {
+        return frame.Count == 0 ? null : frame.Min(snapshot => snapshot.Timestamp);
+    }
+
+    private static string FormatPlcHistoricalRangeTimestamp(DateTimeOffset timestamp)
+    {
+        return timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryParseOptionalTimestamp(
+        string text,
+        out DateTimeOffset? timestamp,
+        out string? error)
+    {
+        timestamp = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
+        if (DateTimeOffset.TryParse(
+            text,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeLocal,
+            out var parsed))
+        {
+            timestamp = parsed;
+            return true;
+        }
+
+        error = $"无法识别时间：{text}";
+        return false;
     }
 
     private bool EnsurePlcReplayLoaded()

@@ -31,6 +31,7 @@ public sealed class PlcTrendChartAdapter
 
     private TimeSpan _visibleWindow = TimeSpan.FromSeconds(30);
     private bool _showFullHistory;
+    private bool _isLiveScrollingPaused;
 
     public PlcTrendChartAdapter(WpfPlot plot)
     {
@@ -48,6 +49,12 @@ public sealed class PlcTrendChartAdapter
     {
         get => _showFullHistory;
         set => _showFullHistory = value;
+    }
+
+    public bool IsLiveScrollingPaused
+    {
+        get => _isLiveScrollingPaused;
+        set => _isLiveScrollingPaused = value;
     }
 
     public void Clear()
@@ -83,6 +90,11 @@ public sealed class PlcTrendChartAdapter
         }
 
         RemoveInactiveTags(monitorTags);
+        if (IsLiveScrollingPaused && !ShowFullHistory)
+        {
+            return;
+        }
+
         Render(monitorTags);
     }
 
@@ -133,6 +145,12 @@ public sealed class PlcTrendChartAdapter
             _plot.Plot.Axes.AutoScaleY();
         }
 
+        _plot.Refresh();
+    }
+
+    public void AutoFitY()
+    {
+        _plot.Plot.Axes.AutoScaleY();
         _plot.Refresh();
     }
 
