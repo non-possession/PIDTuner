@@ -88,6 +88,7 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
             var plannedTimestampUtc = startedAtUtc.Add(nextDue);
             var requestStartedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var snapshots = await session.ReadAsync(cancellationToken);
+            var readOperations = session.LastReadDiagnostics.ToArray();
             var responseReceivedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var bufferedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var uiPresentedTimestampUtc = bufferedTimestampUtc;
@@ -101,7 +102,8 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
                     bufferedTimestampUtc,
                     uiPresentedTimestampUtc,
                     snapshots.Count,
-                    ClassifyFrame(plannedTimestampUtc, requestStartedTimestampUtc, interval))));
+                    ClassifyFrame(plannedTimestampUtc, requestStartedTimestampUtc, interval)),
+                readOperations));
 
             frameIndex++;
             nextDue += interval;

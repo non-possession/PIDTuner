@@ -56,8 +56,12 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
         SiemensS7Client client,
         IReadOnlyList<ParsedTag> enabledTags) : IPlcTagSnapshotReadSession
     {
+        public IReadOnlyList<PlcReadOperationDiagnostics> LastReadDiagnostics { get; private set; } =
+            Array.Empty<PlcReadOperationDiagnostics>();
+
         public async Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(CancellationToken cancellationToken)
         {
+            LastReadDiagnostics = Array.Empty<PlcReadOperationDiagnostics>();
             var snapshots = new PlcTagSnapshot[enabledTags.Count];
             var readableTags = enabledTags
                 .Select((tag, index) => new { Tag = tag, Index = index })
@@ -83,14 +87,15 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
             try
             {
                 // One session read now sends batched S7 variable reads instead of one request per tag.
-                var results = await client.ReadNumericBatchAsync(
+                var batch = await client.ReadNumericBatchWithDiagnosticsAsync(
                     readableTags.Select(item => item.Tag.Address!).ToArray(),
                     cancellationToken);
+                LastReadDiagnostics = batch.Operations;
 
                 for (var index = 0; index < readableTags.Length; index++)
                 {
                     var item = readableTags[index];
-                    var result = results[index];
+                    var result = batch.Results[index];
                     snapshots[item.Index] = result.Error is null
                         ? Good(item.Tag.Definition, result.Value)
                         : Failed(item.Tag.Definition, $"读取失败：{result.Error}", "Siemens S7");

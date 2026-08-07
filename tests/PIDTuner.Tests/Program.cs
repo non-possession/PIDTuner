@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Microsoft.Data.Sqlite;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.Services;
@@ -709,7 +710,20 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             bufferedMs: 13,
             uiMs: 20,
             snapshots: 1,
-            PlcAcquisitionFrameState.Normal)));
+            PlcAcquisitionFrameState.Normal),
+        new[]
+        {
+            new PlcReadOperationDiagnostics(
+                0,
+                "S7ReadVar",
+                "DB8.DBB6-DBB48",
+                3,
+                started.AddMilliseconds(2),
+                started.AddMilliseconds(12),
+                3,
+                0,
+                null)
+        }));
     session.Enqueue(new PlcAcquisitionFrame(
         new[]
         {
@@ -742,6 +756,31 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertEqual(1, summary.LateFrameCount, "sqlite diagnostics late frame count");
     AssertClose(31, summary.AverageScheduleDelayMilliseconds, 0.001, "sqlite diagnostics schedule avg");
     AssertClose(50, summary.MaxReadDurationMilliseconds, 0.001, "sqlite diagnostics max read");
+
+    await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
+    await connection.OpenAsync();
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+        SELECT
+            COUNT(*),
+            operation_kind,
+            target,
+            address_count,
+            duration_ms,
+            success_count,
+            failure_count
+        FROM plc_read_operations
+        GROUP BY operation_kind, target, address_count, duration_ms, success_count, failure_count;
+        """;
+    await using var reader = await command.ExecuteReaderAsync();
+    AssertEqual(true, await reader.ReadAsync(), "sqlite diagnostics read operation exists");
+    AssertEqual(1, (int)reader.GetInt64(0), "sqlite diagnostics read operation count");
+    AssertEqual("S7ReadVar", reader.GetString(1), "sqlite diagnostics read operation kind");
+    AssertEqual("DB8.DBB6-DBB48", reader.GetString(2), "sqlite diagnostics read operation target");
+    AssertEqual(3, reader.GetInt32(3), "sqlite diagnostics read operation address count");
+    AssertClose(10, reader.GetDouble(4), 0.001, "sqlite diagnostics read operation duration");
+    AssertEqual(3, reader.GetInt32(5), "sqlite diagnostics read operation success count");
+    AssertEqual(0, reader.GetInt32(6), "sqlite diagnostics read operation failure count");
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
@@ -1559,6 +1598,10 @@ file sealed class FakePlcLiveDiagnosticsSession(TimeSpan duration, DateTimeOffse
             EnqueueCount,
             1,
             2,
+            3,
+            4,
+            0,
+            EnqueueCount,
             3,
             4,
             0));

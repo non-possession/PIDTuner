@@ -1035,7 +1035,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var prefix = string.IsNullOrWhiteSpace(reason) ? "实时诊断" : reason;
         return string.Format(
             CultureInfo.InvariantCulture,
-            "{0} 帧 {1}，样本 {2}，调度延迟 avg {3:0.#} ms / max {4:0.#} ms，读取耗时 avg {5:0.#} ms / max {6:0.#} ms，迟到 {7} 帧，数据库 {8}",
+            "{0} 帧 {1}，样本 {2}，调度延迟 avg {3:0.#} ms / max {4:0.#} ms，读取耗时 avg {5:0.#} ms / max {6:0.#} ms，读取操作 {7} 次 avg {8:0.#} ms / max {9:0.#} ms / 慢操作 {10} 次，迟到 {11} 帧，数据库 {12}",
             prefix,
             summary.FrameCount,
             summary.SnapshotCount,
@@ -1043,6 +1043,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             summary.MaxScheduleDelayMilliseconds,
             summary.AverageReadDurationMilliseconds,
             summary.MaxReadDurationMilliseconds,
+            summary.ReadOperationCount,
+            summary.AverageReadOperationDurationMilliseconds,
+            summary.MaxReadOperationDurationMilliseconds,
+            summary.SlowReadOperationCount,
             summary.LateFrameCount,
             summary.DatabasePath);
     }

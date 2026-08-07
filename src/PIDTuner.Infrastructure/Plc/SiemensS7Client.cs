@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Net.Sockets;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Models;
+using PIDTuner.Domain.Plc;
 
 namespace PIDTuner.Infrastructure.Plc;
 
@@ -21,6 +22,10 @@ internal sealed class SiemensS7ConnectionException(
 }
 
 internal sealed record S7ReadResult(S7Address Address, double? Value, string? Error);
+
+internal sealed record S7BatchReadResult(
+    IReadOnlyList<S7ReadResult> Results,
+    IReadOnlyList<PlcReadOperationDiagnostics> Operations);
 
 /// <summary>
 /// Minimal Siemens S7 TCP client for DB reads. It owns the socket/session handshake and exposes
@@ -118,21 +123,59 @@ public sealed class SiemensS7Client : IAsyncDisposable
         IReadOnlyList<S7Address> addresses,
         CancellationToken cancellationToken)
     {
+        return (await ReadNumericBatchWithDiagnosticsAsync(addresses, cancellationToken)).Results;
+    }
+
+    internal async Task<S7BatchReadResult> ReadNumericBatchWithDiagnosticsAsync(
+        IReadOnlyList<S7Address> addresses,
+        CancellationToken cancellationToken)
+    {
         if (addresses.Count == 0)
         {
-            return Array.Empty<S7ReadResult>();
+            return new S7BatchReadResult(
+                Array.Empty<S7ReadResult>(),
+                Array.Empty<PlcReadOperationDiagnostics>());
         }
 
         var results = new List<S7ReadResult>(addresses.Count);
+        var operations = new List<PlcReadOperationDiagnostics>();
+        var operationIndex = 0;
         foreach (var chunk in addresses.Chunk(MaxReadItemsPerRequest))
         {
+            var startedAtUtc = DateTimeOffset.UtcNow;
+            IReadOnlyList<S7ReadResult> chunkResults;
+            string? error = null;
             var request = BuildReadRequest(chunk);
-            await SendAsync(request, cancellationToken);
-            var response = await ReceiveAsync(cancellationToken);
-            results.AddRange(ExtractReadResults(response, chunk));
+            try
+            {
+                await SendAsync(request, cancellationToken);
+                var response = await ReceiveAsync(cancellationToken);
+                chunkResults = ExtractReadResults(response, chunk);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                error = exception.Message;
+                chunkResults = chunk
+                    .Select(address => new S7ReadResult(address, null, error))
+                    .ToArray();
+            }
+
+            var receivedAtUtc = DateTimeOffset.UtcNow;
+            results.AddRange(chunkResults);
+            operations.Add(new PlcReadOperationDiagnostics(
+                operationIndex,
+                "S7ReadVar",
+                FormatOperationTarget(chunk),
+                chunk.Length,
+                startedAtUtc,
+                receivedAtUtc,
+                chunkResults.Count(result => result.Error is null),
+                chunkResults.Count(result => result.Error is not null),
+                error));
+            operationIndex++;
         }
 
-        return results;
+        return new S7BatchReadResult(results, operations);
     }
 
     public async ValueTask DisposeAsync()
@@ -234,6 +277,25 @@ public sealed class SiemensS7Client : IAsyncDisposable
         }
 
         return request;
+    }
+
+    private static string FormatOperationTarget(IReadOnlyList<S7Address> addresses)
+    {
+        var groups = addresses
+            .GroupBy(address => address.DataBlock)
+            .OrderBy(group => group.Key)
+            .Select(group =>
+            {
+                var offsets = group
+                    .Select(address => address.ByteOffset)
+                    .Order()
+                    .ToArray();
+                return offsets.Length == 1
+                    ? $"DB{group.Key}.DBB{offsets[0]}"
+                    : $"DB{group.Key}.DBB{offsets[0]}-DBB{offsets[^1]}";
+            });
+
+        return string.Join("; ", groups);
     }
 
     private static void WriteReadItem(Span<byte> item, S7Address address)

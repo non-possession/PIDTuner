@@ -35,4 +35,8 @@ public sealed record PlcLiveDiagnosticsSummary(
     double MaxScheduleDelayMilliseconds,
     double AverageReadDurationMilliseconds,
     double MaxReadDurationMilliseconds,
-    int LateFrameCount);
+    int LateFrameCount,
+    int ReadOperationCount,
+    double AverageReadOperationDurationMilliseconds,
+    double MaxReadOperationDurationMilliseconds,
+    int SlowReadOperationCount);

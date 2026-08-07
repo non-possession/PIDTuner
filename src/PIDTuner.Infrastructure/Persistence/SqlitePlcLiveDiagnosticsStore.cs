@@ -101,11 +101,30 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 source TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS plc_read_operations (
+                session_id TEXT NOT NULL,
+                frame_index INTEGER NOT NULL,
+                operation_index INTEGER NOT NULL,
+                operation_kind TEXT NOT NULL,
+                target TEXT NOT NULL,
+                address_count INTEGER NOT NULL,
+                request_started_timestamp_utc TEXT NOT NULL,
+                response_received_timestamp_utc TEXT NOT NULL,
+                duration_ms REAL NOT NULL,
+                success_count INTEGER NOT NULL,
+                failure_count INTEGER NOT NULL,
+                error TEXT NULL,
+                PRIMARY KEY (session_id, frame_index, operation_index)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_plc_sample_values_session_time
                 ON plc_sample_values(session_id, timestamp_utc);
 
             CREATE INDEX IF NOT EXISTS idx_plc_sample_frames_session_time
                 ON plc_sample_frames(session_id, planned_timestamp_utc);
+
+            CREATE INDEX IF NOT EXISTS idx_plc_read_operations_session_frame
+                ON plc_read_operations(session_id, frame_index);
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -262,6 +281,16 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                         snapshot,
                         cancellationToken);
                 }
+
+                foreach (var operation in frame.ReadOperations)
+                {
+                    await InsertReadOperationAsync(
+                        connection,
+                        transaction,
+                        frame.Diagnostics.FrameIndex,
+                        operation,
+                        cancellationToken);
+                }
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -368,6 +397,58 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        private async Task InsertReadOperationAsync(
+            SqliteConnection connection,
+            SqliteTransaction transaction,
+            int frameIndex,
+            PlcReadOperationDiagnostics operation,
+            CancellationToken cancellationToken)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT OR REPLACE INTO plc_read_operations (
+                    session_id,
+                    frame_index,
+                    operation_index,
+                    operation_kind,
+                    target,
+                    address_count,
+                    request_started_timestamp_utc,
+                    response_received_timestamp_utc,
+                    duration_ms,
+                    success_count,
+                    failure_count,
+                    error)
+                VALUES (
+                    $session_id,
+                    $frame_index,
+                    $operation_index,
+                    $operation_kind,
+                    $target,
+                    $address_count,
+                    $request_started_timestamp_utc,
+                    $response_received_timestamp_utc,
+                    $duration_ms,
+                    $success_count,
+                    $failure_count,
+                    $error);
+                """;
+            command.Parameters.AddWithValue("$session_id", SessionId.ToString("D"));
+            command.Parameters.AddWithValue("$frame_index", frameIndex);
+            command.Parameters.AddWithValue("$operation_index", operation.OperationIndex);
+            command.Parameters.AddWithValue("$operation_kind", operation.OperationKind);
+            command.Parameters.AddWithValue("$target", operation.Target);
+            command.Parameters.AddWithValue("$address_count", operation.AddressCount);
+            command.Parameters.AddWithValue("$request_started_timestamp_utc", FormatTimestamp(operation.RequestStartedTimestampUtc));
+            command.Parameters.AddWithValue("$response_received_timestamp_utc", FormatTimestamp(operation.ResponseReceivedTimestampUtc));
+            command.Parameters.AddWithValue("$duration_ms", operation.DurationMilliseconds);
+            command.Parameters.AddWithValue("$success_count", operation.SuccessCount);
+            command.Parameters.AddWithValue("$failure_count", operation.FailureCount);
+            command.Parameters.AddWithValue("$error", operation.Error is null ? DBNull.Value : operation.Error);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         private async Task MarkStoppedAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             await using var command = connection.CreateCommand();
@@ -402,10 +483,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))
             {
-                return new PlcLiveDiagnosticsSummary(SessionId, DatabasePath, 0, 0, 0, 0, 0, 0, 0);
+                return new PlcLiveDiagnosticsSummary(SessionId, DatabasePath, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
 
-            return new PlcLiveDiagnosticsSummary(
+            var frameSummary = new PlcLiveDiagnosticsSummary(
                 SessionId,
                 DatabasePath,
                 (int)reader.GetInt64(0),
@@ -414,7 +495,53 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 reader.GetDouble(3),
                 reader.GetDouble(4),
                 reader.GetDouble(5),
-                (int)reader.GetInt64(6));
+                (int)reader.GetInt64(6),
+                0,
+                0,
+                0,
+                0);
+
+            return await QueryReadOperationSummaryAsync(connection, frameSummary, cancellationToken);
+        }
+
+        private async Task<PlcLiveDiagnosticsSummary> QueryReadOperationSummaryAsync(
+            SqliteConnection connection,
+            PlcLiveDiagnosticsSummary frameSummary,
+            CancellationToken cancellationToken)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT
+                    COUNT(*) AS operation_count,
+                    COALESCE(AVG(duration_ms), 0) AS avg_operation_duration,
+                    COALESCE(MAX(duration_ms), 0) AS max_operation_duration,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN duration_ms > (
+                                SELECT default_sampling_ms * 0.8
+                                FROM plc_diagnostic_sessions
+                                WHERE session_id = $session_id
+                            )
+                            THEN 1
+                            ELSE 0
+                        END), 0) AS slow_operation_count
+                FROM plc_read_operations
+                WHERE session_id = $session_id;
+                """;
+            command.Parameters.AddWithValue("$session_id", SessionId.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return frameSummary;
+            }
+
+            return frameSummary with
+            {
+                ReadOperationCount = (int)reader.GetInt64(0),
+                AverageReadOperationDurationMilliseconds = reader.GetDouble(1),
+                MaxReadOperationDurationMilliseconds = reader.GetDouble(2),
+                SlowReadOperationCount = (int)reader.GetInt64(3)
+            };
         }
     }
 }
