@@ -86,8 +86,8 @@ public sealed class SiemensS7PlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcT
 
             try
             {
-                // One session read now sends batched S7 variable reads instead of one request per tag.
-                var batch = await client.ReadNumericBatchWithDiagnosticsAsync(
+                // Read one contiguous byte block per DB so tags from the same DB are decoded from one PLC memory snapshot.
+                var batch = await client.ReadNumericDbBlocksWithDiagnosticsAsync(
                     readableTags.Select(item => item.Tag.Address!).ToArray(),
                     cancellationToken);
                 LastReadDiagnostics = batch.Operations;

@@ -43,6 +43,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("json pid parameter set repository saves and lists sets", JsonPidParameterSetRepositorySavesAndListsSets),
     ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
+    ("s7 db block parser decodes sparse real offsets", S7DbBlockParserDecodesSparseRealOffsets),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
@@ -620,6 +621,43 @@ static Task S7ReadResponseParserHandlesAdjacentMultiRealItems()
     AssertClose(2.5, GetS7ReadResultValue(results[1]), 0.001, "second batched REAL");
     AssertEqual(null, GetS7ReadResultError(results[0]), "first batched REAL error");
     AssertEqual(null, GetS7ReadResultError(results[1]), "second batched REAL error");
+    return Task.CompletedTask;
+}
+
+static Task S7DbBlockParserDecodesSparseRealOffsets()
+{
+    var addresses = new[]
+    {
+        S7AddressParser.Parse("DB8.DBD6", PlcDataType.Double),
+        S7AddressParser.Parse("DB8.DBD10", PlcDataType.Double),
+        S7AddressParser.Parse("DB8.DBD48", PlcDataType.Double)
+    };
+    var response = BuildS7ReadResponseWithDbBlock(
+        startByte: 6,
+        byteCount: 46,
+        new Dictionary<int, float>
+        {
+            [6] = 80f,
+            [10] = 30f,
+            [48] = 50f
+        });
+    var method = typeof(SiemensS7Client).GetMethod(
+        "ExtractBlockReadResults",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("ExtractBlockReadResults method was not found.");
+
+    var results = ((System.Collections.IEnumerable)(method.Invoke(null, new object[] { response, addresses, 6, 46 })
+        ?? throw new InvalidOperationException("ExtractBlockReadResults returned null.")))
+        .Cast<object>()
+        .ToArray();
+
+    AssertEqual(3, results.Length, "s7 db block parsed result count");
+    AssertClose(80, GetS7ReadResultValue(results[0]), 0.001, "db block SP");
+    AssertClose(30, GetS7ReadResultValue(results[1]), 0.001, "db block other");
+    AssertClose(50, GetS7ReadResultValue(results[2]), 0.001, "db block PV");
+    AssertEqual(null, GetS7ReadResultError(results[0]), "db block SP error");
+    AssertEqual(null, GetS7ReadResultError(results[1]), "db block other error");
+    AssertEqual(null, GetS7ReadResultError(results[2]), "db block PV error");
     return Task.CompletedTask;
 }
 
@@ -1424,6 +1462,38 @@ static byte[] BuildS7ReadResponseWithTwoAdjacentRealItems(float first, float sec
     response[20] = 0x02;
     WriteS7RealReadItem(response.AsSpan(21, 8), first);
     WriteS7RealReadItem(response.AsSpan(29, 8), second);
+    return response;
+}
+
+static byte[] BuildS7ReadResponseWithDbBlock(
+    int startByte,
+    int byteCount,
+    IReadOnlyDictionary<int, float> valuesByAbsoluteOffset)
+{
+    var response = new byte[25 + byteCount];
+    response[0] = 0x03;
+    response[1] = 0x00;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(2, 2), (ushort)response.Length);
+    response[4] = 0x02;
+    response[5] = 0xF0;
+    response[6] = 0x80;
+    response[7] = 0x32;
+    response[8] = 0x03;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(13, 2), 2);
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(15, 2), (ushort)(4 + byteCount));
+    response[19] = 0x04;
+    response[20] = 0x01;
+    response[21] = 0xFF;
+    response[22] = 0x04;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(23, 2), (ushort)(byteCount * 8));
+
+    foreach (var (absoluteOffset, value) in valuesByAbsoluteOffset)
+    {
+        BinaryPrimitives.WriteSingleBigEndian(
+            response.AsSpan(25 + absoluteOffset - startByte, 4),
+            value);
+    }
+
     return response;
 }
 

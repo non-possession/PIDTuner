@@ -198,6 +198,91 @@ public sealed class SiemensS7Client : IAsyncDisposable
         return new S7BatchReadResult(results, operations);
     }
 
+    internal async Task<S7BatchReadResult> ReadNumericDbBlocksWithDiagnosticsAsync(
+        IReadOnlyList<S7Address> addresses,
+        CancellationToken cancellationToken)
+    {
+        if (addresses.Count == 0)
+        {
+            return new S7BatchReadResult(
+                Array.Empty<S7ReadResult>(),
+                Array.Empty<PlcReadOperationDiagnostics>());
+        }
+
+        var resultsByAddress = new Dictionary<S7Address, S7ReadResult>();
+        var operations = new List<PlcReadOperationDiagnostics>();
+        var operationIndex = 0;
+
+        foreach (var group in addresses.GroupBy(address => address.DataBlock).OrderBy(group => group.Key))
+        {
+            var blockAddresses = group
+                .OrderBy(address => address.ByteOffset)
+                .ThenBy(address => address.BitOffset ?? 0)
+                .ToArray();
+            var startByte = blockAddresses.Min(address => address.ByteOffset);
+            var endByteExclusive = blockAddresses.Max(address => address.ByteOffset + address.ReadByteCount);
+            var byteCount = endByteExclusive - startByte;
+            var startedAtUtc = DateTimeOffset.UtcNow;
+            string? error = null;
+            var sendStartedAtUtc = DateTimeOffset.UtcNow;
+            var sendFinishedAtUtc = sendStartedAtUtc;
+            var receiveHeaderDurationMilliseconds = 0d;
+            var receivePayloadDurationMilliseconds = 0d;
+            IReadOnlyList<S7ReadResult> blockResults;
+
+            try
+            {
+                await SendAsync(BuildAreaReadRequest(group.Key, startByte, byteCount), cancellationToken);
+                sendFinishedAtUtc = DateTimeOffset.UtcNow;
+                var response = await ReceiveTimedAsync(cancellationToken);
+                receiveHeaderDurationMilliseconds = response.ReceiveHeaderDurationMilliseconds;
+                receivePayloadDurationMilliseconds = response.ReceivePayloadDurationMilliseconds;
+                blockResults = ExtractBlockReadResults(response.Bytes, blockAddresses, startByte, byteCount);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                if (sendFinishedAtUtc == sendStartedAtUtc)
+                {
+                    sendFinishedAtUtc = DateTimeOffset.UtcNow;
+                }
+
+                error = exception.Message;
+                blockResults = blockAddresses
+                    .Select(address => new S7ReadResult(address, null, error))
+                    .ToArray();
+            }
+
+            var receivedAtUtc = DateTimeOffset.UtcNow;
+            foreach (var result in blockResults)
+            {
+                resultsByAddress[result.Address] = result;
+            }
+
+            operations.Add(new PlcReadOperationDiagnostics(
+                operationIndex,
+                "S7ReadDbBlock",
+                $"DB{group.Key}.DBB{startByte}-DBB{endByteExclusive - 1}",
+                blockAddresses.Length,
+                startedAtUtc,
+                receivedAtUtc,
+                (sendFinishedAtUtc - sendStartedAtUtc).TotalMilliseconds,
+                receiveHeaderDurationMilliseconds,
+                receivePayloadDurationMilliseconds,
+                blockResults.Count(result => result.Error is null),
+                blockResults.Count(result => result.Error is not null),
+                error));
+            operationIndex++;
+        }
+
+        var orderedResults = addresses
+            .Select(address => resultsByAddress.TryGetValue(address, out var result)
+                ? result
+                : new S7ReadResult(address, null, "DB block read did not return this address."))
+            .ToArray();
+
+        return new S7BatchReadResult(orderedResults, operations);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _stream?.Dispose();
@@ -311,6 +396,32 @@ public sealed class SiemensS7Client : IAsyncDisposable
         return request;
     }
 
+    private byte[] BuildAreaReadRequest(int dataBlock, int startByte, int byteCount)
+    {
+        if (byteCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(byteCount), byteCount, "S7 area read byte count must be greater than zero.");
+        }
+
+        var sequence = _sequence++;
+        const int parameterLength = 14;
+        var request = new byte[17 + parameterLength];
+        request[0] = 0x03;
+        request[1] = 0x00;
+        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(2, 2), (ushort)request.Length);
+        request[4] = 0x02;
+        request[5] = 0xF0;
+        request[6] = 0x80;
+        request[7] = 0x32;
+        request[8] = 0x01;
+        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(11, 2), sequence);
+        BinaryPrimitives.WriteUInt16BigEndian(request.AsSpan(13, 2), parameterLength);
+        request[17] = 0x04;
+        request[18] = 0x01;
+        WriteReadItem(request.AsSpan(19, 12), dataBlock, startByte, null, byteCount);
+        return request;
+    }
+
     private static string FormatOperationTarget(IReadOnlyList<S7Address> addresses)
     {
         var groups = addresses
@@ -332,16 +443,24 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
     private static void WriteReadItem(Span<byte> item, S7Address address)
     {
+        WriteReadItem(item, address.DataBlock, address.ByteOffset, address.BitOffset, address.DataType == PlcDataType.Boolean ? 1 : address.ReadByteCount);
+    }
+
+    private static void WriteReadItem(
+        Span<byte> item,
+        int dataBlock,
+        int byteOffset,
+        int? bitOffset,
+        int readByteCount)
+    {
         item[0] = 0x12;
         item[1] = 0x0A;
         item[2] = 0x10;
-        item[3] = address.DataType == PlcDataType.Boolean ? (byte)0x01 : (byte)0x02;
-        BinaryPrimitives.WriteUInt16BigEndian(
-            item[4..6],
-            (ushort)(address.DataType == PlcDataType.Boolean ? 1 : address.ReadByteCount));
-        BinaryPrimitives.WriteUInt16BigEndian(item[6..8], (ushort)address.DataBlock);
+        item[3] = bitOffset.HasValue ? (byte)0x01 : (byte)0x02;
+        BinaryPrimitives.WriteUInt16BigEndian(item[4..6], (ushort)readByteCount);
+        BinaryPrimitives.WriteUInt16BigEndian(item[6..8], (ushort)dataBlock);
         item[8] = 0x84;
-        var bitAddress = address.BitAddress;
+        var bitAddress = byteOffset * 8 + (bitOffset ?? 0);
         item[9] = (byte)((bitAddress >> 16) & 0xFF);
         item[10] = (byte)((bitAddress >> 8) & 0xFF);
         item[11] = (byte)(bitAddress & 0xFF);
@@ -411,6 +530,79 @@ public sealed class SiemensS7Client : IAsyncDisposable
         }
 
         return results;
+    }
+
+    private static IReadOnlyList<S7ReadResult> ExtractBlockReadResults(
+        byte[] response,
+        IReadOnlyList<S7Address> addresses,
+        int startByte,
+        int requestedByteCount)
+    {
+        var payload = ExtractSingleReadPayload(response);
+        if (payload.Length < requestedByteCount)
+        {
+            throw new InvalidOperationException("S7 DB block response payload is shorter than requested.");
+        }
+
+        var results = new List<S7ReadResult>(addresses.Count);
+        foreach (var address in addresses)
+        {
+            var relativeOffset = address.ByteOffset - startByte;
+            if (relativeOffset < 0 || relativeOffset + address.ReadByteCount > payload.Length)
+            {
+                results.Add(new S7ReadResult(address, null, "Address is outside the returned DB block."));
+                continue;
+            }
+
+            try
+            {
+                var value = DecodeNumericPayload(address, payload.Slice(relativeOffset, address.ReadByteCount));
+                results.Add(new S7ReadResult(address, value, null));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                results.Add(new S7ReadResult(address, null, exception.Message));
+            }
+        }
+
+        return results;
+    }
+
+    private static ReadOnlySpan<byte> ExtractSingleReadPayload(byte[] response)
+    {
+        const int s7Offset = 7;
+        if (response.Length < s7Offset + 12 || response[s7Offset] != 0x32)
+        {
+            throw new InvalidOperationException("Invalid S7 read response.");
+        }
+
+        var rosctr = response[s7Offset + 1];
+        var parameterLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(s7Offset + 6, 2));
+        var headerLength = rosctr == 0x03 ? 12 : 10;
+        var dataOffset = s7Offset + headerLength + parameterLength;
+        if (response.Length < dataOffset + 4)
+        {
+            throw new InvalidOperationException("S7 read response does not contain data.");
+        }
+
+        var returnCode = response[dataOffset];
+        var transportSize = response[dataOffset + 1];
+        var reportedLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(dataOffset + 2, 2));
+        var byteCount = transportSize == 0x03
+            ? 1
+            : (reportedLength + 7) / 8;
+        var payloadOffset = dataOffset + 4;
+        if (returnCode != 0xFF)
+        {
+            throw new InvalidOperationException($"S7 read failed with return code 0x{returnCode:X2}.");
+        }
+
+        if (response.Length < payloadOffset + byteCount)
+        {
+            throw new InvalidOperationException("S7 read response payload is truncated.");
+        }
+
+        return response.AsSpan(payloadOffset, byteCount);
     }
 
     private static double DecodeNumericPayload(S7Address address, ReadOnlySpan<byte> payload)
