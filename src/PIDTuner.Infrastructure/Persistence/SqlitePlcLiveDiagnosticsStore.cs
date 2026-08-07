@@ -83,6 +83,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 read_duration_ms REAL NOT NULL,
                 buffer_delay_ms REAL NOT NULL,
                 ui_delay_ms REAL NOT NULL,
+                actual_interval_ms REAL NULL,
+                response_interval_ms REAL NULL,
+                phase_error_ms REAL NULL,
+                catch_up_frame INTEGER NOT NULL DEFAULT 0,
                 snapshot_count INTEGER NOT NULL,
                 state INTEGER NOT NULL,
                 PRIMARY KEY (session_id, frame_index)
@@ -130,7 +134,42 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 ON plc_read_operations(session_id, frame_index);
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureSampleFrameTimingColumnsAsync(connection, cancellationToken);
         await EnsureReadOperationTimingColumnsAsync(connection, cancellationToken);
+    }
+
+    private static async Task EnsureSampleFrameTimingColumnsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = "PRAGMA table_info(plc_sample_frames);";
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        foreach (var (column, definition) in new[]
+        {
+            ("actual_interval_ms", "REAL NULL"),
+            ("response_interval_ms", "REAL NULL"),
+            ("phase_error_ms", "REAL NULL"),
+            ("catch_up_frame", "INTEGER NOT NULL DEFAULT 0")
+        })
+        {
+            if (existingColumns.Contains(column))
+            {
+                continue;
+            }
+
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE plc_sample_frames ADD COLUMN {column} {definition};";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task EnsureReadOperationTimingColumnsAsync(
@@ -355,6 +394,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     read_duration_ms,
                     buffer_delay_ms,
                     ui_delay_ms,
+                    actual_interval_ms,
+                    response_interval_ms,
+                    phase_error_ms,
+                    catch_up_frame,
                     snapshot_count,
                     state)
                 VALUES (
@@ -369,6 +412,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $read_duration_ms,
                     $buffer_delay_ms,
                     $ui_delay_ms,
+                    $actual_interval_ms,
+                    $response_interval_ms,
+                    $phase_error_ms,
+                    $catch_up_frame,
                     $snapshot_count,
                     $state);
                 """;
@@ -383,6 +430,16 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             command.Parameters.AddWithValue("$read_duration_ms", diagnostics.ReadDurationMilliseconds);
             command.Parameters.AddWithValue("$buffer_delay_ms", diagnostics.BufferDelayMilliseconds);
             command.Parameters.AddWithValue("$ui_delay_ms", diagnostics.UiDelayMilliseconds);
+            command.Parameters.AddWithValue(
+                "$actual_interval_ms",
+                diagnostics.ActualIntervalMilliseconds.HasValue ? diagnostics.ActualIntervalMilliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$response_interval_ms",
+                diagnostics.ResponseIntervalMilliseconds.HasValue ? diagnostics.ResponseIntervalMilliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$phase_error_ms",
+                diagnostics.PhaseErrorMilliseconds.HasValue ? diagnostics.PhaseErrorMilliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue("$catch_up_frame", diagnostics.CatchUpFrame ? 1 : 0);
             command.Parameters.AddWithValue("$snapshot_count", diagnostics.SnapshotCount);
             command.Parameters.AddWithValue("$state", (int)diagnostics.State);
             await command.ExecuteNonQueryAsync(cancellationToken);

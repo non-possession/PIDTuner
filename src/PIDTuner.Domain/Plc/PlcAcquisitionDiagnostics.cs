@@ -21,7 +21,11 @@ public sealed record PlcAcquisitionFrameDiagnostics(
     DateTimeOffset BufferedTimestampUtc,
     DateTimeOffset UiPresentedTimestampUtc,
     int SnapshotCount,
-    PlcAcquisitionFrameState State)
+    PlcAcquisitionFrameState State,
+    double? ActualIntervalMilliseconds = null,
+    double? ResponseIntervalMilliseconds = null,
+    double? PhaseErrorMilliseconds = null,
+    bool CatchUpFrame = false)
 {
     public double ScheduleDelayMilliseconds =>
         (RequestStartedTimestampUtc - PlannedTimestampUtc).TotalMilliseconds;

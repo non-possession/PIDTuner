@@ -76,10 +76,13 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
         var startedAtUtc = DateTimeOffset.UtcNow;
         var nextDue = TimeSpan.Zero;
         var frameIndex = 0;
+        DateTimeOffset? previousRequestStartedTimestampUtc = null;
+        DateTimeOffset? previousResponseReceivedTimestampUtc = null;
 
         while (!cancellationToken.IsCancellationRequested)
         {
             var wait = nextDue - stopwatch.Elapsed;
+            var catchUpFrame = frameIndex > 0 && wait <= TimeSpan.Zero;
             if (wait > TimeSpan.Zero)
             {
                 await Task.Delay(wait, cancellationToken);
@@ -92,6 +95,12 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
             var responseReceivedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var bufferedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var uiPresentedTimestampUtc = bufferedTimestampUtc;
+            var actualIntervalMilliseconds = previousRequestStartedTimestampUtc.HasValue
+                ? (requestStartedTimestampUtc - previousRequestStartedTimestampUtc.Value).TotalMilliseconds
+                : (double?)null;
+            var responseIntervalMilliseconds = previousResponseReceivedTimestampUtc.HasValue
+                ? (responseReceivedTimestampUtc - previousResponseReceivedTimestampUtc.Value).TotalMilliseconds
+                : (double?)null;
             buffer.Add(new PlcAcquisitionFrame(
                 snapshots,
                 new PlcAcquisitionFrameDiagnostics(
@@ -102,9 +111,15 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
                     bufferedTimestampUtc,
                     uiPresentedTimestampUtc,
                     snapshots.Count,
-                    ClassifyFrame(plannedTimestampUtc, requestStartedTimestampUtc, interval)),
+                    ClassifyFrame(plannedTimestampUtc, requestStartedTimestampUtc, interval),
+                    actualIntervalMilliseconds,
+                    responseIntervalMilliseconds,
+                    (requestStartedTimestampUtc - plannedTimestampUtc).TotalMilliseconds,
+                    catchUpFrame),
                 readOperations));
 
+            previousRequestStartedTimestampUtc = requestStartedTimestampUtc;
+            previousResponseReceivedTimestampUtc = responseReceivedTimestampUtc;
             frameIndex++;
             nextDue += interval;
         }

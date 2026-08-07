@@ -1180,6 +1180,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var stopwatch = Stopwatch.StartNew();
             var startedAtUtc = DateTimeOffset.UtcNow;
             var nextDue = TimeSpan.Zero;
+            DateTimeOffset? previousRequestStartedTimestampUtc = null;
+            DateTimeOffset? previousResponseReceivedTimestampUtc = null;
             PlcMonitorStatus = $"正在记录 1s 点位数据，周期 {intervalMilliseconds} ms。";
             PlcAcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
 
@@ -1188,6 +1190,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             while (nextDue < TimeSpan.FromSeconds(1))
             {
                 var wait = nextDue - stopwatch.Elapsed;
+                var catchUpFrame = frames.Count > 0 && wait <= TimeSpan.Zero;
                 if (wait > TimeSpan.Zero)
                 {
                     await Task.Delay(wait);
@@ -1207,6 +1210,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 var bufferedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
                 ApplyPlcMonitorSnapshots(snapshots);
                 var uiPresentedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
+                var actualIntervalMilliseconds = previousRequestStartedTimestampUtc.HasValue
+                    ? (requestStartedTimestampUtc - previousRequestStartedTimestampUtc.Value).TotalMilliseconds
+                    : (double?)null;
+                var responseIntervalMilliseconds = previousResponseReceivedTimestampUtc.HasValue
+                    ? (responseReceivedTimestampUtc - previousResponseReceivedTimestampUtc.Value).TotalMilliseconds
+                    : (double?)null;
                 diagnostics.Add(new PlcAcquisitionFrameDiagnostics(
                     frameIndex,
                     plannedTimestampUtc,
@@ -1215,7 +1224,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     bufferedTimestampUtc,
                     uiPresentedTimestampUtc,
                     snapshots.Count,
-                    ClassifyAcquisitionFrame(plannedTimestampUtc, requestStartedTimestampUtc, intervalMilliseconds)));
+                    ClassifyAcquisitionFrame(plannedTimestampUtc, requestStartedTimestampUtc, intervalMilliseconds),
+                    actualIntervalMilliseconds,
+                    responseIntervalMilliseconds,
+                    (requestStartedTimestampUtc - plannedTimestampUtc).TotalMilliseconds,
+                    catchUpFrame));
+                previousRequestStartedTimestampUtc = requestStartedTimestampUtc;
+                previousResponseReceivedTimestampUtc = responseReceivedTimestampUtc;
                 // Absolute scheduling targets 0ms, N ms, 2N ms... instead of "read duration + delay".
                 nextDue += TimeSpan.FromMilliseconds(intervalMilliseconds);
             }

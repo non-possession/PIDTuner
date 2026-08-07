@@ -749,7 +749,13 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             bufferedMs: 211,
             uiMs: 220,
             snapshots: 1,
-            PlcAcquisitionFrameState.Late)));
+            PlcAcquisitionFrameState.Late) with
+        {
+            ActualIntervalMilliseconds = 158,
+            ResponseIntervalMilliseconds = 198,
+            PhaseErrorMilliseconds = 60,
+            CatchUpFrame = true
+        }));
 
     var summary = await session.StopAsync(CancellationToken.None);
 
@@ -790,6 +796,19 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertClose(1, reader.GetDouble(7), 0.001, "sqlite diagnostics read operation payload duration");
     AssertEqual(3, reader.GetInt32(8), "sqlite diagnostics read operation success count");
     AssertEqual(0, reader.GetInt32(9), "sqlite diagnostics read operation failure count");
+
+    await using var frameCommand = connection.CreateCommand();
+    frameCommand.CommandText = """
+        SELECT actual_interval_ms, response_interval_ms, phase_error_ms, catch_up_frame
+        FROM plc_sample_frames
+        WHERE frame_index = 1;
+        """;
+    await using var frameReader = await frameCommand.ExecuteReaderAsync();
+    AssertEqual(true, await frameReader.ReadAsync(), "sqlite diagnostics frame timing exists");
+    AssertClose(158, frameReader.GetDouble(0), 0.001, "sqlite diagnostics actual interval");
+    AssertClose(198, frameReader.GetDouble(1), 0.001, "sqlite diagnostics response interval");
+    AssertClose(60, frameReader.GetDouble(2), 0.001, "sqlite diagnostics phase error");
+    AssertEqual(1, frameReader.GetInt32(3), "sqlite diagnostics catch-up frame");
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
