@@ -454,6 +454,19 @@
                             Width="80"
                             Height="28"
                             Margin="0,0,16,0" />
+                    <TextBlock Text="诊断 min"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"
+                               Foreground="#374151" />
+                    <TextBox Text="{Binding PlcDiagnosticsDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
+                             Width="44"
+                             Height="28"
+                             Margin="0,0,6,0" />
+                    <Button Command="{Binding TogglePlcLiveDiagnosticsCommand}"
+                            Content="{Binding PlcLiveDiagnosticsButtonText}"
+                            Width="76"
+                            Height="28"
+                            Margin="0,0,16,0" />
                     <TextBlock Text="历史"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"
@@ -503,6 +516,10 @@
                             Margin="0,0,16,0" />
                     <TextBlock Text="{Binding PlcReplayStatus}"
                                VerticalAlignment="Center"
+                               Foreground="#374151" />
+                    <TextBlock Text="{Binding PlcLiveDiagnosticsStatus}"
+                               VerticalAlignment="Center"
+                               Margin="16,0,0,0"
                                Foreground="#374151" />
                   </WrapPanel>
                   <TextBlock x:Name="PlcTrendStatusTextBlock"

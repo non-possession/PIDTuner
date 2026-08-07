@@ -44,11 +44,15 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
+    ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
+    ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
     ("main view model reuses a plc session while live monitoring", MainViewModelReusesPlcSessionWhileLiveMonitoring),
+    ("main view model toggles live diagnostics while monitoring", MainViewModelTogglesLiveDiagnosticsWhileMonitoring),
+    ("main view model filters diagnostics frames before session start", MainViewModelFiltersDiagnosticsFramesBeforeSessionStart),
     ("main view model toggles live trend scrolling pause", MainViewModelTogglesLiveTrendScrollingPause),
     ("plc monitor row displays milliseconds", PlcMonitorRowDisplaysMilliseconds),
     ("main view model records one second plc monitor frames at fastest tag interval", MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInterval),
@@ -657,6 +661,89 @@ static async Task PlcAcquisitionEngineRejectsInvalidInterval()
     AssertEqual(0, reader.OpenSessionCount, "invalid interval should not open plc session");
 }
 
+static Task PlcTrendChartCalculatesLiveRetentionFromTimeWindows()
+{
+    var standardRetention = PlcTrendChartAdapter.CalculateLiveRetentionWindow(
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(100));
+    var slowSamplingRetention = PlcTrendChartAdapter.CalculateLiveRetentionWindow(
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromSeconds(5));
+
+    AssertEqual(TimeSpan.FromSeconds(310), standardRetention, "standard live trend retention window");
+    AssertEqual(TimeSpan.FromSeconds(325), slowSamplingRetention, "slow sampling live trend retention window");
+    return Task.CompletedTask;
+}
+
+static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
+{
+    var directory = CreateTestStorageDirectory();
+    var databasePath = Path.Combine(directory, "plc-diagnostics.sqlite");
+    var store = new SqlitePlcLiveDiagnosticsStore(databasePath);
+    var configuration = PlcProjectConfiguration.CreateDefault();
+    var started = DateTimeOffset.Parse("2026-08-07T10:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+    var tag = configuration.Tags[0];
+    var session = await store.StartSessionAsync(configuration, TimeSpan.FromMinutes(1), CancellationToken.None);
+
+    session.Enqueue(new PlcAcquisitionFrame(
+        new[]
+        {
+            new PlcTagSnapshot(
+                tag.Id,
+                tag.Name,
+                tag.Address,
+                12.5,
+                tag.Unit,
+                started,
+                "Good",
+                "Test")
+        },
+        DiagnosticFrame(
+            0,
+            started,
+            plannedMs: 0,
+            requestMs: 2,
+            responseMs: 12,
+            bufferedMs: 13,
+            uiMs: 20,
+            snapshots: 1,
+            PlcAcquisitionFrameState.Normal)));
+    session.Enqueue(new PlcAcquisitionFrame(
+        new[]
+        {
+            new PlcTagSnapshot(
+                tag.Id,
+                tag.Name,
+                tag.Address,
+                13.5,
+                tag.Unit,
+                started.AddMilliseconds(100),
+                "Good",
+                "Test")
+        },
+        DiagnosticFrame(
+            1,
+            started,
+            plannedMs: 100,
+            requestMs: 160,
+            responseMs: 210,
+            bufferedMs: 211,
+            uiMs: 220,
+            snapshots: 1,
+            PlcAcquisitionFrameState.Late)));
+
+    var summary = await session.StopAsync(CancellationToken.None);
+
+    AssertEqual(true, File.Exists(databasePath), "sqlite diagnostics database exists");
+    AssertEqual(2, summary.FrameCount, "sqlite diagnostics frame count");
+    AssertEqual(2, summary.SnapshotCount, "sqlite diagnostics snapshot count");
+    AssertEqual(1, summary.LateFrameCount, "sqlite diagnostics late frame count");
+    AssertClose(31, summary.AverageScheduleDelayMilliseconds, 0.001, "sqlite diagnostics schedule avg");
+    AssertClose(50, summary.MaxReadDurationMilliseconds, 0.001, "sqlite diagnostics max read");
+}
+
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
 {
     var store = new JsonPlcProjectConfigurationStore();
@@ -801,6 +888,7 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
 {
     var directory = CreateTestStorageDirectory();
     var reader = new SequencePlcTagSnapshotReader();
+    DateTimeOffset? lastTrendTimestamp = null;
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(),
         new JsonPidSampleFieldProfileStore(),
@@ -810,6 +898,7 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
     viewModel.PlcDefaultSamplingMilliseconds = 50;
     viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcSnapshotsApplied += (_, timestamp) => lastTrendTimestamp = timestamp;
 
     await viewModel.TogglePlcMonitoringAsync();
     await WaitUntilAsync(() => reader.SessionReadCount >= 3);
@@ -819,7 +908,67 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
     AssertEqual(1, reader.OpenSessionCount, "live monitor session open count");
     AssertEqual(true, reader.SessionReadCount >= 3, "live monitor session read count");
     AssertEqual(0, reader.ReadCount, "live monitor single read count");
+    AssertEqual(true, lastTrendTimestamp.HasValue, "live monitor planned trend timestamp");
     AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
+}
+
+static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var diagnosticsStore = new FakePlcLiveDiagnosticsStore();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        plcLiveDiagnosticsStore: diagnosticsStore,
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
+    viewModel.PlcDefaultSamplingMilliseconds = 50;
+    viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcDiagnosticsDurationMinutes = 20;
+
+    await viewModel.TogglePlcLiveDiagnosticsAsync();
+    AssertEqual(0, diagnosticsStore.StartCount, "diagnostics should not start without monitoring");
+    AssertEqual(10, viewModel.PlcDiagnosticsDurationMinutes, "diagnostics duration clamps to ten minutes");
+
+    await viewModel.TogglePlcMonitoringAsync();
+    await viewModel.TogglePlcLiveDiagnosticsAsync();
+    await WaitUntilAsync(() => reader.SessionReadCount >= 2);
+    await viewModel.TogglePlcLiveDiagnosticsAsync();
+    await viewModel.TogglePlcMonitoringAsync();
+
+    AssertEqual(1, diagnosticsStore.StartCount, "diagnostics start count");
+    AssertEqual(true, diagnosticsStore.LastSession is not null, "diagnostics session created");
+    AssertEqual(true, diagnosticsStore.LastSession!.StopCount >= 1, "diagnostics session stopped");
+    AssertContains("帧", viewModel.PlcLiveDiagnosticsStatus);
+}
+
+static async Task MainViewModelFiltersDiagnosticsFramesBeforeSessionStart()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var diagnosticsStore = new FakePlcLiveDiagnosticsStore(DateTimeOffset.UtcNow.AddMinutes(1));
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        plcLiveDiagnosticsStore: diagnosticsStore,
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
+    viewModel.PlcDefaultSamplingMilliseconds = 50;
+    viewModel.PlcMinimumSamplingMilliseconds = 50;
+
+    await viewModel.TogglePlcMonitoringAsync();
+    await viewModel.TogglePlcLiveDiagnosticsAsync();
+    await WaitUntilAsync(() => reader.SessionReadCount >= 2);
+    await viewModel.TogglePlcLiveDiagnosticsAsync();
+    await viewModel.TogglePlcMonitoringAsync();
+
+    AssertEqual(1, diagnosticsStore.StartCount, "future diagnostics start count");
+    AssertEqual(0, diagnosticsStore.LastSession!.EnqueueCount, "future diagnostics should ignore frames before session start");
 }
 
 static async Task MainViewModelTogglesLiveTrendScrollingPause()
@@ -942,7 +1091,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     var resetCount = 0;
     var appliedCount = 0;
     loader.PlcTrendResetRequested += () => resetCount++;
-    loader.PlcSnapshotsApplied += _ => appliedCount++;
+    loader.PlcSnapshotsApplied += (_, _) => appliedCount++;
 
     await loader.LoadPlcRecordingAsync();
 
@@ -1361,5 +1510,62 @@ file sealed class SequencePlcTagSnapshotReader : IPlcTagSnapshotReader, IPlcTagS
         {
             return ValueTask.CompletedTask;
         }
+    }
+}
+
+file sealed class FakePlcLiveDiagnosticsStore(DateTimeOffset? startedAtUtc = null) : IPlcLiveDiagnosticsStore
+{
+    public int StartCount { get; private set; }
+
+    public FakePlcLiveDiagnosticsSession? LastSession { get; private set; }
+
+    public Task<IPlcLiveDiagnosticsSession> StartSessionAsync(
+        PlcProjectConfiguration configuration,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
+        StartCount++;
+        LastSession = new FakePlcLiveDiagnosticsSession(duration, startedAtUtc);
+        return Task.FromResult<IPlcLiveDiagnosticsSession>(LastSession);
+    }
+}
+
+file sealed class FakePlcLiveDiagnosticsSession(TimeSpan duration, DateTimeOffset? startedAtUtc) : IPlcLiveDiagnosticsSession
+{
+    public int EnqueueCount { get; private set; }
+
+    public int StopCount { get; private set; }
+
+    public Guid SessionId { get; } = Guid.NewGuid();
+
+    public string DatabasePath { get; } = Path.Combine(Path.GetTempPath(), "fake-plc-live-diagnostics.sqlite");
+
+    public DateTimeOffset StartedAtUtc { get; } = startedAtUtc ?? DateTimeOffset.UtcNow;
+
+    public DateTimeOffset EndsAtUtc { get; } = (startedAtUtc ?? DateTimeOffset.UtcNow).Add(duration);
+
+    public void Enqueue(PlcAcquisitionFrame frame)
+    {
+        EnqueueCount++;
+    }
+
+    public Task<PlcLiveDiagnosticsSummary> StopAsync(CancellationToken cancellationToken)
+    {
+        StopCount++;
+        return Task.FromResult(new PlcLiveDiagnosticsSummary(
+            SessionId,
+            DatabasePath,
+            EnqueueCount,
+            EnqueueCount,
+            1,
+            2,
+            3,
+            4,
+            0));
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 }

@@ -13,7 +13,9 @@ namespace PIDTuner.Desktop.Services;
 
 public sealed class PlcTrendChartAdapter
 {
-    private const int MaxBufferedPointsPerTag = 6000;
+    private static readonly TimeSpan MinimumLiveRetentionPadding = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultUiRefreshInterval = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan DefaultLiveSamplingInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly WpfPlot _plot;
     private readonly Dictionary<Guid, List<PlcTrendPoint>> _pointsByTag = [];
@@ -30,6 +32,9 @@ public sealed class PlcTrendChartAdapter
     ];
 
     private TimeSpan _visibleWindow = TimeSpan.FromSeconds(30);
+    private TimeSpan _maxLiveTrendWindow = TimeSpan.FromMinutes(5);
+    private TimeSpan _uiRefreshInterval = DefaultUiRefreshInterval;
+    private TimeSpan _liveSamplingInterval = DefaultLiveSamplingInterval;
     private bool _showFullHistory;
     private bool _isLiveScrollingPaused;
 
@@ -43,6 +48,24 @@ public sealed class PlcTrendChartAdapter
     {
         get => _visibleWindow;
         set => _visibleWindow = value < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : value;
+    }
+
+    public TimeSpan MaxLiveTrendWindow
+    {
+        get => _maxLiveTrendWindow;
+        set => _maxLiveTrendWindow = value < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : value;
+    }
+
+    public TimeSpan UiRefreshInterval
+    {
+        get => _uiRefreshInterval;
+        set => _uiRefreshInterval = value <= TimeSpan.Zero ? DefaultUiRefreshInterval : value;
+    }
+
+    public TimeSpan LiveSamplingInterval
+    {
+        get => _liveSamplingInterval;
+        set => _liveSamplingInterval = value <= TimeSpan.Zero ? DefaultLiveSamplingInterval : value;
     }
 
     public bool ShowFullHistory
@@ -67,7 +90,8 @@ public sealed class PlcTrendChartAdapter
 
     public void AppendSnapshots(
         IReadOnlyList<PlcTagSnapshot> snapshots,
-        IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
+        IReadOnlyList<PlcTagMonitorViewModel> monitorTags,
+        DateTimeOffset? timestampOverride = null)
     {
         foreach (var snapshot in snapshots)
         {
@@ -82,14 +106,11 @@ public sealed class PlcTrendChartAdapter
                 _pointsByTag.Add(snapshot.TagId, points);
             }
 
-            points.Add(new PlcTrendPoint(snapshot.Timestamp, value));
-            while (points.Count > MaxBufferedPointsPerTag)
-            {
-                points.RemoveAt(0);
-            }
+            points.Add(new PlcTrendPoint(timestampOverride ?? snapshot.Timestamp, value));
         }
 
         RemoveInactiveTags(monitorTags);
+        TrimLivePoints();
         if (IsLiveScrollingPaused && !ShowFullHistory)
         {
             return;
@@ -152,6 +173,17 @@ public sealed class PlcTrendChartAdapter
     {
         _plot.Plot.Axes.AutoScaleY();
         _plot.Refresh();
+    }
+
+    public static TimeSpan CalculateLiveRetentionWindow(
+        TimeSpan maxLiveTrendWindow,
+        TimeSpan uiRefreshInterval,
+        TimeSpan liveSamplingInterval)
+    {
+        var padding = Max(
+            MinimumLiveRetentionPadding,
+            Max(uiRefreshInterval * 2, liveSamplingInterval * 5));
+        return EnsurePositive(maxLiveTrendWindow, TimeSpan.FromSeconds(1)) + padding;
     }
 
     public string BuildNearestPointSummary(
@@ -256,6 +288,40 @@ public sealed class PlcTrendChartAdapter
         }
     }
 
+    private void TrimLivePoints()
+    {
+        if (ShowFullHistory)
+        {
+            return;
+        }
+
+        var range = GetTimestampRange();
+        if (range is null)
+        {
+            return;
+        }
+
+        var retentionWindow = CalculateLiveRetentionWindow(
+            MaxLiveTrendWindow,
+            UiRefreshInterval,
+            LiveSamplingInterval);
+        var cutoff = range.Value.Latest - retentionWindow;
+        foreach (var points in _pointsByTag.Values)
+        {
+            var removeCount = points.FindIndex(point => point.Timestamp >= cutoff);
+            if (removeCount < 0)
+            {
+                points.Clear();
+                continue;
+            }
+
+            if (removeCount > 0)
+            {
+                points.RemoveRange(0, removeCount);
+            }
+        }
+    }
+
     private (DateTimeOffset Earliest, DateTimeOffset Latest)? GetTimestampRange()
     {
         var points = _pointsByTag.Values
@@ -265,6 +331,10 @@ public sealed class PlcTrendChartAdapter
 
         return points.Length == 0 ? null : (points.Min(), points.Max());
     }
+
+    private static TimeSpan Max(TimeSpan left, TimeSpan right) => left >= right ? left : right;
+
+    private static TimeSpan EnsurePositive(TimeSpan value, TimeSpan fallback) => value > TimeSpan.Zero ? value : fallback;
 
     private readonly record struct PlcTrendPoint(DateTimeOffset Timestamp, double Value);
 }

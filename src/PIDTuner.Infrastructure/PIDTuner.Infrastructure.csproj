@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.4" />
     <ProjectReference Include="..\PIDTuner.Application\PIDTuner.Application.csproj" />
     <ProjectReference Include="..\PIDTuner.Domain\PIDTuner.Domain.csproj" />
   </ItemGroup>

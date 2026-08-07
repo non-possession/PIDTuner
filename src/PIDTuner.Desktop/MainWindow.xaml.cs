@@ -9,6 +9,8 @@ namespace PIDTuner.Desktop;
 
 public partial class MainWindow : Window
 {
+    private static readonly TimeSpan MaxLiveTrendWindow = TimeSpan.FromMinutes(5);
+
     private readonly MainWindowViewModel _viewModel;
     private readonly PlcTrendChartAdapter _plcTrendChartAdapter;
 
@@ -17,6 +19,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = (MainWindowViewModel)DataContext;
         _plcTrendChartAdapter = new PlcTrendChartAdapter(PlcTrendPlot);
+        ConfigurePlcTrendRetention();
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
         _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -31,11 +34,14 @@ public partial class MainWindow : Window
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
-    private void ApplyPlcTrendSnapshots(IReadOnlyList<PlcTagSnapshot> snapshots)
+    private void ApplyPlcTrendSnapshots(
+        IReadOnlyList<PlcTagSnapshot> snapshots,
+        DateTimeOffset? trendTimestamp)
     {
+        ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
-        _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.PlcMonitorTags, trendTimestamp);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -110,6 +116,7 @@ public partial class MainWindow : Window
     {
         var wasHistoricalTrendMode = _viewModel.IsPlcHistoricalTrendMode;
         _viewModel.UsePlcLiveTrendMode();
+        ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.VisibleWindow = window;
         _plcTrendChartAdapter.ShowFullHistory = false;
         _plcTrendChartAdapter.IsLiveScrollingPaused = false;
@@ -154,5 +161,14 @@ public partial class MainWindow : Window
         return window.TotalMinutes >= 1
             ? $"{window.TotalMinutes:0.#}min"
             : $"{window.TotalSeconds:0.#}s";
+    }
+
+    private void ConfigurePlcTrendRetention()
+    {
+        _plcTrendChartAdapter.MaxLiveTrendWindow = MaxLiveTrendWindow;
+        _plcTrendChartAdapter.UiRefreshInterval =
+            TimeSpan.FromMilliseconds(MainWindowViewModel.LiveMonitorUiRefreshMilliseconds);
+        _plcTrendChartAdapter.LiveSamplingInterval =
+            TimeSpan.FromMilliseconds(_viewModel.CurrentPlcAcquisitionIntervalMilliseconds);
     }
 }

@@ -28,7 +28,7 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private const int LiveMonitorUiRefreshMilliseconds = 250;
+    public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
@@ -45,13 +45,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidParameterSetRepository _parameterSetRepository;
     private readonly IPlcConnectivityProbe _plcConnectivityProbe;
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
+    private readonly IPlcLiveDiagnosticsStore _plcLiveDiagnosticsStore;
     private readonly PidParameterSetExtractor _parameterSetExtractor = new();
     private readonly string _testSessionStorageDirectory;
     private readonly string _plcRecordingStorageDirectory;
     private readonly DispatcherTimer _monitorTimer = new();
     private readonly DispatcherTimer _plcReplayTimer = new();
+    private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private readonly PlcSampleBuffer _livePlcSampleBuffer = new();
     private readonly PlcAcquisitionEngine _livePlcAcquisitionEngine;
+    private IPlcLiveDiagnosticsSession? _plcLiveDiagnosticsSession;
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _loadedPlcReplayFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private int _plcReplayNextFrameIndex;
@@ -130,11 +133,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcTrendModeStatus = "当前趋势：实时";
     private string _plcHistoricalRangeStartText = string.Empty;
     private string _plcHistoricalRangeEndText = string.Empty;
+    private string _plcLiveDiagnosticsStatus = "实时诊断：尚未启动。";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
     private bool _isPlcReplayRunning;
     private bool _isPlcHistoricalTrendMode;
     private bool _isPlcLiveTrendPaused;
+    private bool _isPlcLiveDiagnosticsRunning;
+    private int _currentPlcAcquisitionIntervalMilliseconds = PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
+    private int _plcDiagnosticsDurationMinutes = 10;
 
     private string _parameterSetStatus = "尚未保存参数方案。";
 
@@ -162,6 +169,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IPidSampleRepository? pidSampleRepository = null,
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
         IPidParameterSetRepository? parameterSetRepository = null,
+        IPlcLiveDiagnosticsStore? plcLiveDiagnosticsStore = null,
         string? testSessionStorageDirectory = null,
         string? plcRecordingStorageDirectory = null)
     {
@@ -182,9 +190,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
         _parameterSetRepository = parameterSetRepository
             ?? new JsonPidParameterSetRepository(Path.Combine(FindRepositoryRoot(), "local", "parameter-sets"));
+        _plcLiveDiagnosticsStore = plcLiveDiagnosticsStore
+            ?? new SqlitePlcLiveDiagnosticsStore(Path.Combine(
+                FindRepositoryRoot(),
+                "local",
+                "plc-diagnostics",
+                "plc-live-diagnostics.sqlite"));
         _livePlcAcquisitionEngine = new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync);
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
         _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
+        _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
+        _plcLiveDiagnosticsTimer.Tick += async (_, _) => await StopExpiredPlcLiveDiagnosticsAsync();
         RefreshFieldDefinitions();
         RefreshTagDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
@@ -195,6 +211,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CheckPlcCommunicationCommand = new AsyncCommand(CheckPlcCommunicationAsync);
         RefreshPlcMonitorCommand = new AsyncCommand(RefreshPlcMonitorAsync);
         TogglePlcMonitoringCommand = new AsyncCommand(TogglePlcMonitoringAsync);
+        TogglePlcLiveDiagnosticsCommand = new AsyncCommand(TogglePlcLiveDiagnosticsAsync);
         RecordPlcOneSecondCommand = new AsyncCommand(RecordPlcOneSecondAsync);
         LoadPlcRecordingCommand = new AsyncCommand(LoadPlcRecordingAsync);
         ShowPlcLiveTrendCommand = new AsyncCommand(ShowPlcLiveTrendAsync);
@@ -231,7 +248,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public event Action<IReadOnlyList<PlcTagSnapshot>>? PlcSnapshotsApplied;
+    public event Action<IReadOnlyList<PlcTagSnapshot>, DateTimeOffset?>? PlcSnapshotsApplied;
 
     public event Action? PlcTrendResetRequested;
 
@@ -333,6 +350,32 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _plcAcquisitionDiagnosticsStatus, value);
     }
 
+    public string PlcLiveDiagnosticsStatus
+    {
+        get => _plcLiveDiagnosticsStatus;
+        private set => SetProperty(ref _plcLiveDiagnosticsStatus, value);
+    }
+
+    public int PlcDiagnosticsDurationMinutes
+    {
+        get => _plcDiagnosticsDurationMinutes;
+        set => SetProperty(ref _plcDiagnosticsDurationMinutes, Math.Clamp(value, 1, 10));
+    }
+
+    public bool IsPlcLiveDiagnosticsRunning
+    {
+        get => _isPlcLiveDiagnosticsRunning;
+        private set
+        {
+            if (SetProperty(ref _isPlcLiveDiagnosticsRunning, value))
+            {
+                OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
+            }
+        }
+    }
+
+    public string PlcLiveDiagnosticsButtonText => IsPlcLiveDiagnosticsRunning ? "停止诊断" : "启动诊断";
+
     public string PlcReplayStatus
     {
         get => _plcReplayStatus;
@@ -376,6 +419,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public string PlcLiveTrendPauseButtonText => IsPlcLiveTrendPaused ? "恢复滚动" : "暂停滚动";
+
+    public int CurrentPlcAcquisitionIntervalMilliseconds
+    {
+        get => _currentPlcAcquisitionIntervalMilliseconds;
+        private set => SetProperty(ref _currentPlcAcquisitionIntervalMilliseconds, value);
+    }
 
     public string PlcReplaySpeedText => $"{_plcReplaySpeedMultiplier:0.##}x";
 
@@ -689,6 +738,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand TogglePlcMonitoringCommand { get; }
 
+    public ICommand TogglePlcLiveDiagnosticsCommand { get; }
+
     public ICommand RecordPlcOneSecondCommand { get; }
 
     public ICommand LoadPlcRecordingCommand { get; }
@@ -858,7 +909,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private void ApplyPlcMonitorSnapshots(IReadOnlyList<PlcTagSnapshot> snapshots)
+    private void ApplyPlcMonitorSnapshots(
+        IReadOnlyList<PlcTagSnapshot> snapshots,
+        DateTimeOffset? trendTimestamp = null)
     {
         foreach (var snapshot in snapshots)
         {
@@ -882,7 +935,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
-        PlcSnapshotsApplied?.Invoke(snapshots);
+        PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
     }
 
     private void ApplyBufferedLiveMonitorFrames()
@@ -896,8 +949,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var diagnostics = new List<PlcAcquisitionFrameDiagnostics>(frames.Count);
         foreach (var frame in frames)
         {
-            ApplyPlcMonitorSnapshots(frame.Snapshots);
-            diagnostics.Add(frame.Diagnostics with { UiPresentedTimestampUtc = DateTimeOffset.UtcNow });
+            var presentedDiagnostics = frame.Diagnostics with { UiPresentedTimestampUtc = DateTimeOffset.UtcNow };
+            ApplyPlcMonitorSnapshots(frame.Snapshots, presentedDiagnostics.PlannedTimestampUtc);
+            diagnostics.Add(presentedDiagnostics);
+            EnqueuePlcLiveDiagnosticsFrame(frame with { Diagnostics = presentedDiagnostics });
         }
 
         var lastFrame = frames[^1];
@@ -906,6 +961,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             : $"实时采集中，已应用 {frames.Count} 帧，最新 {lastFrame.Snapshots.Count} 个点位，数据源：{lastFrame.Snapshots[0].Source}。";
         PlcAcquisitionDiagnosticsStatus = FormatAcquisitionDiagnosticsSummary(
             PlcAcquisitionDiagnostics.Summarize(diagnostics));
+    }
+
+    private void EnqueuePlcLiveDiagnosticsFrame(PlcAcquisitionFrame frame)
+    {
+        var session = _plcLiveDiagnosticsSession;
+        if (session is null || frame.Diagnostics.PlannedTimestampUtc < session.StartedAtUtc)
+        {
+            return;
+        }
+
+        session.Enqueue(frame);
     }
 
     private static int ResolveRecordingIntervalMilliseconds(
@@ -964,12 +1030,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             summary.LateFrameCount);
     }
 
+    private static string FormatPlcLiveDiagnosticsSummary(string reason, PlcLiveDiagnosticsSummary summary)
+    {
+        var prefix = string.IsNullOrWhiteSpace(reason) ? "实时诊断" : reason;
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "{0} 帧 {1}，样本 {2}，调度延迟 avg {3:0.#} ms / max {4:0.#} ms，读取耗时 avg {5:0.#} ms / max {6:0.#} ms，迟到 {7} 帧，数据库 {8}",
+            prefix,
+            summary.FrameCount,
+            summary.SnapshotCount,
+            summary.AverageScheduleDelayMilliseconds,
+            summary.MaxScheduleDelayMilliseconds,
+            summary.AverageReadDurationMilliseconds,
+            summary.MaxReadDurationMilliseconds,
+            summary.LateFrameCount,
+            summary.DatabasePath);
+    }
+
     private async Task StopLiveMonitoringAsync()
     {
         _monitorTimer.Stop();
         IsPlcMonitoring = false;
         await _livePlcAcquisitionEngine.StopAsync();
         _livePlcSampleBuffer.Clear();
+        await StopPlcLiveDiagnosticsAsync("实时监控已停止，诊断写入已关闭。");
     }
 
     public async Task TogglePlcMonitoringAsync()
@@ -984,6 +1068,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         StopPlcReplay();
         var configuration = BuildPlcConfigurationFromForm();
         var acquisitionIntervalMilliseconds = ResolveMonitoringIntervalMilliseconds(configuration);
+        CurrentPlcAcquisitionIntervalMilliseconds = acquisitionIntervalMilliseconds;
         _livePlcSampleBuffer.Clear();
         await _livePlcAcquisitionEngine.StartAsync(
             configuration,
@@ -994,6 +1079,79 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _monitorTimer.Start();
         IsPlcMonitoring = true;
         PlcMonitorStatus = $"点位监控运行中，采集周期 {acquisitionIntervalMilliseconds} ms，界面刷新 {LiveMonitorUiRefreshMilliseconds} ms。";
+    }
+
+    public async Task TogglePlcLiveDiagnosticsAsync()
+    {
+        if (IsPlcLiveDiagnosticsRunning)
+        {
+            await StopPlcLiveDiagnosticsAsync("诊断已手动停止。");
+            return;
+        }
+
+        if (!IsPlcMonitoring)
+        {
+            Notify("无法启动实时诊断", "请先启动实时监控。", "Warning");
+            return;
+        }
+
+        try
+        {
+            var duration = TimeSpan.FromMinutes(PlcDiagnosticsDurationMinutes);
+            _plcLiveDiagnosticsSession = await _plcLiveDiagnosticsStore.StartSessionAsync(
+                BuildPlcConfigurationFromForm(),
+                duration,
+                CancellationToken.None);
+            IsPlcLiveDiagnosticsRunning = true;
+            _plcLiveDiagnosticsTimer.Start();
+            PlcLiveDiagnosticsStatus =
+                $"实时诊断运行中：{PlcDiagnosticsDurationMinutes} min，到期 {FormatPlcHistoricalRangeTimestamp(_plcLiveDiagnosticsSession.EndsAtUtc)}，数据库 {_plcLiveDiagnosticsSession.DatabasePath}";
+            Notify("实时诊断已启动", _plcLiveDiagnosticsSession.DatabasePath, "Info");
+        }
+        catch (Exception exception)
+        {
+            Notify("实时诊断启动失败", exception.Message, "Error");
+        }
+    }
+
+    private async Task StopExpiredPlcLiveDiagnosticsAsync()
+    {
+        if (_plcLiveDiagnosticsSession is null || DateTimeOffset.UtcNow < _plcLiveDiagnosticsSession.EndsAtUtc)
+        {
+            return;
+        }
+
+        await StopPlcLiveDiagnosticsAsync("诊断时长已到，数据库写入已自动关闭。");
+    }
+
+    private async Task StopPlcLiveDiagnosticsAsync(string reason)
+    {
+        if (_plcLiveDiagnosticsSession is null)
+        {
+            IsPlcLiveDiagnosticsRunning = false;
+            _plcLiveDiagnosticsTimer.Stop();
+            return;
+        }
+
+        var session = _plcLiveDiagnosticsSession;
+        _plcLiveDiagnosticsSession = null;
+        IsPlcLiveDiagnosticsRunning = false;
+        _plcLiveDiagnosticsTimer.Stop();
+
+        try
+        {
+            var summary = await session.StopAsync(CancellationToken.None);
+            PlcLiveDiagnosticsStatus = FormatPlcLiveDiagnosticsSummary(reason, summary);
+            Notify(
+                "实时诊断已完成",
+                $"{summary.DatabasePath}；{FormatPlcLiveDiagnosticsSummary(string.Empty, summary)}",
+                "Success");
+        }
+        catch (Exception exception)
+        {
+            PlcLiveDiagnosticsStatus = $"实时诊断停止失败：{exception.Message}";
+            Notify("实时诊断停止失败", exception.Message, "Error");
+        }
     }
 
     public async Task RecordPlcOneSecondAsync()
