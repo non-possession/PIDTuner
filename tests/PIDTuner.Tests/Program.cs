@@ -46,6 +46,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 db block parser decodes sparse real offsets", S7DbBlockParserDecodesSparseRealOffsets),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
+    ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
     ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
     ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
@@ -698,6 +699,26 @@ static async Task PlcAcquisitionEngineRejectsInvalidInterval()
         "plc acquisition engine zero interval");
 
     AssertEqual(0, reader.OpenSessionCount, "invalid interval should not open plc session");
+}
+
+static Task PlcAcquisitionEngineSkipsOverdueScheduleSlots()
+{
+    var interval = TimeSpan.FromMilliseconds(100);
+
+    AssertEqual(
+        TimeSpan.FromMilliseconds(100),
+        PlcAcquisitionEngine.AdvanceNextDue(TimeSpan.Zero, TimeSpan.FromMilliseconds(20), interval),
+        "on-time frame advances to the next regular slot");
+    AssertEqual(
+        TimeSpan.FromMilliseconds(200),
+        PlcAcquisitionEngine.AdvanceNextDue(TimeSpan.Zero, TimeSpan.FromMilliseconds(125), interval),
+        "slow first frame skips the already overdue 100 ms slot");
+    AssertEqual(
+        TimeSpan.FromMilliseconds(500),
+        PlcAcquisitionEngine.AdvanceNextDue(TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(405), interval),
+        "late frame advances to the first future schedule slot");
+
+    return Task.CompletedTask;
 }
 
 static Task PlcTrendChartCalculatesLiveRetentionFromTimeWindows()

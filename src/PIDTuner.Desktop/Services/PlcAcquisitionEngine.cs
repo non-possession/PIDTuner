@@ -121,8 +121,25 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
             previousRequestStartedTimestampUtc = requestStartedTimestampUtc;
             previousResponseReceivedTimestampUtc = responseReceivedTimestampUtc;
             frameIndex++;
-            nextDue += interval;
+            nextDue = AdvanceNextDue(nextDue, stopwatch.Elapsed, interval);
         }
+    }
+
+    public static TimeSpan AdvanceNextDue(TimeSpan currentDue, TimeSpan elapsed, TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "PLC acquisition interval must be greater than zero.");
+        }
+
+        var nextDue = currentDue + interval;
+        if (elapsed < nextDue)
+        {
+            return nextDue;
+        }
+
+        var missedIntervals = ((elapsed - nextDue).Ticks / interval.Ticks) + 1;
+        return nextDue + TimeSpan.FromTicks(missedIntervals * interval.Ticks);
     }
 
     private static PlcAcquisitionFrameState ClassifyFrame(
