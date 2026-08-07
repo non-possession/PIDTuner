@@ -720,6 +720,9 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
                 3,
                 started.AddMilliseconds(2),
                 started.AddMilliseconds(12),
+                1.5,
+                7.5,
+                1.0,
                 3,
                 0,
                 null)
@@ -767,10 +770,13 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             target,
             address_count,
             duration_ms,
+            send_duration_ms,
+            receive_header_duration_ms,
+            receive_payload_duration_ms,
             success_count,
             failure_count
         FROM plc_read_operations
-        GROUP BY operation_kind, target, address_count, duration_ms, success_count, failure_count;
+        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count;
         """;
     await using var reader = await command.ExecuteReaderAsync();
     AssertEqual(true, await reader.ReadAsync(), "sqlite diagnostics read operation exists");
@@ -779,8 +785,11 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertEqual("DB8.DBB6-DBB48", reader.GetString(2), "sqlite diagnostics read operation target");
     AssertEqual(3, reader.GetInt32(3), "sqlite diagnostics read operation address count");
     AssertClose(10, reader.GetDouble(4), 0.001, "sqlite diagnostics read operation duration");
-    AssertEqual(3, reader.GetInt32(5), "sqlite diagnostics read operation success count");
-    AssertEqual(0, reader.GetInt32(6), "sqlite diagnostics read operation failure count");
+    AssertClose(1.5, reader.GetDouble(5), 0.001, "sqlite diagnostics read operation send duration");
+    AssertClose(7.5, reader.GetDouble(6), 0.001, "sqlite diagnostics read operation header duration");
+    AssertClose(1, reader.GetDouble(7), 0.001, "sqlite diagnostics read operation payload duration");
+    AssertEqual(3, reader.GetInt32(8), "sqlite diagnostics read operation success count");
+    AssertEqual(0, reader.GetInt32(9), "sqlite diagnostics read operation failure count");
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()

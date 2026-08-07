@@ -111,6 +111,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 request_started_timestamp_utc TEXT NOT NULL,
                 response_received_timestamp_utc TEXT NOT NULL,
                 duration_ms REAL NOT NULL,
+                send_duration_ms REAL NOT NULL DEFAULT 0,
+                receive_header_duration_ms REAL NOT NULL DEFAULT 0,
+                receive_payload_duration_ms REAL NOT NULL DEFAULT 0,
                 success_count INTEGER NOT NULL,
                 failure_count INTEGER NOT NULL,
                 error TEXT NULL,
@@ -127,6 +130,40 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 ON plc_read_operations(session_id, frame_index);
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureReadOperationTimingColumnsAsync(connection, cancellationToken);
+    }
+
+    private static async Task EnsureReadOperationTimingColumnsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = "PRAGMA table_info(plc_read_operations);";
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        foreach (var column in new[]
+        {
+            "send_duration_ms",
+            "receive_header_duration_ms",
+            "receive_payload_duration_ms"
+        })
+        {
+            if (existingColumns.Contains(column))
+            {
+                continue;
+            }
+
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE plc_read_operations ADD COLUMN {column} REAL NOT NULL DEFAULT 0;";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task InsertSessionAsync(
@@ -417,6 +454,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     request_started_timestamp_utc,
                     response_received_timestamp_utc,
                     duration_ms,
+                    send_duration_ms,
+                    receive_header_duration_ms,
+                    receive_payload_duration_ms,
                     success_count,
                     failure_count,
                     error)
@@ -430,6 +470,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $request_started_timestamp_utc,
                     $response_received_timestamp_utc,
                     $duration_ms,
+                    $send_duration_ms,
+                    $receive_header_duration_ms,
+                    $receive_payload_duration_ms,
                     $success_count,
                     $failure_count,
                     $error);
@@ -443,6 +486,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             command.Parameters.AddWithValue("$request_started_timestamp_utc", FormatTimestamp(operation.RequestStartedTimestampUtc));
             command.Parameters.AddWithValue("$response_received_timestamp_utc", FormatTimestamp(operation.ResponseReceivedTimestampUtc));
             command.Parameters.AddWithValue("$duration_ms", operation.DurationMilliseconds);
+            command.Parameters.AddWithValue("$send_duration_ms", operation.SendDurationMilliseconds);
+            command.Parameters.AddWithValue("$receive_header_duration_ms", operation.ReceiveHeaderDurationMilliseconds);
+            command.Parameters.AddWithValue("$receive_payload_duration_ms", operation.ReceivePayloadDurationMilliseconds);
             command.Parameters.AddWithValue("$success_count", operation.SuccessCount);
             command.Parameters.AddWithValue("$failure_count", operation.FailureCount);
             command.Parameters.AddWithValue("$error", operation.Error is null ? DBNull.Value : operation.Error);

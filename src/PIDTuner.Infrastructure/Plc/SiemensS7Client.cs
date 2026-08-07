@@ -27,6 +27,11 @@ internal sealed record S7BatchReadResult(
     IReadOnlyList<S7ReadResult> Results,
     IReadOnlyList<PlcReadOperationDiagnostics> Operations);
 
+internal sealed record TimedS7Response(
+    byte[] Bytes,
+    double ReceiveHeaderDurationMilliseconds,
+    double ReceivePayloadDurationMilliseconds);
+
 /// <summary>
 /// Minimal Siemens S7 TCP client for DB reads. It owns the socket/session handshake and exposes
 /// typed numeric and batched reads to higher-level snapshot readers.
@@ -146,14 +151,26 @@ public sealed class SiemensS7Client : IAsyncDisposable
             IReadOnlyList<S7ReadResult> chunkResults;
             string? error = null;
             var request = BuildReadRequest(chunk);
+            var sendStartedAtUtc = DateTimeOffset.UtcNow;
+            var sendFinishedAtUtc = sendStartedAtUtc;
+            var receiveHeaderDurationMilliseconds = 0d;
+            var receivePayloadDurationMilliseconds = 0d;
             try
             {
                 await SendAsync(request, cancellationToken);
-                var response = await ReceiveAsync(cancellationToken);
-                chunkResults = ExtractReadResults(response, chunk);
+                sendFinishedAtUtc = DateTimeOffset.UtcNow;
+                var response = await ReceiveTimedAsync(cancellationToken);
+                receiveHeaderDurationMilliseconds = response.ReceiveHeaderDurationMilliseconds;
+                receivePayloadDurationMilliseconds = response.ReceivePayloadDurationMilliseconds;
+                chunkResults = ExtractReadResults(response.Bytes, chunk);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                if (sendFinishedAtUtc == sendStartedAtUtc)
+                {
+                    sendFinishedAtUtc = DateTimeOffset.UtcNow;
+                }
+
                 error = exception.Message;
                 chunkResults = chunk
                     .Select(address => new S7ReadResult(address, null, error))
@@ -169,6 +186,9 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 chunk.Length,
                 startedAtUtc,
                 receivedAtUtc,
+                (sendFinishedAtUtc - sendStartedAtUtc).TotalMilliseconds,
+                receiveHeaderDurationMilliseconds,
+                receivePayloadDurationMilliseconds,
                 chunkResults.Count(result => result.Error is null),
                 chunkResults.Count(result => result.Error is not null),
                 error));
@@ -201,13 +221,20 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
     private async Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
     {
+        return (await ReceiveTimedAsync(cancellationToken)).Bytes;
+    }
+
+    private async Task<TimedS7Response> ReceiveTimedAsync(CancellationToken cancellationToken)
+    {
         if (_stream is null)
         {
             throw new InvalidOperationException("S7 client is not connected.");
         }
 
         var header = new byte[4];
+        var headerStartedAtUtc = DateTimeOffset.UtcNow;
         await _stream.ReadExactlyAsync(header, cancellationToken);
+        var headerReceivedAtUtc = DateTimeOffset.UtcNow;
         var length = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2, 2));
         if (length < 4)
         {
@@ -216,8 +243,13 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
         var response = new byte[length];
         header.CopyTo(response, 0);
+        var payloadStartedAtUtc = DateTimeOffset.UtcNow;
         await _stream.ReadExactlyAsync(response.AsMemory(4), cancellationToken);
-        return response;
+        var payloadReceivedAtUtc = DateTimeOffset.UtcNow;
+        return new TimedS7Response(
+            response,
+            (headerReceivedAtUtc - headerStartedAtUtc).TotalMilliseconds,
+            (payloadReceivedAtUtc - payloadStartedAtUtc).TotalMilliseconds);
     }
 
     private static byte[] BuildConnectionRequest(int rack, int slot)

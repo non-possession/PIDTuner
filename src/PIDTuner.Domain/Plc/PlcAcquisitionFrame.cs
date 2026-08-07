@@ -20,6 +20,9 @@ public sealed record PlcReadOperationDiagnostics(
     int AddressCount,
     DateTimeOffset RequestStartedTimestampUtc,
     DateTimeOffset ResponseReceivedTimestampUtc,
+    double SendDurationMilliseconds,
+    double ReceiveHeaderDurationMilliseconds,
+    double ReceivePayloadDurationMilliseconds,
     int SuccessCount,
     int FailureCount,
     string? Error)
