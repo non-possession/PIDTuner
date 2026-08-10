@@ -93,22 +93,7 @@ public sealed class PlcTrendChartAdapter
         IReadOnlyList<PlcTagMonitorViewModel> monitorTags,
         DateTimeOffset? timestampOverride = null)
     {
-        foreach (var snapshot in snapshots)
-        {
-            if (snapshot.Value is not double value || double.IsNaN(value) || double.IsInfinity(value))
-            {
-                continue;
-            }
-
-            if (!_pointsByTag.TryGetValue(snapshot.TagId, out var points))
-            {
-                points = [];
-                _pointsByTag.Add(snapshot.TagId, points);
-            }
-
-            points.Add(new PlcTrendPoint(timestampOverride ?? snapshot.Timestamp, value));
-        }
-
+        AppendPoints(snapshots, timestampOverride);
         RemoveInactiveTags(monitorTags);
         TrimLivePoints();
         if (IsLiveScrollingPaused && !ShowFullHistory)
@@ -116,6 +101,20 @@ public sealed class PlcTrendChartAdapter
             return;
         }
 
+        Render(monitorTags);
+    }
+
+    public void AppendSnapshotFrames(
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames,
+        IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
+    {
+        foreach (var frame in frames)
+        {
+            AppendPoints(frame, timestampOverride: null);
+        }
+
+        RemoveInactiveTags(monitorTags);
+        TrimLivePoints();
         Render(monitorTags);
     }
 
@@ -324,6 +323,27 @@ public sealed class PlcTrendChartAdapter
         foreach (var tagId in _pointsByTag.Keys.Where(tagId => !activeIds.Contains(tagId)).ToArray())
         {
             _pointsByTag.Remove(tagId);
+        }
+    }
+
+    private void AppendPoints(
+        IReadOnlyList<PlcTagSnapshot> snapshots,
+        DateTimeOffset? timestampOverride)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            if (snapshot.Value is not double value || double.IsNaN(value) || double.IsInfinity(value))
+            {
+                continue;
+            }
+
+            if (!_pointsByTag.TryGetValue(snapshot.TagId, out var points))
+            {
+                points = [];
+                _pointsByTag.Add(snapshot.TagId, points);
+            }
+
+            points.Add(new PlcTrendPoint(timestampOverride ?? snapshot.Timestamp, value));
         }
     }
 

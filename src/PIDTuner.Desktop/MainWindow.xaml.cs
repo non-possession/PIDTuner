@@ -21,6 +21,7 @@ public partial class MainWindow : Window
         _plcTrendChartAdapter = new PlcTrendChartAdapter(PlcTrendPlot);
         ConfigurePlcTrendRetention();
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
+        _viewModel.PlcSnapshotFramesApplied += ApplyPlcTrendSnapshotFrames;
         _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.PlcMonitorTags.CollectionChanged += PlcMonitorTags_CollectionChanged;
@@ -42,6 +43,15 @@ public partial class MainWindow : Window
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
         _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.PlcMonitorTags, trendTimestamp);
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
+    private void ApplyPlcTrendSnapshotFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+    {
+        ConfigurePlcTrendRetention();
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
+        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
+        _plcTrendChartAdapter.AppendSnapshotFrames(frames, _viewModel.PlcMonitorTags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 

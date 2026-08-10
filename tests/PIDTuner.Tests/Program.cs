@@ -1271,8 +1271,10 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     var resetCount = 0;
     var appliedCount = 0;
+    var batchAppliedCount = 0;
     loader.PlcTrendResetRequested += () => resetCount++;
     loader.PlcSnapshotsApplied += (_, _) => appliedCount++;
+    loader.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
 
     await loader.LoadPlcRecordingAsync();
 
@@ -1293,10 +1295,13 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertContains("第 1/", loader.PlcReplayStatus);
     AssertEqual(true, resetCount >= 2, "backward replay trend reset count");
 
+    var appliedCountBeforeHistory = appliedCount;
     await loader.ShowPlcHistoricalTrendAsync();
     AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical plc trend mode");
     AssertContains("历史", loader.PlcTrendModeStatus);
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+    AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
+    AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
 
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;

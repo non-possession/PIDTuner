@@ -254,6 +254,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event Action<IReadOnlyList<PlcTagSnapshot>, DateTimeOffset?>? PlcSnapshotsApplied;
 
+    public event Action<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>>? PlcSnapshotFramesApplied;
+
     public event Action? PlcTrendResetRequested;
 
     public string Title { get; } = "PIDTuner";
@@ -917,7 +919,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ApplyPlcMonitorSnapshots(
         IReadOnlyList<PlcTagSnapshot> snapshots,
-        DateTimeOffset? trendTimestamp = null)
+        DateTimeOffset? trendTimestamp = null,
+        bool applyTrend = true)
     {
         foreach (var snapshot in snapshots)
         {
@@ -941,7 +944,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
-        PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
+        if (applyTrend)
+        {
+            PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
+        }
     }
 
     private void ApplyBufferedLiveMonitorFrames()
@@ -1632,9 +1638,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcTrendModeStatus = "当前趋势：历史";
         for (var index = 0; index < frames.Count; index++)
         {
-            ApplyPlcMonitorSnapshots(frames[index]);
+            ApplyPlcMonitorSnapshots(frames[index], applyTrend: false);
         }
 
+        PlcSnapshotFramesApplied?.Invoke(frames);
         _plcReplayDisplayedFrameIndex = Math.Max(0, _loadedPlcReplayFrames.Count - 1);
         _plcReplayNextFrameIndex = _loadedPlcReplayFrames.Count;
         PlcMonitorStatus = $"历史趋势已显示：{frames.Count}/{_loadedPlcReplayFrames.Count} 帧。";
