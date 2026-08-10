@@ -9,7 +9,29 @@ public interface IPlcLiveDiagnosticsStore
         PlcProjectConfiguration configuration,
         TimeSpan duration,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PlcLiveDiagnosticsSessionInfo>> ListSessionsAsync(
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>> LoadSessionFramesAsync(
+        Guid sessionId,
+        DateTimeOffset? start,
+        DateTimeOffset? end,
+        CancellationToken cancellationToken);
 }
+
+public sealed record PlcLiveDiagnosticsSessionInfo(
+    Guid SessionId,
+    string ConfigurationName,
+    string Protocol,
+    string IpAddress,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset EndsAtUtc,
+    DateTimeOffset? StoppedAtUtc,
+    int DefaultSamplingMilliseconds,
+    int MinimumSamplingMilliseconds,
+    int FrameCount,
+    int SnapshotCount);
 
 public interface IPlcLiveDiagnosticsSession : IAsyncDisposable
 {

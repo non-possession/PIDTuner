@@ -903,6 +903,26 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertEqual(2, frameReader.GetInt32(7), "sqlite diagnostics skipped schedule slots");
     AssertClose(100, frameReader.GetDouble(8), 0.001, "sqlite diagnostics planned 11s phase");
     AssertClose(160, frameReader.GetDouble(9), 0.001, "sqlite diagnostics request 11s phase");
+
+    var sessions = await store.ListSessionsAsync(CancellationToken.None);
+    AssertEqual(1, sessions.Count, "sqlite diagnostics listed session count");
+    AssertEqual(summary.SessionId, sessions[0].SessionId, "sqlite diagnostics listed session id");
+    AssertEqual(2, sessions[0].FrameCount, "sqlite diagnostics listed frame count");
+    AssertEqual(2, sessions[0].SnapshotCount, "sqlite diagnostics listed snapshot count");
+
+    var frames = await store.LoadSessionFramesAsync(summary.SessionId, null, null, CancellationToken.None);
+    AssertEqual(2, frames.Count, "sqlite diagnostics loaded frame count");
+    AssertEqual(1, frames[0].Count, "sqlite diagnostics loaded first frame snapshot count");
+    AssertEqual(tag.Name, frames[0][0].Name, "sqlite diagnostics loaded tag name");
+    AssertClose(12.5, frames[0][0].Value ?? double.NaN, 0.001, "sqlite diagnostics loaded first value");
+
+    var filteredFrames = await store.LoadSessionFramesAsync(
+        summary.SessionId,
+        started.AddMilliseconds(50),
+        started.AddMilliseconds(150),
+        CancellationToken.None);
+    AssertEqual(1, filteredFrames.Count, "sqlite diagnostics filtered frame count");
+    AssertClose(13.5, filteredFrames[0][0].Value ?? double.NaN, 0.001, "sqlite diagnostics filtered value");
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
@@ -1762,6 +1782,21 @@ file sealed class FakePlcLiveDiagnosticsStore(DateTimeOffset? startedAtUtc = nul
         StartCount++;
         LastSession = new FakePlcLiveDiagnosticsSession(duration, startedAtUtc);
         return Task.FromResult<IPlcLiveDiagnosticsSession>(LastSession);
+    }
+
+    public Task<IReadOnlyList<PlcLiveDiagnosticsSessionInfo>> ListSessionsAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<PlcLiveDiagnosticsSessionInfo>>(Array.Empty<PlcLiveDiagnosticsSessionInfo>());
+    }
+
+    public Task<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>> LoadSessionFramesAsync(
+        Guid sessionId,
+        DateTimeOffset? start,
+        DateTimeOffset? end,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>>(
+            Array.Empty<IReadOnlyList<PlcTagSnapshot>>());
     }
 }
 
