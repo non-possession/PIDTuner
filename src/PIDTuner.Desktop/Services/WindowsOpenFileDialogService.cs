@@ -67,6 +67,19 @@ public sealed class WindowsOpenFileDialogService : IOpenFileDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public string? PickVisiblePlcTrendSaveFile()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出当前可见 PLC 趋势数据",
+            Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*",
+            DefaultExt = ".csv",
+            AddExtension = true
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
     public string? PickPlcProjectConfigurationFile()
     {
         var dialog = new OpenFileDialog

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -1926,6 +1927,69 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task ExportVisiblePlcTrendAsync(PlcTrendVisibleExport export)
+    {
+        if (export.Points.Count == 0)
+        {
+            Notify(
+                "无法导出可见趋势",
+                "当前趋势画布没有可导出的可见数据点。",
+                "Warning");
+            return;
+        }
+
+        var fileName = _openFileDialogService.PickVisiblePlcTrendSaveFile();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = File.Create(fileName);
+            await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            await writer.WriteLineAsync(
+                "timestampUtc,timestampLocal,tagName,tagId,address,value,unit,quality,source,visibleStartUtc,visibleEndUtc,trendMode");
+
+            var visibleStartUtc = export.VisibleStart.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+            var visibleEndUtc = export.VisibleEnd.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+            var trendMode = export.IsHistoricalMode ? "Historical" : "Live";
+
+            foreach (var point in export.Points)
+            {
+                var columns = new[]
+                {
+                    point.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+                    point.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
+                    point.TagName,
+                    point.TagId.ToString("D"),
+                    point.Address,
+                    point.Value.ToString("G17", CultureInfo.InvariantCulture),
+                    point.Unit ?? string.Empty,
+                    point.Quality,
+                    point.Source,
+                    visibleStartUtc,
+                    visibleEndUtc,
+                    trendMode
+                };
+                await writer.WriteLineAsync(string.Join(",", columns.Select(EscapeCsv)));
+            }
+
+            Notify(
+                "可见趋势已导出",
+                string.Join(
+                    Environment.NewLine,
+                    $"行数：{export.Points.Count}",
+                    $"范围：{export.VisibleStart:yyyy-MM-dd HH:mm:ss.fff} - {export.VisibleEnd:yyyy-MM-dd HH:mm:ss.fff}",
+                    $"路径：{Path.GetFullPath(fileName)}"),
+                "Success");
+        }
+        catch (Exception exception)
+        {
+            Notify("可见趋势导出失败", exception.Message, "Error");
+        }
+    }
+
     public Task SetHistoryBaselineAsync()
     {
         if (SelectedHistorySession is null)
@@ -2212,6 +2276,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         var sign = value.Value > 0 ? "+" : string.Empty;
         return sign + value.Value.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        if (!value.Contains('"') &&
+            !value.Contains(',') &&
+            !value.Contains('\r') &&
+            !value.Contains('\n'))
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     private void ApplyHistoryFilter()

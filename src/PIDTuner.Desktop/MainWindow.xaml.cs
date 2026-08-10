@@ -112,6 +112,12 @@ public partial class MainWindow : Window
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
+    private async void PlcTrendExportVisible_Click(object sender, RoutedEventArgs e)
+    {
+        var export = _plcTrendChartAdapter.CreateVisibleExport(_viewModel.PlcMonitorTags);
+        await _viewModel.ExportVisiblePlcTrendAsync(export);
+    }
+
     private async Task SetPlcTrendWindowAsync(TimeSpan window)
     {
         var wasHistoricalTrendMode = _viewModel.IsPlcHistoricalTrendMode;

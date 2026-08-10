@@ -1302,8 +1302,11 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     var reviewRepository = new JsonPidRecommendationReviewRepository(directory);
     var parameterSetRepository = new JsonPidParameterSetRepository(directory);
     var exportedHistorySamplesPath = Path.Combine(directory, "history-samples.csv");
+    var exportedVisibleTrendPath = Path.Combine(directory, "visible-trend.csv");
     var viewModel = new MainWindowViewModel(
-        new NoFileDialogService(historySamplesSaveFile: exportedHistorySamplesPath),
+        new NoFileDialogService(
+            historySamplesSaveFile: exportedHistorySamplesPath,
+            visiblePlcTrendSaveFile: exportedVisibleTrendPath),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
         testSessionRepository: sessionRepository,
@@ -1392,6 +1395,39 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual("历史采样已导出", viewModel.NotificationTitle, "export history notification title");
     AssertContains(Path.GetFullPath(exportedHistorySamplesPath), viewModel.NotificationMessage);
     AssertEqual(true, File.Exists(exportedHistorySamplesPath), "exported history samples file exists");
+
+    var visibleStart = DateTimeOffset.Parse("2026-07-29T10:00:01.0000000+00:00", CultureInfo.InvariantCulture);
+    var visibleEnd = visibleStart.AddSeconds(2);
+    var export = new PlcTrendVisibleExport(
+        visibleStart,
+        visibleEnd,
+        true,
+        new[]
+        {
+            new PlcTrendVisibleExportPoint(
+                visibleStart.AddMilliseconds(100),
+                Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                "SP,visible",
+                "DB8.DBD6",
+                42.5,
+                "%",
+                "Good",
+                "Replay")
+        });
+    await viewModel.ExportVisiblePlcTrendAsync(export);
+
+    AssertEqual("可见趋势已导出", viewModel.NotificationTitle, "visible trend export notification title");
+    AssertContains(Path.GetFullPath(exportedVisibleTrendPath), viewModel.NotificationMessage);
+    AssertEqual(true, File.Exists(exportedVisibleTrendPath), "exported visible trend file exists");
+    var visibleBytes = await File.ReadAllBytesAsync(exportedVisibleTrendPath);
+    AssertEqual(true, visibleBytes.Length > 3, "visible trend export has content");
+    AssertEqual(0xEF, visibleBytes[0], "visible trend csv utf8 bom byte 1");
+    AssertEqual(0xBB, visibleBytes[1], "visible trend csv utf8 bom byte 2");
+    AssertEqual(0xBF, visibleBytes[2], "visible trend csv utf8 bom byte 3");
+    var visibleCsv = await File.ReadAllTextAsync(exportedVisibleTrendPath, Encoding.UTF8);
+    AssertContains("visibleStartUtc,visibleEndUtc,trendMode", visibleCsv);
+    AssertContains("\"SP,visible\"", visibleCsv);
+    AssertContains("Historical", visibleCsv);
 }
 
 static PidSample Sample(DateTimeOffset timestamp, double sp, double pv, double mv, Guid sessionId)
@@ -1582,6 +1618,7 @@ static PidSampleFieldDefinition Field(
 
 file sealed class NoFileDialogService(
     string? historySamplesSaveFile = null,
+    string? visiblePlcTrendSaveFile = null,
     string? plcProjectConfigurationFile = null,
     string? plcProjectConfigurationSaveFile = null,
     string? plcRecordingFile = null) : IOpenFileDialogService
@@ -1619,6 +1656,11 @@ file sealed class NoFileDialogService(
     public string? PickHistorySamplesSaveFile()
     {
         return historySamplesSaveFile;
+    }
+
+    public string? PickVisiblePlcTrendSaveFile()
+    {
+        return visiblePlcTrendSaveFile;
     }
 
     public string? PickPlcRecordingFile()

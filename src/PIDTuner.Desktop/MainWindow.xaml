@@ -494,6 +494,11 @@
                             Height="28"
                             Margin="0,0,16,0"
                             Click="PlcTrendFitY_Click" />
+                    <Button Content="导出可见"
+                            Width="60"
+                            Height="28"
+                            Margin="0,0,16,0"
+                            Click="PlcTrendExportVisible_Click" />
                     <Button Command="{Binding SetPlcReplaySpeedHalfCommand}"
                             Content="0.5x"
                             Width="48"

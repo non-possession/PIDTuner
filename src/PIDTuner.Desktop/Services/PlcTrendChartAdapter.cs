@@ -175,6 +175,45 @@ public sealed class PlcTrendChartAdapter
         _plot.Refresh();
     }
 
+    public PlcTrendVisibleExport CreateVisibleExport(IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
+    {
+        var xLimits = _plot.Plot.Axes.GetLimits().XRange;
+        var visibleStart = new DateTimeOffset(
+            DateTime.SpecifyKind(DateTime.FromOADate(xLimits.Min), DateTimeKind.Local));
+        var visibleEnd = new DateTimeOffset(
+            DateTime.SpecifyKind(DateTime.FromOADate(xLimits.Max), DateTimeKind.Local));
+        var points = new List<PlcTrendVisibleExportPoint>();
+
+        foreach (var tag in monitorTags.Where(tag => tag.IsTrendVisible))
+        {
+            if (!_pointsByTag.TryGetValue(tag.TagId, out var tagPoints))
+            {
+                continue;
+            }
+
+            points.AddRange(tagPoints
+                .Where(point => point.Timestamp >= visibleStart && point.Timestamp <= visibleEnd)
+                .Select(point => new PlcTrendVisibleExportPoint(
+                    point.Timestamp,
+                    tag.TagId,
+                    tag.Name,
+                    tag.Address,
+                    point.Value,
+                    tag.Unit,
+                    tag.Quality,
+                    tag.Source)));
+        }
+
+        return new PlcTrendVisibleExport(
+            visibleStart,
+            visibleEnd,
+            ShowFullHistory,
+            points
+                .OrderBy(point => point.Timestamp)
+                .ThenBy(point => point.TagName, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+    }
+
     public static TimeSpan CalculateLiveRetentionWindow(
         TimeSpan maxLiveTrendWindow,
         TimeSpan uiRefreshInterval,
