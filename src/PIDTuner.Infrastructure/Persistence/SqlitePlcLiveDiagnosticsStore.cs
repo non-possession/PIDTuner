@@ -9,7 +9,7 @@ namespace PIDTuner.Infrastructure.Persistence;
 
 public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiveDiagnosticsStore
 {
-    private const int MaxQueuedFrames = 10_000;
+    private const int MaxQueuedFrames = 50_000;
 
     public async Task<IPlcLiveDiagnosticsSession> StartSessionAsync(
         PlcProjectConfiguration configuration,
@@ -87,6 +87,18 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 response_interval_ms REAL NULL,
                 phase_error_ms REAL NULL,
                 catch_up_frame INTEGER NOT NULL DEFAULT 0,
+                planned_elapsed_ms REAL NULL,
+                request_elapsed_ms REAL NULL,
+                schedule_slot_index INTEGER NULL,
+                skipped_schedule_slots INTEGER NOT NULL DEFAULT 0,
+                planned_phase_1000_ms REAL NULL,
+                planned_phase_5000_ms REAL NULL,
+                planned_phase_10000_ms REAL NULL,
+                planned_phase_11000_ms REAL NULL,
+                request_phase_1000_ms REAL NULL,
+                request_phase_5000_ms REAL NULL,
+                request_phase_10000_ms REAL NULL,
+                request_phase_11000_ms REAL NULL,
                 snapshot_count INTEGER NOT NULL,
                 state INTEGER NOT NULL,
                 PRIMARY KEY (session_id, frame_index)
@@ -158,7 +170,19 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             ("actual_interval_ms", "REAL NULL"),
             ("response_interval_ms", "REAL NULL"),
             ("phase_error_ms", "REAL NULL"),
-            ("catch_up_frame", "INTEGER NOT NULL DEFAULT 0")
+            ("catch_up_frame", "INTEGER NOT NULL DEFAULT 0"),
+            ("planned_elapsed_ms", "REAL NULL"),
+            ("request_elapsed_ms", "REAL NULL"),
+            ("schedule_slot_index", "INTEGER NULL"),
+            ("skipped_schedule_slots", "INTEGER NOT NULL DEFAULT 0"),
+            ("planned_phase_1000_ms", "REAL NULL"),
+            ("planned_phase_5000_ms", "REAL NULL"),
+            ("planned_phase_10000_ms", "REAL NULL"),
+            ("planned_phase_11000_ms", "REAL NULL"),
+            ("request_phase_1000_ms", "REAL NULL"),
+            ("request_phase_5000_ms", "REAL NULL"),
+            ("request_phase_10000_ms", "REAL NULL"),
+            ("request_phase_11000_ms", "REAL NULL")
         })
         {
             if (existingColumns.Contains(column))
@@ -259,6 +283,7 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             });
         private readonly CancellationTokenSource _cancellation = new();
         private readonly Task _writerTask;
+        private int _droppedFrameCount;
         private int _stopped;
 
         public SqlitePlcLiveDiagnosticsSession(
@@ -289,7 +314,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 return;
             }
 
-            _frames.Writer.TryWrite(frame);
+            if (!_frames.Writer.TryWrite(frame))
+            {
+                Interlocked.Increment(ref _droppedFrameCount);
+            }
         }
 
         public async Task<PlcLiveDiagnosticsSummary> StopAsync(CancellationToken cancellationToken)
@@ -398,6 +426,18 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     response_interval_ms,
                     phase_error_ms,
                     catch_up_frame,
+                    planned_elapsed_ms,
+                    request_elapsed_ms,
+                    schedule_slot_index,
+                    skipped_schedule_slots,
+                    planned_phase_1000_ms,
+                    planned_phase_5000_ms,
+                    planned_phase_10000_ms,
+                    planned_phase_11000_ms,
+                    request_phase_1000_ms,
+                    request_phase_5000_ms,
+                    request_phase_10000_ms,
+                    request_phase_11000_ms,
                     snapshot_count,
                     state)
                 VALUES (
@@ -416,6 +456,18 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $response_interval_ms,
                     $phase_error_ms,
                     $catch_up_frame,
+                    $planned_elapsed_ms,
+                    $request_elapsed_ms,
+                    $schedule_slot_index,
+                    $skipped_schedule_slots,
+                    $planned_phase_1000_ms,
+                    $planned_phase_5000_ms,
+                    $planned_phase_10000_ms,
+                    $planned_phase_11000_ms,
+                    $request_phase_1000_ms,
+                    $request_phase_5000_ms,
+                    $request_phase_10000_ms,
+                    $request_phase_11000_ms,
                     $snapshot_count,
                     $state);
                 """;
@@ -440,6 +492,40 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 "$phase_error_ms",
                 diagnostics.PhaseErrorMilliseconds.HasValue ? diagnostics.PhaseErrorMilliseconds.Value : DBNull.Value);
             command.Parameters.AddWithValue("$catch_up_frame", diagnostics.CatchUpFrame ? 1 : 0);
+            command.Parameters.AddWithValue(
+                "$planned_elapsed_ms",
+                diagnostics.PlannedElapsedMilliseconds.HasValue ? diagnostics.PlannedElapsedMilliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$request_elapsed_ms",
+                diagnostics.RequestElapsedMilliseconds.HasValue ? diagnostics.RequestElapsedMilliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$schedule_slot_index",
+                diagnostics.ScheduleSlotIndex.HasValue ? diagnostics.ScheduleSlotIndex.Value : DBNull.Value);
+            command.Parameters.AddWithValue("$skipped_schedule_slots", diagnostics.SkippedScheduleSlots);
+            command.Parameters.AddWithValue(
+                "$planned_phase_1000_ms",
+                diagnostics.PlannedPhase1000Milliseconds.HasValue ? diagnostics.PlannedPhase1000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$planned_phase_5000_ms",
+                diagnostics.PlannedPhase5000Milliseconds.HasValue ? diagnostics.PlannedPhase5000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$planned_phase_10000_ms",
+                diagnostics.PlannedPhase10000Milliseconds.HasValue ? diagnostics.PlannedPhase10000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$planned_phase_11000_ms",
+                diagnostics.PlannedPhase11000Milliseconds.HasValue ? diagnostics.PlannedPhase11000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$request_phase_1000_ms",
+                diagnostics.RequestPhase1000Milliseconds.HasValue ? diagnostics.RequestPhase1000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$request_phase_5000_ms",
+                diagnostics.RequestPhase5000Milliseconds.HasValue ? diagnostics.RequestPhase5000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$request_phase_10000_ms",
+                diagnostics.RequestPhase10000Milliseconds.HasValue ? diagnostics.RequestPhase10000Milliseconds.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$request_phase_11000_ms",
+                diagnostics.RequestPhase11000Milliseconds.HasValue ? diagnostics.RequestPhase11000Milliseconds.Value : DBNull.Value);
             command.Parameters.AddWithValue("$snapshot_count", diagnostics.SnapshotCount);
             command.Parameters.AddWithValue("$state", (int)diagnostics.State);
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -586,7 +672,21 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))
             {
-                return new PlcLiveDiagnosticsSummary(SessionId, DatabasePath, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                return new PlcLiveDiagnosticsSummary(
+                    SessionId,
+                    DatabasePath,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    Volatile.Read(ref _droppedFrameCount));
             }
 
             var frameSummary = new PlcLiveDiagnosticsSummary(
@@ -602,7 +702,8 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 0,
                 0,
                 0,
-                0);
+                0,
+                Volatile.Read(ref _droppedFrameCount));
 
             return await QueryReadOperationSummaryAsync(connection, frameSummary, cancellationToken);
         }

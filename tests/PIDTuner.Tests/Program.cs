@@ -717,6 +717,13 @@ static Task PlcAcquisitionEngineSkipsOverdueScheduleSlots()
         TimeSpan.FromMilliseconds(500),
         PlcAcquisitionEngine.AdvanceNextDue(TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(405), interval),
         "late frame advances to the first future schedule slot");
+    AssertEqual(
+        3,
+        PlcAcquisitionEngine.CalculateScheduleAdvance(
+            TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromMilliseconds(405),
+            interval).SkippedScheduleSlots,
+        "late frame reports skipped schedule slots");
 
     return Task.CompletedTask;
 }
@@ -813,7 +820,19 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             ActualIntervalMilliseconds = 158,
             ResponseIntervalMilliseconds = 198,
             PhaseErrorMilliseconds = 60,
-            CatchUpFrame = true
+            CatchUpFrame = true,
+            PlannedElapsedMilliseconds = 100,
+            RequestElapsedMilliseconds = 160,
+            ScheduleSlotIndex = 1,
+            SkippedScheduleSlots = 2,
+            PlannedPhase1000Milliseconds = 100,
+            PlannedPhase5000Milliseconds = 100,
+            PlannedPhase10000Milliseconds = 100,
+            PlannedPhase11000Milliseconds = 100,
+            RequestPhase1000Milliseconds = 160,
+            RequestPhase5000Milliseconds = 160,
+            RequestPhase10000Milliseconds = 160,
+            RequestPhase11000Milliseconds = 160
         }));
 
     var summary = await session.StopAsync(CancellationToken.None);
@@ -858,7 +877,17 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
 
     await using var frameCommand = connection.CreateCommand();
     frameCommand.CommandText = """
-        SELECT actual_interval_ms, response_interval_ms, phase_error_ms, catch_up_frame
+        SELECT
+            actual_interval_ms,
+            response_interval_ms,
+            phase_error_ms,
+            catch_up_frame,
+            planned_elapsed_ms,
+            request_elapsed_ms,
+            schedule_slot_index,
+            skipped_schedule_slots,
+            planned_phase_11000_ms,
+            request_phase_11000_ms
         FROM plc_sample_frames
         WHERE frame_index = 1;
         """;
@@ -868,6 +897,12 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertClose(198, frameReader.GetDouble(1), 0.001, "sqlite diagnostics response interval");
     AssertClose(60, frameReader.GetDouble(2), 0.001, "sqlite diagnostics phase error");
     AssertEqual(1, frameReader.GetInt32(3), "sqlite diagnostics catch-up frame");
+    AssertClose(100, frameReader.GetDouble(4), 0.001, "sqlite diagnostics planned elapsed");
+    AssertClose(160, frameReader.GetDouble(5), 0.001, "sqlite diagnostics request elapsed");
+    AssertEqual(1L, frameReader.GetInt64(6), "sqlite diagnostics schedule slot index");
+    AssertEqual(2, frameReader.GetInt32(7), "sqlite diagnostics skipped schedule slots");
+    AssertClose(100, frameReader.GetDouble(8), 0.001, "sqlite diagnostics planned 11s phase");
+    AssertClose(160, frameReader.GetDouble(9), 0.001, "sqlite diagnostics request 11s phase");
 }
 
 static async Task PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags()
@@ -1053,11 +1088,11 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
     viewModel.PlcDefaultSamplingMilliseconds = 50;
     viewModel.PlcMinimumSamplingMilliseconds = 50;
-    viewModel.PlcDiagnosticsDurationMinutes = 20;
+    viewModel.PlcDiagnosticsDurationMinutes = 40;
 
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     AssertEqual(0, diagnosticsStore.StartCount, "diagnostics should not start without monitoring");
-    AssertEqual(10, viewModel.PlcDiagnosticsDurationMinutes, "diagnostics duration clamps to ten minutes");
+    AssertEqual(30, viewModel.PlcDiagnosticsDurationMinutes, "diagnostics duration clamps to thirty minutes");
 
     await viewModel.TogglePlcMonitoringAsync();
     await viewModel.TogglePlcLiveDiagnosticsAsync();

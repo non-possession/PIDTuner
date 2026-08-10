@@ -95,12 +95,14 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
             var responseReceivedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var bufferedTimestampUtc = startedAtUtc.Add(stopwatch.Elapsed);
             var uiPresentedTimestampUtc = bufferedTimestampUtc;
+            var scheduleAdvance = CalculateScheduleAdvance(nextDue, stopwatch.Elapsed, interval);
             var actualIntervalMilliseconds = previousRequestStartedTimestampUtc.HasValue
                 ? (requestStartedTimestampUtc - previousRequestStartedTimestampUtc.Value).TotalMilliseconds
                 : (double?)null;
             var responseIntervalMilliseconds = previousResponseReceivedTimestampUtc.HasValue
                 ? (responseReceivedTimestampUtc - previousResponseReceivedTimestampUtc.Value).TotalMilliseconds
                 : (double?)null;
+            var requestElapsed = requestStartedTimestampUtc - startedAtUtc;
             buffer.Add(new PlcAcquisitionFrame(
                 snapshots,
                 new PlcAcquisitionFrameDiagnostics(
@@ -115,17 +117,34 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
                     actualIntervalMilliseconds,
                     responseIntervalMilliseconds,
                     (requestStartedTimestampUtc - plannedTimestampUtc).TotalMilliseconds,
-                    catchUpFrame),
+                    catchUpFrame,
+                    nextDue.TotalMilliseconds,
+                    requestElapsed.TotalMilliseconds,
+                    CalculateScheduleSlotIndex(nextDue, interval),
+                    scheduleAdvance.SkippedScheduleSlots,
+                    PhaseMilliseconds(nextDue, 1_000),
+                    PhaseMilliseconds(nextDue, 5_000),
+                    PhaseMilliseconds(nextDue, 10_000),
+                    PhaseMilliseconds(nextDue, 11_000),
+                    PhaseMilliseconds(requestElapsed, 1_000),
+                    PhaseMilliseconds(requestElapsed, 5_000),
+                    PhaseMilliseconds(requestElapsed, 10_000),
+                    PhaseMilliseconds(requestElapsed, 11_000)),
                 readOperations));
 
             previousRequestStartedTimestampUtc = requestStartedTimestampUtc;
             previousResponseReceivedTimestampUtc = responseReceivedTimestampUtc;
             frameIndex++;
-            nextDue = AdvanceNextDue(nextDue, stopwatch.Elapsed, interval);
+            nextDue = scheduleAdvance.NextDue;
         }
     }
 
     public static TimeSpan AdvanceNextDue(TimeSpan currentDue, TimeSpan elapsed, TimeSpan interval)
+    {
+        return CalculateScheduleAdvance(currentDue, elapsed, interval).NextDue;
+    }
+
+    public static PlcScheduleAdvance CalculateScheduleAdvance(TimeSpan currentDue, TimeSpan elapsed, TimeSpan interval)
     {
         if (interval <= TimeSpan.Zero)
         {
@@ -135,12 +154,31 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
         var nextDue = currentDue + interval;
         if (elapsed < nextDue)
         {
-            return nextDue;
+            return new PlcScheduleAdvance(nextDue, 0);
         }
 
         var missedIntervals = ((elapsed - nextDue).Ticks / interval.Ticks) + 1;
-        return nextDue + TimeSpan.FromTicks(missedIntervals * interval.Ticks);
+        return new PlcScheduleAdvance(
+            nextDue + TimeSpan.FromTicks(missedIntervals * interval.Ticks),
+            missedIntervals > int.MaxValue ? int.MaxValue : (int)missedIntervals);
     }
+
+    private static long CalculateScheduleSlotIndex(TimeSpan plannedElapsed, TimeSpan interval) =>
+        interval.Ticks <= 0 ? 0 : plannedElapsed.Ticks / interval.Ticks;
+
+    private static double PhaseMilliseconds(TimeSpan elapsed, int periodMilliseconds)
+    {
+        var periodTicks = TimeSpan.FromMilliseconds(periodMilliseconds).Ticks;
+        var phaseTicks = elapsed.Ticks % periodTicks;
+        if (phaseTicks < 0)
+        {
+            phaseTicks += periodTicks;
+        }
+
+        return TimeSpan.FromTicks(phaseTicks).TotalMilliseconds;
+    }
+
+    public readonly record struct PlcScheduleAdvance(TimeSpan NextDue, int SkippedScheduleSlots);
 
     private static PlcAcquisitionFrameState ClassifyFrame(
         DateTimeOffset plannedTimestampUtc,

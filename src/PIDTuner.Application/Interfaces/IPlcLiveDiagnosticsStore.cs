@@ -39,4 +39,5 @@ public sealed record PlcLiveDiagnosticsSummary(
     int ReadOperationCount,
     double AverageReadOperationDurationMilliseconds,
     double MaxReadOperationDurationMilliseconds,
-    int SlowReadOperationCount);
+    int SlowReadOperationCount,
+    int DiagnosticsQueueDroppedFrameCount = 0);

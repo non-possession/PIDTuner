@@ -454,7 +454,7 @@
                             Width="80"
                             Height="28"
                             Margin="0,0,16,0" />
-                    <TextBlock Text="诊断 min"
+                    <TextBlock Text="诊断 min ≤30"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"
                                Foreground="#374151" />

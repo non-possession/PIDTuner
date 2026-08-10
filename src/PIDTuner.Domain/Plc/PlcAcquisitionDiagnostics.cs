@@ -25,7 +25,19 @@ public sealed record PlcAcquisitionFrameDiagnostics(
     double? ActualIntervalMilliseconds = null,
     double? ResponseIntervalMilliseconds = null,
     double? PhaseErrorMilliseconds = null,
-    bool CatchUpFrame = false)
+    bool CatchUpFrame = false,
+    double? PlannedElapsedMilliseconds = null,
+    double? RequestElapsedMilliseconds = null,
+    long? ScheduleSlotIndex = null,
+    int SkippedScheduleSlots = 0,
+    double? PlannedPhase1000Milliseconds = null,
+    double? PlannedPhase5000Milliseconds = null,
+    double? PlannedPhase10000Milliseconds = null,
+    double? PlannedPhase11000Milliseconds = null,
+    double? RequestPhase1000Milliseconds = null,
+    double? RequestPhase5000Milliseconds = null,
+    double? RequestPhase10000Milliseconds = null,
+    double? RequestPhase11000Milliseconds = null)
 {
     public double ScheduleDelayMilliseconds =>
         (RequestStartedTimestampUtc - PlannedTimestampUtc).TotalMilliseconds;

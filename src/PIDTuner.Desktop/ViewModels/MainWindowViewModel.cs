@@ -141,6 +141,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isPlcLiveTrendPaused;
     private bool _isPlcLiveDiagnosticsRunning;
     private int _currentPlcAcquisitionIntervalMilliseconds = PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
+    private const int MaxPlcDiagnosticsDurationMinutes = 30;
+
     private int _plcDiagnosticsDurationMinutes = 10;
 
     private string _parameterSetStatus = "尚未保存参数方案。";
@@ -359,7 +361,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public int PlcDiagnosticsDurationMinutes
     {
         get => _plcDiagnosticsDurationMinutes;
-        set => SetProperty(ref _plcDiagnosticsDurationMinutes, Math.Clamp(value, 1, 10));
+        set => SetProperty(ref _plcDiagnosticsDurationMinutes, Math.Clamp(value, 1, MaxPlcDiagnosticsDurationMinutes));
     }
 
     public bool IsPlcLiveDiagnosticsRunning
