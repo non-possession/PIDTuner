@@ -219,7 +219,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadPlcRecordingCommand = new AsyncCommand(LoadPlcRecordingAsync);
         ShowPlcLiveTrendCommand = new AsyncCommand(ShowPlcLiveTrendAsync);
         ShowPlcHistoricalTrendCommand = new AsyncCommand(ShowPlcHistoricalTrendAsync);
-        LoadLatestPlcDiagnosticsHistoryCommand = new AsyncCommand(LoadLatestPlcDiagnosticsHistoryAsync);
         TogglePlcLiveTrendPauseCommand = new AsyncCommand(TogglePlcLiveTrendPauseAsync);
         ApplyPlcHistoricalRangeCommand = new AsyncCommand(ApplyPlcHistoricalRangeAsync);
         ResetPlcHistoricalRangeCommand = new AsyncCommand(ResetPlcHistoricalRangeAsync);
@@ -753,8 +752,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand ShowPlcLiveTrendCommand { get; }
 
     public ICommand ShowPlcHistoricalTrendCommand { get; }
-
-    public ICommand LoadLatestPlcDiagnosticsHistoryCommand { get; }
 
     public ICommand TogglePlcLiveTrendPauseCommand { get; }
 
@@ -1382,61 +1379,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectedPlcMonitorTag = null;
         PlcTrendResetRequested?.Invoke();
         ShowLoadedPlcHistoricalTrend();
-    }
-
-    public async Task LoadLatestPlcDiagnosticsHistoryAsync()
-    {
-        try
-        {
-            await StopLiveMonitoringAsync();
-            StopPlcReplay();
-            var sessions = await _plcLiveDiagnosticsStore.ListSessionsAsync(CancellationToken.None);
-            var session = sessions.FirstOrDefault(item => item.FrameCount > 0);
-            if (session is null)
-            {
-                Notify("无法加载诊断历史", "当前诊断数据库中没有可显示的采集帧。", "Warning");
-                return;
-            }
-
-            var frames = await _plcLiveDiagnosticsStore.LoadSessionFramesAsync(
-                session.SessionId,
-                null,
-                null,
-                CancellationToken.None);
-            if (frames.Count == 0)
-            {
-                Notify("无法加载诊断历史", "最近的诊断 session 没有可显示的点位数据。", "Warning");
-                return;
-            }
-
-            _loadedPlcReplayFrames = frames;
-            _loadedPlcReplayIntervalMilliseconds = Math.Max(10, session.MinimumSamplingMilliseconds);
-            _plcReplayNextFrameIndex = frames.Count;
-            _plcReplayDisplayedFrameIndex = Math.Max(0, frames.Count - 1);
-            _lastPlcRecordingFrames = frames;
-            OnPropertyChanged(nameof(LastPlcRecordingFrames));
-            SetPlcHistoricalRangeTextFromFrames(frames);
-
-            PlcMonitorTags.Clear();
-            SelectedPlcMonitorTag = null;
-            PlcTrendResetRequested?.Invoke();
-            ShowLoadedPlcHistoricalTrend(frames);
-            PlcMonitorStatus =
-                $"已加载最新诊断历史：{frames.Count} 帧，{session.SnapshotCount} 条快照，session {session.SessionId:D}。";
-            UpdatePlcReplayStatus("诊断历史");
-            Notify(
-                "诊断历史已加载",
-                string.Join(
-                    Environment.NewLine,
-                    PlcMonitorStatus,
-                    $"开始：{session.StartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}",
-                    $"结束：{(session.StoppedAtUtc ?? session.EndsAtUtc).ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}"),
-                "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("诊断历史加载失败", exception.Message, "Error");
-        }
     }
 
     public Task ApplyPlcHistoricalRangeAsync()

@@ -489,11 +489,6 @@
                             Width="76"
                             Height="28"
                             Margin="0,0,6,0" />
-                    <Button Command="{Binding LoadLatestPlcDiagnosticsHistoryCommand}"
-                            Content="最新诊断"
-                            Width="76"
-                            Height="28"
-                            Margin="0,0,6,0" />
                     <Button Content="适配Y"
                             Width="60"
                             Height="28"

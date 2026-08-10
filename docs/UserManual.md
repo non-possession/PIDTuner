@@ -76,14 +76,13 @@ On the `实时监控` tab:
 8. Use `10s`, `30s`, `1min`, and `5min` to switch the visible real-time trend window. These window buttons return the chart to live trend mode.
 9. Click `暂停滚动` to freeze the live chart view while background PLC acquisition continues. Click `恢复滚动` to redraw the latest live window.
 10. In historical trend mode, edit the two history time fields and click `应用区间` to show only that static time range. Click `全量历史` to restore the full loaded recording.
-11. Click `最新诊断` to load the latest SQLite PLC live diagnostics session as a static historical trend.
-12. Use mouse zoom and pan on the trend chart for X/Y scale inspection, and click `适配Y` to re-fit the vertical scale.
-13. Click `导出可见` to export the data points currently visible on the trend canvas. The CSV range follows the current X-axis view, only includes currently visible curves, uses UTF-8 with BOM for Excel, and the success notification shows the absolute save path.
-14. Hover the trend chart to see the nearest visible tag values around the cursor time.
-15. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
-16. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
-17. Click `上一帧` or `下一帧` for manual replay stepping.
-18. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
+11. Use mouse zoom and pan on the trend chart for X/Y scale inspection, and click `适配Y` to re-fit the vertical scale.
+12. Click `导出可见` to export the data points currently visible on the trend canvas. The CSV range follows the current X-axis view, only includes currently visible curves, uses UTF-8 with BOM for Excel, and the success notification shows the absolute save path.
+13. Hover the trend chart to see the nearest visible tag values around the cursor time.
+14. Click `打开记录` to load a saved PLC recording JSON file. The first frame is previewed immediately.
+15. Click `播放/暂停` to replay or pause the loaded PLC recording frame by frame.
+16. Click `上一帧` or `下一帧` for manual replay stepping.
+17. Use `0.5x`, `1x`, `2x`, and `5x` to change replay speed. The original recording timestamps remain unchanged; the speed buttons only change the playback timer interval.
 
 The real-time trend chart is the primary working area on this page. The visible tag table sits below the chart as a compact monitoring and visibility-control panel.
 

@@ -39,129 +39,6 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             endsAtUtc);
     }
 
-    public async Task<IReadOnlyList<PlcLiveDiagnosticsSessionInfo>> ListSessionsAsync(
-        CancellationToken cancellationToken)
-    {
-        var fullPath = Path.GetFullPath(databasePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-
-        await using var connection = OpenConnection(fullPath);
-        await EnsureSchemaAsync(connection, cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT
-                s.session_id,
-                s.configuration_name,
-                s.protocol,
-                s.ip_address,
-                s.started_at_utc,
-                s.ends_at_utc,
-                s.stopped_at_utc,
-                s.default_sampling_ms,
-                s.minimum_sampling_ms,
-                COUNT(DISTINCT f.frame_index) AS frame_count,
-                COUNT(v.tag_id) AS snapshot_count
-            FROM plc_diagnostic_sessions s
-            LEFT JOIN plc_sample_frames f
-                ON f.session_id = s.session_id
-            LEFT JOIN plc_sample_values v
-                ON v.session_id = s.session_id
-                AND v.frame_index = f.frame_index
-            GROUP BY s.session_id
-            ORDER BY s.started_at_utc DESC;
-            """;
-
-        var sessions = new List<PlcLiveDiagnosticsSessionInfo>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            sessions.Add(new PlcLiveDiagnosticsSessionInfo(
-                Guid.Parse(reader.GetString(0)),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                ParseTimestamp(reader.GetString(4)),
-                ParseTimestamp(reader.GetString(5)),
-                reader.IsDBNull(6) ? null : ParseTimestamp(reader.GetString(6)),
-                reader.GetInt32(7),
-                reader.GetInt32(8),
-                checked((int)reader.GetInt64(9)),
-                checked((int)reader.GetInt64(10))));
-        }
-
-        return sessions;
-    }
-
-    public async Task<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>> LoadSessionFramesAsync(
-        Guid sessionId,
-        DateTimeOffset? start,
-        DateTimeOffset? end,
-        CancellationToken cancellationToken)
-    {
-        var fullPath = Path.GetFullPath(databasePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-
-        await using var connection = OpenConnection(fullPath);
-        await EnsureSchemaAsync(connection, cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT
-                frame_index,
-                tag_id,
-                tag_name,
-                address,
-                value,
-                unit,
-                timestamp_utc,
-                quality,
-                source
-            FROM plc_sample_values
-            WHERE session_id = $session_id
-                AND ($start_utc IS NULL OR timestamp_utc >= $start_utc)
-                AND ($end_utc IS NULL OR timestamp_utc <= $end_utc)
-            ORDER BY frame_index, tag_name;
-            """;
-        command.Parameters.AddWithValue("$session_id", sessionId.ToString("D"));
-        command.Parameters.AddWithValue("$start_utc", start.HasValue ? FormatTimestamp(start.Value) : DBNull.Value);
-        command.Parameters.AddWithValue("$end_utc", end.HasValue ? FormatTimestamp(end.Value) : DBNull.Value);
-
-        var frames = new List<IReadOnlyList<PlcTagSnapshot>>();
-        var currentFrameIndex = int.MinValue;
-        var currentFrame = new List<PlcTagSnapshot>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var frameIndex = reader.GetInt32(0);
-            if (frameIndex != currentFrameIndex)
-            {
-                if (currentFrame.Count > 0)
-                {
-                    frames.Add(currentFrame.ToArray());
-                }
-
-                currentFrameIndex = frameIndex;
-                currentFrame = [];
-            }
-
-            currentFrame.Add(new PlcTagSnapshot(
-                Guid.Parse(reader.GetString(1)),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetDouble(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                ParseTimestamp(reader.GetString(6)),
-                reader.GetString(7),
-                reader.GetString(8)));
-        }
-
-        if (currentFrame.Count > 0)
-        {
-            frames.Add(currentFrame.ToArray());
-        }
-
-        return frames;
-    }
-
     private static SqliteConnection OpenConnection(string path)
     {
         var builder = new SqliteConnectionStringBuilder
@@ -394,9 +271,6 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
 
     private static string FormatTimestamp(DateTimeOffset timestamp) =>
         timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-
-    private static DateTimeOffset ParseTimestamp(string timestamp) =>
-        DateTimeOffset.Parse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
 
     private sealed class SqlitePlcLiveDiagnosticsSession : IPlcLiveDiagnosticsSession
     {
