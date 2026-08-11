@@ -52,8 +52,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _monitorTimer = new();
     private readonly DispatcherTimer _plcReplayTimer = new();
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
-    private readonly PlcSampleBuffer _livePlcSampleBuffer = new();
-    private readonly PlcAcquisitionEngine _livePlcAcquisitionEngine;
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
@@ -125,10 +123,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
-    private bool _isPlcMonitoring;
     private bool _isPlcHistoricalTrendMode;
     private bool _isPlcLiveTrendPaused;
-    private int _currentPlcAcquisitionIntervalMilliseconds = PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     private const int MaxPlcDiagnosticsDurationMinutes = 30;
 
     private int _plcDiagnosticsDurationMinutes = 10;
@@ -186,7 +182,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "local",
                 "plc-diagnostics",
                 "plc-live-diagnostics.sqlite"));
-        LiveMonitor = new PlcLiveMonitorViewModel(PlcMonitorTags);
+        LiveMonitor = new PlcLiveMonitorViewModel(
+            PlcMonitorTags,
+            new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync));
+        LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
         Debug = new PlcDebugViewModel(PlcMonitorTags, liveDiagnosticsStore);
         Debug.PropertyChanged += Debug_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
@@ -200,7 +199,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 Debug.UpdateReplayStatus(replayPhase);
             }
         };
-        _livePlcAcquisitionEngine = new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync);
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
         _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
         _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
@@ -527,28 +525,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public int CurrentPlcAcquisitionIntervalMilliseconds
     {
-        get => _currentPlcAcquisitionIntervalMilliseconds;
-        private set
-        {
-            if (SetProperty(ref _currentPlcAcquisitionIntervalMilliseconds, value))
-            {
-                LiveMonitor.CurrentAcquisitionIntervalMilliseconds = value;
-            }
-        }
+        get => LiveMonitor.CurrentAcquisitionIntervalMilliseconds;
+        private set => LiveMonitor.CurrentAcquisitionIntervalMilliseconds = value;
     }
 
     public string PlcReplaySpeedText => Debug.ReplaySpeedText;
 
     public bool IsPlcMonitoring
     {
-        get => _isPlcMonitoring;
-        private set
-        {
-            if (SetProperty(ref _isPlcMonitoring, value))
-            {
-                LiveMonitor.IsMonitoring = value;
-            }
-        }
+        get => LiveMonitor.IsMonitoring;
+        private set => LiveMonitor.IsMonitoring = value;
     }
 
     public bool IsPlcReplayRunning
@@ -973,6 +959,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void LiveMonitor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(PlcLiveMonitorViewModel.IsMonitoring):
+                OnPropertyChanged(nameof(IsPlcMonitoring));
+                break;
+            case nameof(PlcLiveMonitorViewModel.CurrentAcquisitionIntervalMilliseconds):
+                OnPropertyChanged(nameof(CurrentPlcAcquisitionIntervalMilliseconds));
+                break;
+            case nameof(PlcLiveMonitorViewModel.IsLiveTrendPaused):
+                OnPropertyChanged(nameof(IsPlcLiveTrendPaused));
+                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
+                break;
+        }
+    }
+
     private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1133,27 +1136,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ApplyBufferedLiveMonitorFrames()
     {
-        var frames = _livePlcSampleBuffer.Drain();
-        if (frames.Count == 0)
+        var result = LiveMonitor.DrainPresentedFrames();
+        if (result.Frames.Count == 0)
         {
             return;
         }
 
-        var diagnostics = new List<PlcAcquisitionFrameDiagnostics>(frames.Count);
-        foreach (var frame in frames)
+        foreach (var frame in result.Frames)
         {
-            var presentedDiagnostics = frame.Diagnostics with { UiPresentedTimestampUtc = DateTimeOffset.UtcNow };
-            ApplyPlcMonitorSnapshots(frame.Snapshots, presentedDiagnostics.PlannedTimestampUtc);
-            diagnostics.Add(presentedDiagnostics);
-            EnqueuePlcLiveDiagnosticsFrame(frame with { Diagnostics = presentedDiagnostics });
+            ApplyPlcMonitorSnapshots(frame.Snapshots, frame.Diagnostics.PlannedTimestampUtc);
+            EnqueuePlcLiveDiagnosticsFrame(frame);
         }
 
-        var lastFrame = frames[^1];
-        PlcMonitorStatus = lastFrame.Snapshots.Count == 0
-            ? "实时采集中，尚未读取到启用点位。"
-            : $"实时采集中，已应用 {frames.Count} 帧，最新 {lastFrame.Snapshots.Count} 个点位，数据源：{lastFrame.Snapshots[0].Source}。";
-        PlcAcquisitionDiagnosticsStatus = FormatAcquisitionDiagnosticsSummary(
-            PlcAcquisitionDiagnostics.Summarize(diagnostics));
+        PlcMonitorStatus = result.MonitorStatus;
+        PlcAcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
     }
 
     private void EnqueuePlcLiveDiagnosticsFrame(PlcAcquisitionFrame frame)
@@ -1172,13 +1168,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             .Min();
 
         return Math.Max(ResolveMinimumSamplingMilliseconds(configuration), minimumTagInterval);
-    }
-
-    private static int ResolveMonitoringIntervalMilliseconds(PlcProjectConfiguration configuration)
-    {
-        return Math.Max(
-            ResolveMinimumSamplingMilliseconds(configuration),
-            configuration.DefaultSamplingMilliseconds);
     }
 
     private static int ResolveMinimumSamplingMilliseconds(PlcProjectConfiguration configuration)
@@ -1220,9 +1209,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task StopLiveMonitoringAsync()
     {
         _monitorTimer.Stop();
-        IsPlcMonitoring = false;
-        await _livePlcAcquisitionEngine.StopAsync();
-        _livePlcSampleBuffer.Clear();
+        await LiveMonitor.StopAsync();
         await StopPlcLiveDiagnosticsAsync("实时监控已停止，诊断写入已关闭。");
     }
 
@@ -1237,18 +1224,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         StopPlcReplay();
         var configuration = BuildPlcConfigurationFromForm();
-        var acquisitionIntervalMilliseconds = ResolveMonitoringIntervalMilliseconds(configuration);
-        CurrentPlcAcquisitionIntervalMilliseconds = acquisitionIntervalMilliseconds;
-        _livePlcSampleBuffer.Clear();
-        await _livePlcAcquisitionEngine.StartAsync(
+        var result = await LiveMonitor.StartAsync(
             configuration,
-            TimeSpan.FromMilliseconds(acquisitionIntervalMilliseconds),
-            _livePlcSampleBuffer,
             CancellationToken.None);
-        _monitorTimer.Interval = TimeSpan.FromMilliseconds(LiveMonitorUiRefreshMilliseconds);
+        _monitorTimer.Interval = result.UiRefreshInterval;
         _monitorTimer.Start();
-        IsPlcMonitoring = true;
-        PlcMonitorStatus = $"点位监控运行中，采集周期 {acquisitionIntervalMilliseconds} ms，界面刷新 {LiveMonitorUiRefreshMilliseconds} ms。";
+        PlcMonitorStatus = result.MonitorStatus;
     }
 
     public async Task TogglePlcLiveDiagnosticsAsync()

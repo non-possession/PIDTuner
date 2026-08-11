@@ -2,7 +2,7 @@
 
 本文档记录 PIDTuner 在 V2.0 阶段进行历史趋势工作台迁移前的架构重构依据。它不是功能需求清单，而是后续代码变更的模块边界、职责划分和迁移顺序。
 
-当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分 PLC 采集控制、配置和离线分析流程。
+当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期、PLC 实时采集运行态已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分配置和离线分析流程。
 
 ## 1. 重构目标
 
@@ -95,7 +95,7 @@ V2.0 的架构目标是：
 
 实时趋势适配器只处理实时追加数据和滚动窗口，不承担历史工作台的静态查询与轴控制。
 
-说明：当前 `MainWindow.xaml` 仍使用既有页面结构。`PlcLiveMonitorViewModel` 已挂载到 `MainWindowViewModel`，后续迁移 XAML 绑定时不需要继续扩大根 ViewModel。
+说明：当前 `MainWindow.xaml` 仍使用既有页面结构。`PlcLiveMonitorViewModel` 已挂载到 `MainWindowViewModel`，并已接管实时采集启动、停止、采集周期解析、采集 buffer 和 UI 呈现帧 drain。根 ViewModel 仍负责把 drain 出来的帧应用到现有点位表和图表事件，后续迁移 XAML 绑定时不需要继续扩大根 ViewModel。
 
 ### 3.3 历史趋势工作台模块
 
@@ -283,6 +283,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `MainWindowViewModel` 当前仍保留旧 XAML 绑定兼容属性和命令包装；这些包装可以保留到 UI 迁移完成，但不应继续承载工作台规则。
 - PLC 回放状态机已经迁入 `PlcDebugViewModel`，根 ViewModel 不再保存回放帧、下一帧索引、当前帧索引、倍速和回放状态文本计算。
 - PLC 实时诊断会话生命周期已经迁入 `PlcDebugViewModel`，根 ViewModel 只负责按钮命令、计时器启停和通知转发。
+- PLC 实时采集运行态已经迁入 `PlcLiveMonitorViewModel`，根 ViewModel 不再直接持有 `PlcAcquisitionEngine` 和 `PlcSampleBuffer`。
 - 不应把“文件行数下降”视为最终目标；最终目标是根 ViewModel 只组合子 ViewModel 和转发全局通知。
 
 ## 6. 禁止事项
@@ -311,6 +312,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `MainWindowViewModel` 退化为最终组合根：未完成。
 - PLC 回放状态机从 `MainWindowViewModel` 迁出：已完成。
 - PLC 实时诊断会话生命周期从 `MainWindowViewModel` 迁出：已完成。
+- PLC 实时采集运行态从 `MainWindowViewModel` 迁出：已完成。
 
 因此，下一阶段可以开始讨论历史趋势功能迁移的具体交互方案，但如果要严格完成架构重构，还应继续拆出 PLC 调试/回放、实时采集控制、配置和离线分析等功能簇。
 
@@ -329,5 +331,6 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `HistoricalTrendWorkbenchViewModel` 已接管历史趋势时间范围、滑块换算、Y 轴范围和图表请求事件。
 - `PlcDebugViewModel` 已接管 PLC 回放帧集合、回放索引、播放速度、播放状态文本和单帧/连续播放状态机。
 - `PlcDebugViewModel` 已接管 PLC 实时诊断 session 的启动、过期停止、手动停止、帧入队、摘要文本和按钮文本状态。
+- `PlcLiveMonitorViewModel` 已接管 PLC 实时采集的启动、停止、采集周期解析、采集 buffer、呈现帧 drain 和采集诊断摘要文本。
 
 这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。
