@@ -467,52 +467,18 @@
                             Width="76"
                             Height="28"
                             Margin="0,0,16,0" />
-                    <TextBlock Text="历史"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0"
-                               Foreground="#374151" />
-                    <TextBox Text="{Binding PlcHistoricalRangeStartText, UpdateSourceTrigger=PropertyChanged}"
-                             Width="150"
-                             Height="28"
-                             Margin="0,0,6,0" />
-                    <TextBox Text="{Binding PlcHistoricalRangeEndText, UpdateSourceTrigger=PropertyChanged}"
-                             Width="150"
-                             Height="28"
-                             Margin="0,0,6,0" />
-                    <Button Command="{Binding ApplyPlcHistoricalRangeCommand}"
-                            Content="应用区间"
-                            Width="76"
-                            Height="28"
-                            Margin="0,0,6,0" />
                     <Button Command="{Binding ResetPlcHistoricalRangeCommand}"
                             Content="全量历史"
                             Width="76"
                             Height="28"
-                            Margin="0,0,6,0" />
-                    <TextBlock Text="Y"
-                               VerticalAlignment="Center"
-                               Margin="4,0,6,0"
-                               Foreground="#374151" />
-                    <TextBox Text="{Binding PlcTrendYMinText, UpdateSourceTrigger=PropertyChanged}"
-                             Width="64"
-                             Height="28"
-                             Margin="0,0,6,0" />
-                    <TextBox Text="{Binding PlcTrendYMaxText, UpdateSourceTrigger=PropertyChanged}"
-                             Width="64"
-                             Height="28"
-                             Margin="0,0,6,0" />
-                    <Button Command="{Binding ApplyPlcTrendYRangeCommand}"
-                            Content="应用Y"
-                            Width="60"
-                            Height="28"
-                            Margin="0,0,6,0" />
+                            Margin="0,0,16,0" />
                     <Button Command="{Binding ResetPlcTrendYRangeCommand}"
                             Content="自动Y"
                             Width="60"
                             Height="28"
-                            Margin="0,0,6,0" />
+                            Margin="0,0,16,0" />
                     <Button Content="导出可见"
-                            Width="60"
+                            Width="72"
                             Height="28"
                             Margin="0,0,16,0"
                             Click="PlcTrendExportVisible_Click" />
@@ -544,6 +510,74 @@
                                Margin="16,0,0,0"
                                Foreground="#374151" />
                   </WrapPanel>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="56" />
+                      <ColumnDefinition Width="150" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="150" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="X窗口"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="#374151" />
+                    <TextBlock Text="{Binding PlcHistoricalViewportStartLabel}"
+                               Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Foreground="#374151" />
+                    <Slider Value="{Binding PlcHistoricalViewportStart, UpdateSourceTrigger=PropertyChanged}"
+                            Minimum="{Binding PlcHistoricalViewportMinimum}"
+                            Maximum="{Binding PlcHistoricalViewportMaximum}"
+                            IsEnabled="{Binding IsPlcHistoricalViewportEnabled}"
+                            Grid.Column="2"
+                            Margin="8,0" />
+                    <Slider Value="{Binding PlcHistoricalViewportEnd, UpdateSourceTrigger=PropertyChanged}"
+                            Minimum="{Binding PlcHistoricalViewportMinimum}"
+                            Maximum="{Binding PlcHistoricalViewportMaximum}"
+                            IsEnabled="{Binding IsPlcHistoricalViewportEnabled}"
+                            Grid.Column="3"
+                            Margin="8,0" />
+                    <TextBlock Text="{Binding PlcHistoricalViewportEndLabel}"
+                               Grid.Column="4"
+                               VerticalAlignment="Center"
+                               Foreground="#374151" />
+                  </Grid>
+                  <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="56" />
+                      <ColumnDefinition Width="80" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="80" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Y范围"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="#374151" />
+                    <TextBlock Text="{Binding PlcTrendYMinText}"
+                               Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Foreground="#374151" />
+                    <Slider Value="{Binding PlcTrendYLower, UpdateSourceTrigger=PropertyChanged}"
+                            Minimum="{Binding PlcTrendYSliderMinimum}"
+                            Maximum="{Binding PlcTrendYSliderMaximum}"
+                            IsEnabled="{Binding IsPlcTrendYSliderEnabled}"
+                            Grid.Column="2"
+                            Margin="8,0" />
+                    <Slider Value="{Binding PlcTrendYUpper, UpdateSourceTrigger=PropertyChanged}"
+                            Minimum="{Binding PlcTrendYSliderMinimum}"
+                            Maximum="{Binding PlcTrendYSliderMaximum}"
+                            IsEnabled="{Binding IsPlcTrendYSliderEnabled}"
+                            Grid.Column="3"
+                            Margin="8,0" />
+                    <TextBlock Text="{Binding PlcTrendYMaxText}"
+                               Grid.Column="4"
+                               VerticalAlignment="Center"
+                               Foreground="#374151" />
+                  </Grid>
                   <TextBlock x:Name="PlcTrendStatusTextBlock"
                              Margin="0,6,0,0"
                              VerticalAlignment="Center"

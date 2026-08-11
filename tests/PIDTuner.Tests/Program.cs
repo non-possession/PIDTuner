@@ -1255,6 +1255,9 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     var viewportRequestCount = 0;
     DateTimeOffset? requestedViewportStart = null;
     DateTimeOffset? requestedViewportEnd = null;
+    var yRangeRequestCount = 0;
+    double? requestedYMin = null;
+    double? requestedYMax = null;
     loader.PlcTrendResetRequested += () => resetCount++;
     loader.PlcSnapshotsApplied += (_, _) => appliedCount++;
     loader.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
@@ -1263,6 +1266,12 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         viewportRequestCount++;
         requestedViewportStart = start;
         requestedViewportEnd = end;
+    };
+    loader.PlcTrendYRangeRequested += (min, max) =>
+    {
+        yRangeRequestCount++;
+        requestedYMin = min;
+        requestedYMax = max;
     };
 
     await loader.LoadPlcRecordingAsync();
@@ -1291,6 +1300,8 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
     AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
+    AssertEqual(true, loader.IsPlcHistoricalViewportEnabled, "historical viewport slider enabled");
+    AssertEqual(true, loader.IsPlcTrendYSliderEnabled, "historical y slider enabled");
 
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
@@ -1306,8 +1317,25 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
 
+    var sliderStart = loader.PlcHistoricalViewportMinimum +
+        (loader.PlcHistoricalViewportMaximum - loader.PlcHistoricalViewportMinimum) / 2d;
+    loader.PlcHistoricalViewportStart = sliderStart;
+    AssertEqual(3, viewportRequestCount, "historical start slider requests viewport update");
+    AssertEqual(
+        DateTimeOffset.FromUnixTimeMilliseconds((long)Math.Round(sliderStart)),
+        requestedViewportStart,
+        "historical start slider timestamp");
+
+    var sliderYLower = loader.PlcTrendYSliderMinimum +
+        (loader.PlcTrendYSliderMaximum - loader.PlcTrendYSliderMinimum) / 4d;
+    loader.PlcTrendYLower = sliderYLower;
+    AssertEqual(1, yRangeRequestCount, "historical y lower slider requests y range update");
+    AssertClose(sliderYLower, requestedYMin, 0.0001d, "historical y lower slider value");
+    AssertClose(loader.PlcTrendYUpper, requestedYMax, 0.0001d, "historical y upper slider value");
+
     loader.UsePlcLiveTrendMode();
     AssertEqual(false, loader.IsPlcHistoricalTrendMode, "live plc trend mode");
+    AssertEqual(false, loader.IsPlcHistoricalViewportEnabled, "live plc trend disables historical slider");
     AssertContains("实时", loader.PlcTrendModeStatus);
 }
 
