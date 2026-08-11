@@ -30,8 +30,6 @@ namespace PIDTuner.Desktop.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     public const int LiveMonitorUiRefreshMilliseconds = 250;
-    private const double AxisSliderMinimum = 0d;
-    private const double AxisSliderMaximum = 1000d;
 
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
@@ -134,27 +132,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private string _plcReplayStatus = "尚未加载 PLC 记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
-    private string _plcHistoricalRangeStartText = string.Empty;
-    private string _plcHistoricalRangeEndText = string.Empty;
-    private string _plcTrendYMinText = string.Empty;
-    private string _plcTrendYMaxText = string.Empty;
-    private string _plcHistoricalViewportStartLabel = string.Empty;
-    private string _plcHistoricalViewportEndLabel = string.Empty;
-    private double _plcHistoricalViewportMinimum;
-    private double _plcHistoricalViewportMaximum = 1d;
-    private double _plcHistoricalViewportStart;
-    private double _plcHistoricalViewportEnd = 1d;
-    private double _plcTrendYSliderMinimum;
-    private double _plcTrendYSliderMaximum = 1d;
-    private double _plcTrendYLower;
-    private double _plcTrendYUpper = 1d;
-    private DateTimeOffset? _plcHistoricalTotalStart;
-    private DateTimeOffset? _plcHistoricalTotalEnd;
-    private double _plcTrendYTotalMinimum;
-    private double _plcTrendYTotalMaximum = 1d;
-    private bool _isPlcHistoricalViewportEnabled;
-    private bool _isPlcTrendYSliderEnabled;
-    private bool _isUpdatingTrendSliderState;
     private string _plcLiveDiagnosticsStatus = "实时诊断：尚未启动。";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
@@ -222,6 +199,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "plc-live-diagnostics.sqlite"));
         LiveMonitor = new PlcLiveMonitorViewModel(PlcMonitorTags);
         Debug = new PlcDebugViewModel(PlcMonitorTags);
+        HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
+        HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
+        HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
+        HistoricalTrendWorkbench.StatusRequested += (message, replayPhase) =>
+        {
+            PlcMonitorStatus = message;
+            if (!string.IsNullOrWhiteSpace(replayPhase))
+            {
+                UpdatePlcReplayStatus(replayPhase);
+            }
+        };
         _livePlcAcquisitionEngine = new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync);
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
         _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
@@ -443,127 +431,103 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string PlcHistoricalRangeStartText
     {
-        get => _plcHistoricalRangeStartText;
-        set => SetProperty(ref _plcHistoricalRangeStartText, value);
+        get => HistoricalTrendWorkbench.RangeStartText;
+        set
+        {
+            if (HistoricalTrendWorkbench.RangeStartText == value)
+            {
+                return;
+            }
+
+            HistoricalTrendWorkbench.RangeStartText = value;
+            OnPropertyChanged();
+        }
     }
 
     public string PlcHistoricalRangeEndText
     {
-        get => _plcHistoricalRangeEndText;
-        set => SetProperty(ref _plcHistoricalRangeEndText, value);
+        get => HistoricalTrendWorkbench.RangeEndText;
+        set
+        {
+            if (HistoricalTrendWorkbench.RangeEndText == value)
+            {
+                return;
+            }
+
+            HistoricalTrendWorkbench.RangeEndText = value;
+            OnPropertyChanged();
+        }
     }
 
     public string PlcTrendYMinText
     {
-        get => _plcTrendYMinText;
-        set => SetProperty(ref _plcTrendYMinText, value);
+        get => HistoricalTrendWorkbench.YMinimumText;
+        set
+        {
+            if (HistoricalTrendWorkbench.YMinimumText == value)
+            {
+                return;
+            }
+
+            HistoricalTrendWorkbench.YMinimumText = value;
+            OnPropertyChanged();
+        }
     }
 
     public string PlcTrendYMaxText
     {
-        get => _plcTrendYMaxText;
-        set => SetProperty(ref _plcTrendYMaxText, value);
+        get => HistoricalTrendWorkbench.YMaximumText;
+        set
+        {
+            if (HistoricalTrendWorkbench.YMaximumText == value)
+            {
+                return;
+            }
+
+            HistoricalTrendWorkbench.YMaximumText = value;
+            OnPropertyChanged();
+        }
     }
 
-    public string PlcHistoricalViewportStartLabel
-    {
-        get => _plcHistoricalViewportStartLabel;
-        private set => SetProperty(ref _plcHistoricalViewportStartLabel, value);
-    }
+    public string PlcHistoricalViewportStartLabel => HistoricalTrendWorkbench.ViewportStartLabel;
 
-    public string PlcHistoricalViewportEndLabel
-    {
-        get => _plcHistoricalViewportEndLabel;
-        private set => SetProperty(ref _plcHistoricalViewportEndLabel, value);
-    }
+    public string PlcHistoricalViewportEndLabel => HistoricalTrendWorkbench.ViewportEndLabel;
 
-    public double PlcHistoricalViewportMinimum
-    {
-        get => _plcHistoricalViewportMinimum;
-        private set => SetProperty(ref _plcHistoricalViewportMinimum, value);
-    }
+    public double PlcHistoricalViewportMinimum => HistoricalTrendWorkbench.ViewportMinimum;
 
-    public double PlcHistoricalViewportMaximum
-    {
-        get => _plcHistoricalViewportMaximum;
-        private set => SetProperty(ref _plcHistoricalViewportMaximum, value);
-    }
+    public double PlcHistoricalViewportMaximum => HistoricalTrendWorkbench.ViewportMaximum;
 
     public double PlcHistoricalViewportStart
     {
-        get => _plcHistoricalViewportStart;
-        set
-        {
-            var clamped = ClampAxisSliderValue(value, PlcHistoricalViewportMinimum, PlcHistoricalViewportEnd);
-            if (SetProperty(ref _plcHistoricalViewportStart, clamped))
-            {
-                ApplyHistoricalViewportSliderChange();
-            }
-        }
+        get => HistoricalTrendWorkbench.ViewportStart;
+        set => HistoricalTrendWorkbench.ViewportStart = Math.Min(value, PlcHistoricalViewportEnd);
     }
 
     public double PlcHistoricalViewportEnd
     {
-        get => _plcHistoricalViewportEnd;
-        set
-        {
-            var clamped = ClampAxisSliderValue(value, PlcHistoricalViewportStart, PlcHistoricalViewportMaximum);
-            if (SetProperty(ref _plcHistoricalViewportEnd, clamped))
-            {
-                ApplyHistoricalViewportSliderChange();
-            }
-        }
+        get => HistoricalTrendWorkbench.ViewportEnd;
+        set => HistoricalTrendWorkbench.ViewportEnd = Math.Max(value, PlcHistoricalViewportStart);
     }
 
-    public double PlcTrendYSliderMinimum
-    {
-        get => _plcTrendYSliderMinimum;
-        private set => SetProperty(ref _plcTrendYSliderMinimum, value);
-    }
+    public double PlcTrendYSliderMinimum => HistoricalTrendWorkbench.YSliderMinimum;
 
-    public double PlcTrendYSliderMaximum
-    {
-        get => _plcTrendYSliderMaximum;
-        private set => SetProperty(ref _plcTrendYSliderMaximum, value);
-    }
+    public double PlcTrendYSliderMaximum => HistoricalTrendWorkbench.YSliderMaximum;
 
     public double PlcTrendYLower
     {
-        get => _plcTrendYLower;
-        set
-        {
-            var clamped = ClampAxisSliderValue(value, PlcTrendYSliderMinimum, PlcTrendYUpper);
-            if (SetProperty(ref _plcTrendYLower, clamped))
-            {
-                ApplyYSliderChange();
-            }
-        }
+        get => HistoricalTrendWorkbench.YLower;
+        set => HistoricalTrendWorkbench.YLower = Math.Min(value, PlcTrendYUpper);
     }
 
     public double PlcTrendYUpper
     {
-        get => _plcTrendYUpper;
-        set
-        {
-            var clamped = ClampAxisSliderValue(value, PlcTrendYLower, PlcTrendYSliderMaximum);
-            if (SetProperty(ref _plcTrendYUpper, clamped))
-            {
-                ApplyYSliderChange();
-            }
-        }
+        get => HistoricalTrendWorkbench.YUpper;
+        set => HistoricalTrendWorkbench.YUpper = Math.Max(value, PlcTrendYLower);
     }
 
-    public bool IsPlcHistoricalViewportEnabled
-    {
-        get => _isPlcHistoricalViewportEnabled;
-        private set => SetProperty(ref _isPlcHistoricalViewportEnabled, value);
-    }
+    public bool IsPlcHistoricalViewportEnabled => HistoricalTrendWorkbench.IsViewportEnabled;
 
-    public bool IsPlcTrendYSliderEnabled
-    {
-        get => _isPlcTrendYSliderEnabled;
-        private set => SetProperty(ref _isPlcTrendYSliderEnabled, value);
-    }
+    public bool IsPlcTrendYSliderEnabled => HistoricalTrendWorkbench.IsYSliderEnabled;
 
     public bool IsPlcHistoricalTrendMode
     {
@@ -1031,6 +995,38 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void HistoricalTrendWorkbench_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        foreach (var propertyName in MapHistoricalTrendProperty(e.PropertyName))
+        {
+            OnPropertyChanged(propertyName);
+        }
+    }
+
+    private static IReadOnlyList<string> MapHistoricalTrendProperty(string? propertyName)
+    {
+        return propertyName switch
+        {
+            nameof(HistoricalTrendWorkbenchViewModel.RangeStartText) => [nameof(PlcHistoricalRangeStartText)],
+            nameof(HistoricalTrendWorkbenchViewModel.RangeEndText) => [nameof(PlcHistoricalRangeEndText)],
+            nameof(HistoricalTrendWorkbenchViewModel.YMinimumText) => [nameof(PlcTrendYMinText)],
+            nameof(HistoricalTrendWorkbenchViewModel.YMaximumText) => [nameof(PlcTrendYMaxText)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportStartLabel) => [nameof(PlcHistoricalViewportStartLabel)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportEndLabel) => [nameof(PlcHistoricalViewportEndLabel)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportMinimum) => [nameof(PlcHistoricalViewportMinimum)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportMaximum) => [nameof(PlcHistoricalViewportMaximum)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportStart) => [nameof(PlcHistoricalViewportStart)],
+            nameof(HistoricalTrendWorkbenchViewModel.ViewportEnd) => [nameof(PlcHistoricalViewportEnd)],
+            nameof(HistoricalTrendWorkbenchViewModel.YSliderMinimum) => [nameof(PlcTrendYSliderMinimum)],
+            nameof(HistoricalTrendWorkbenchViewModel.YSliderMaximum) => [nameof(PlcTrendYSliderMaximum)],
+            nameof(HistoricalTrendWorkbenchViewModel.YLower) => [nameof(PlcTrendYLower)],
+            nameof(HistoricalTrendWorkbenchViewModel.YUpper) => [nameof(PlcTrendYUpper)],
+            nameof(HistoricalTrendWorkbenchViewModel.IsViewportEnabled) => [nameof(IsPlcHistoricalViewportEnabled)],
+            nameof(HistoricalTrendWorkbenchViewModel.IsYSliderEnabled) => [nameof(IsPlcTrendYSliderEnabled)],
+            _ => Array.Empty<string>()
+        };
+    }
+
     public async Task SavePlcConfigurationAsync()
     {
         var fileName = _openFileDialogService.PickPlcProjectConfigurationSaveFile();
@@ -1493,7 +1489,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _plcReplayDisplayedFrameIndex = -1;
             _lastPlcRecordingFrames = recording.Frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
-            SetPlcHistoricalRangeTextFromFrames(recording.Frames);
+            HistoricalTrendWorkbench.SetRangeTextFromFrames(recording.Frames);
 
             PlcMonitorTags.Clear();
             SelectedPlcMonitorTag = null;
@@ -1539,7 +1535,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         IsPlcHistoricalTrendMode = false;
         IsPlcLiveTrendPaused = false;
-        IsPlcHistoricalViewportEnabled = false;
+        HistoricalTrendWorkbench.Clear();
         PlcTrendModeStatus = "当前趋势：实时";
     }
 
@@ -1584,38 +1580,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        var isStartValid = TryParseOptionalTimestamp(PlcHistoricalRangeStartText, out var start, out var startError);
-        var isEndValid = TryParseOptionalTimestamp(PlcHistoricalRangeEndText, out var end, out var endError);
-        if (!isStartValid || !isEndValid)
+        if (!HistoricalTrendWorkbench.TryApplyRangeText(out var error))
         {
-            Notify("历史趋势区间无效", startError ?? endError ?? "请输入可识别的时间。", "Warning");
+            Notify("历史趋势区间无效", error ?? "请输入可识别的时间。", "Warning");
             return Task.CompletedTask;
         }
 
-        if (start.HasValue && end.HasValue && start > end)
-        {
-            Notify("历史趋势区间无效", "开始时间不能晚于结束时间。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        var dataRange = GetPlcReplayTimestampRange(_loadedPlcReplayFrames);
-        if (dataRange is null)
-        {
-            Notify("历史趋势区间无数据", "当前 PLC 记录没有可用时间戳。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        var visibleStart = start ?? dataRange.Value.Start;
-        var visibleEnd = end ?? dataRange.Value.End;
-        if (visibleEnd < dataRange.Value.Start || visibleStart > dataRange.Value.End)
+        if (HistoricalTrendWorkbench.VisibleSeries.Count == 0)
         {
             Notify("历史趋势区间无数据", "当前时间范围不在已加载 PLC 记录内。", "Warning");
             return Task.CompletedTask;
         }
 
         IsPlcHistoricalTrendMode = true;
-        ApplyHistoricalViewport(visibleStart, visibleEnd, updateSliderValues: true);
-        PlcMonitorStatus = $"历史趋势视图已调整：{FormatPlcHistoricalRangeTimestamp(visibleStart)} - {FormatPlcHistoricalRangeTimestamp(visibleEnd)}。";
+        PlcMonitorStatus = $"历史趋势视图已调整：{PlcHistoricalRangeStartText} - {PlcHistoricalRangeEndText}。";
         UpdatePlcReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
@@ -1627,12 +1605,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        SetPlcHistoricalRangeTextFromFrames(_loadedPlcReplayFrames);
+        HistoricalTrendWorkbench.SetRangeTextFromFrames(_loadedPlcReplayFrames);
         IsPlcHistoricalTrendMode = true;
         var dataRange = GetPlcReplayTimestampRange(_loadedPlcReplayFrames);
         if (dataRange is not null)
         {
-            ApplyHistoricalViewport(dataRange.Value.Start, dataRange.Value.End, updateSliderValues: true);
+            HistoricalTrendWorkbench.ResetTimeRangeToFull();
         }
 
         PlcMonitorStatus = $"历史趋势已恢复全量视图：{_loadedPlcReplayFrames.Count} 帧。";
@@ -1642,37 +1620,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task ApplyPlcTrendYRangeAsync()
     {
-        var hasMin = !string.IsNullOrWhiteSpace(PlcTrendYMinText);
-        var hasMax = !string.IsNullOrWhiteSpace(PlcTrendYMaxText);
-        if (!hasMin && !hasMax)
+        if (!HistoricalTrendWorkbench.TryApplyYText(out var error))
         {
-            return ResetPlcTrendYRangeAsync();
-        }
-
-        if (!hasMin || !hasMax ||
-            !TryParseAxisValue(PlcTrendYMinText, out var min) ||
-            !TryParseAxisValue(PlcTrendYMaxText, out var max))
-        {
-            Notify("Y 轴范围无效", "请同时输入可识别的 Y 最小值和最大值。", "Warning");
+            Notify("Y 轴范围无效", error ?? "请同时输入可识别的 Y 最小值和最大值。", "Warning");
             return Task.CompletedTask;
         }
 
-        if (min >= max)
-        {
-            Notify("Y 轴范围无效", "Y 最小值必须小于最大值。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        ApplyYRange(min, max, updateSliderValues: true);
-        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{min.ToString("0.###", CultureInfo.InvariantCulture)} - {max.ToString("0.###", CultureInfo.InvariantCulture)}。";
+        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{PlcTrendYMinText} - {PlcTrendYMaxText}。";
         return Task.CompletedTask;
     }
 
     public Task ResetPlcTrendYRangeAsync()
     {
-        PlcTrendYMinText = string.Empty;
-        PlcTrendYMaxText = string.Empty;
-        ResetYSliderToFullRange();
+        HistoricalTrendWorkbench.ResetYRangeToFull();
         PlcTrendYRangeRequested?.Invoke(null, null);
         PlcMonitorStatus = "趋势 Y 轴已恢复自动适配。";
         return Task.CompletedTask;
@@ -1826,7 +1786,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IsPlcHistoricalTrendMode = true;
         IsPlcLiveTrendPaused = false;
         PlcTrendModeStatus = "当前趋势：历史";
-        SetTrendSliderStateFromFrames(frames);
+        HistoricalTrendWorkbench.LoadFrames(frames);
         for (var index = 0; index < frames.Count; index++)
         {
             ApplyPlcMonitorSnapshots(frames[index], applyTrend: false);
@@ -1837,21 +1797,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcReplayNextFrameIndex = _loadedPlcReplayFrames.Count;
         PlcMonitorStatus = $"历史趋势已显示：{frames.Count}/{_loadedPlcReplayFrames.Count} 帧。";
         UpdatePlcReplayStatus("历史趋势");
-    }
-
-    private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> FilterPlcReplayFrames(
-        DateTimeOffset? start,
-        DateTimeOffset? end)
-    {
-        return _loadedPlcReplayFrames
-            .Where(frame =>
-            {
-                var timestamp = FrameTimestamp(frame);
-                return timestamp.HasValue &&
-                    (!start.HasValue || timestamp.Value >= start.Value) &&
-                    (!end.HasValue || timestamp.Value <= end.Value);
-            })
-            .ToArray();
     }
 
     private static (DateTimeOffset Start, DateTimeOffset End)? GetPlcReplayTimestampRange(
@@ -1867,221 +1812,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return timestamps.Length == 0 ? null : (timestamps[0], timestamps[^1]);
     }
 
-    private void SetTrendSliderStateFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
-    {
-        _isUpdatingTrendSliderState = true;
-        try
-        {
-            var timeRange = GetPlcReplayTimestampRange(frames);
-            IsPlcHistoricalViewportEnabled = timeRange is not null;
-            if (timeRange is not null)
-            {
-                _plcHistoricalTotalStart = timeRange.Value.Start;
-                _plcHistoricalTotalEnd = timeRange.Value.End > timeRange.Value.Start
-                    ? timeRange.Value.End
-                    : timeRange.Value.Start.AddMilliseconds(1);
-                PlcHistoricalViewportMinimum = AxisSliderMinimum;
-                PlcHistoricalViewportMaximum = AxisSliderMaximum;
-                SetHistoricalViewportSliderValues(AxisSliderMinimum, AxisSliderMaximum);
-                UpdateHistoricalViewportText(timeRange.Value.Start, timeRange.Value.End);
-            }
-
-            var yRange = GetPlcReplayValueRange(frames);
-            IsPlcTrendYSliderEnabled = yRange is not null;
-            if (yRange is not null)
-            {
-                var minimum = yRange.Value.Min;
-                var maximum = yRange.Value.Max;
-                if (minimum >= maximum)
-                {
-                    minimum -= 1d;
-                    maximum += 1d;
-                }
-
-                var padding = Math.Max((maximum - minimum) * 0.05d, 1d);
-                _plcTrendYTotalMinimum = minimum - padding;
-                _plcTrendYTotalMaximum = maximum + padding;
-                PlcTrendYSliderMinimum = AxisSliderMinimum;
-                PlcTrendYSliderMaximum = AxisSliderMaximum;
-                SetYSliderValues(AxisSliderMinimum, AxisSliderMaximum);
-                UpdateYRangeText(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum);
-            }
-        }
-        finally
-        {
-            _isUpdatingTrendSliderState = false;
-        }
-    }
-
-    private static (double Min, double Max)? GetPlcReplayValueRange(
-        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
-    {
-        var values = frames
-            .SelectMany(frame => frame)
-            .Select(snapshot => snapshot.Value)
-            .OfType<double>()
-            .Where(value => !double.IsNaN(value) && !double.IsInfinity(value))
-            .ToArray();
-
-        return values.Length == 0 ? null : (values.Min(), values.Max());
-    }
-
-    private void ApplyHistoricalViewportSliderChange()
-    {
-        if (_isUpdatingTrendSliderState || !IsPlcHistoricalViewportEnabled)
-        {
-            return;
-        }
-
-        if (!_plcHistoricalTotalStart.HasValue || !_plcHistoricalTotalEnd.HasValue)
-        {
-            return;
-        }
-
-        var start = InterpolateTimestamp(
-            _plcHistoricalTotalStart.Value,
-            _plcHistoricalTotalEnd.Value,
-            PlcHistoricalViewportStart);
-        var end = InterpolateTimestamp(
-            _plcHistoricalTotalStart.Value,
-            _plcHistoricalTotalEnd.Value,
-            PlcHistoricalViewportEnd);
-        ApplyHistoricalViewport(start, end, updateSliderValues: false);
-        PlcMonitorStatus = $"历史趋势视图已调整：{FormatPlcHistoricalRangeTimestamp(start)} - {FormatPlcHistoricalRangeTimestamp(end)}。";
-        UpdatePlcReplayStatus("历史趋势视图");
-    }
-
-    private void ApplyHistoricalViewport(
-        DateTimeOffset start,
-        DateTimeOffset end,
-        bool updateSliderValues)
-    {
-        if (start > end)
-        {
-            (start, end) = (end, start);
-        }
-
-        UpdateHistoricalViewportText(start, end);
-        if (updateSliderValues)
-        {
-            _isUpdatingTrendSliderState = true;
-            try
-            {
-                SetHistoricalViewportSliderValues(
-                    TimestampToSliderValue(start),
-                    TimestampToSliderValue(end));
-            }
-            finally
-            {
-                _isUpdatingTrendSliderState = false;
-            }
-        }
-
-        PlcHistoricalViewportRequested?.Invoke(start, end);
-    }
-
-    private void ApplyYSliderChange()
-    {
-        if (_isUpdatingTrendSliderState || !IsPlcTrendYSliderEnabled)
-        {
-            return;
-        }
-
-        var min = InterpolateAxisValue(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum, PlcTrendYLower);
-        var max = InterpolateAxisValue(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum, PlcTrendYUpper);
-        ApplyYRange(min, max, updateSliderValues: false);
-        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{min.ToString("0.###", CultureInfo.InvariantCulture)} - {max.ToString("0.###", CultureInfo.InvariantCulture)}。";
-    }
-
-    private void ApplyYRange(double min, double max, bool updateSliderValues)
-    {
-        if (min > max)
-        {
-            (min, max) = (max, min);
-        }
-
-        UpdateYRangeText(min, max);
-        if (updateSliderValues)
-        {
-            _isUpdatingTrendSliderState = true;
-            try
-            {
-                SetYSliderValues(
-                    AxisValueToSliderValue(min),
-                    AxisValueToSliderValue(max));
-            }
-            finally
-            {
-                _isUpdatingTrendSliderState = false;
-            }
-        }
-
-        PlcTrendYRangeRequested?.Invoke(min, max);
-    }
-
-    private void ResetYSliderToFullRange()
-    {
-        if (!IsPlcTrendYSliderEnabled)
-        {
-            return;
-        }
-
-            _isUpdatingTrendSliderState = true;
-            try
-            {
-                SetYSliderValues(PlcTrendYSliderMinimum, PlcTrendYSliderMaximum);
-        }
-        finally
-        {
-            _isUpdatingTrendSliderState = false;
-        }
-    }
-
-    private void UpdateHistoricalViewportText(DateTimeOffset start, DateTimeOffset end)
-    {
-        PlcHistoricalRangeStartText = FormatPlcHistoricalRangeTimestamp(start);
-        PlcHistoricalRangeEndText = FormatPlcHistoricalRangeTimestamp(end);
-        PlcHistoricalViewportStartLabel = PlcHistoricalRangeStartText;
-        PlcHistoricalViewportEndLabel = PlcHistoricalRangeEndText;
-    }
-
-    private void UpdateYRangeText(double min, double max)
-    {
-        PlcTrendYMinText = min.ToString("0.###", CultureInfo.InvariantCulture);
-        PlcTrendYMaxText = max.ToString("0.###", CultureInfo.InvariantCulture);
-    }
-
-    private void SetHistoricalViewportSliderValues(double start, double end)
-    {
-        SetProperty(ref _plcHistoricalViewportStart, start, nameof(PlcHistoricalViewportStart));
-        SetProperty(ref _plcHistoricalViewportEnd, end, nameof(PlcHistoricalViewportEnd));
-    }
-
-    private void SetYSliderValues(double lower, double upper)
-    {
-        SetProperty(ref _plcTrendYLower, lower, nameof(PlcTrendYLower));
-        SetProperty(ref _plcTrendYUpper, upper, nameof(PlcTrendYUpper));
-    }
-
-    private void SetPlcHistoricalRangeTextFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
-    {
-        var timestamps = frames
-            .Select(FrameTimestamp)
-            .Where(timestamp => timestamp.HasValue)
-            .Select(timestamp => timestamp!.Value)
-            .Order()
-            .ToArray();
-        if (timestamps.Length == 0)
-        {
-            PlcHistoricalRangeStartText = string.Empty;
-            PlcHistoricalRangeEndText = string.Empty;
-            return;
-        }
-
-        PlcHistoricalRangeStartText = FormatPlcHistoricalRangeTimestamp(timestamps[0]);
-        PlcHistoricalRangeEndText = FormatPlcHistoricalRangeTimestamp(timestamps[^1]);
-    }
-
     private static DateTimeOffset? FrameTimestamp(IReadOnlyList<PlcTagSnapshot> frame)
     {
         return frame.Count == 0 ? null : frame.Min(snapshot => snapshot.Timestamp);
@@ -2090,105 +1820,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private static string FormatPlcHistoricalRangeTimestamp(DateTimeOffset timestamp)
     {
         return timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
-    }
-
-    private static bool TryParseOptionalTimestamp(
-        string text,
-        out DateTimeOffset? timestamp,
-        out string? error)
-    {
-        timestamp = null;
-        error = null;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return true;
-        }
-
-        if (DateTimeOffset.TryParse(
-            text,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeLocal,
-            out var parsed))
-        {
-            timestamp = parsed;
-            return true;
-        }
-
-        error = $"无法识别时间：{text}";
-        return false;
-    }
-
-    private static bool TryParseAxisValue(string text, out double value)
-    {
-        return double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.CurrentCulture,
-                out value) ||
-            double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out value);
-    }
-
-    private static double ClampAxisSliderValue(double value, double minimum, double maximum)
-    {
-        if (minimum > maximum)
-        {
-            (minimum, maximum) = (maximum, minimum);
-        }
-
-        return Math.Clamp(value, minimum, maximum);
-    }
-
-    private double TimestampToSliderValue(DateTimeOffset timestamp)
-    {
-        if (!_plcHistoricalTotalStart.HasValue || !_plcHistoricalTotalEnd.HasValue)
-        {
-            return AxisSliderMinimum;
-        }
-
-        var totalMilliseconds = Math.Max(
-            1d,
-            (_plcHistoricalTotalEnd.Value - _plcHistoricalTotalStart.Value).TotalMilliseconds);
-        var offsetMilliseconds = (timestamp - _plcHistoricalTotalStart.Value).TotalMilliseconds;
-        return ClampAxisSliderValue(
-            AxisSliderMinimum + (offsetMilliseconds / totalMilliseconds * AxisSliderMaximum),
-            AxisSliderMinimum,
-            AxisSliderMaximum);
-    }
-
-    private double AxisValueToSliderValue(double value)
-    {
-        var span = Math.Max(double.Epsilon, _plcTrendYTotalMaximum - _plcTrendYTotalMinimum);
-        return ClampAxisSliderValue(
-            AxisSliderMinimum + ((value - _plcTrendYTotalMinimum) / span * AxisSliderMaximum),
-            AxisSliderMinimum,
-            AxisSliderMaximum);
-    }
-
-    private static DateTimeOffset InterpolateTimestamp(
-        DateTimeOffset start,
-        DateTimeOffset end,
-        double sliderValue)
-    {
-        var fraction = SliderFraction(sliderValue);
-        var ticks = start.Ticks + (long)Math.Round((end.Ticks - start.Ticks) * fraction);
-        return new DateTimeOffset(ticks, start.Offset);
-    }
-
-    private static double InterpolateAxisValue(double minimum, double maximum, double sliderValue)
-    {
-        return minimum + ((maximum - minimum) * SliderFraction(sliderValue));
-    }
-
-    private static double SliderFraction(double sliderValue)
-    {
-        return Math.Clamp(
-            (sliderValue - AxisSliderMinimum) / (AxisSliderMaximum - AxisSliderMinimum),
-            0d,
-            1d);
     }
 
     private bool EnsurePlcReplayLoaded()

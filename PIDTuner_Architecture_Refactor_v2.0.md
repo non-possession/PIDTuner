@@ -2,7 +2,7 @@
 
 本文档记录 PIDTuner 在 V2.0 阶段进行历史趋势工作台迁移前的架构重构依据。它不是功能需求清单，而是后续代码变更的模块边界、职责划分和迁移顺序。
 
-当前状态：架构重构基线已落地。历史趋势的具体 UI 交互、WPFHistoricalTrend 交互迁移和可见数据导出增强尚未进入功能实现阶段。
+当前状态：架构重构基线已落地，历史趋势状态逻辑已经开始从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分 PLC 调试、PLC 采集控制、配置和离线分析流程。
 
 ## 1. 重构目标
 
@@ -258,7 +258,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 ### 阶段 D：拆分 ViewModel
 
-状态：已完成架构入口，未完成全部 XAML 绑定迁移。
+状态：已完成架构入口，历史趋势状态逻辑已部分迁出，未完成全部 XAML 绑定迁移。
 
 已新增：
 
@@ -277,7 +277,11 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 每次迁移后保持现有用户功能可运行。
 - `MainWindowViewModel` 最终退化为组合根和全局状态入口。
 
-当前约束：后续历史趋势功能不再进入 `MainWindowViewModel`，应进入 `HistoricalTrendWorkbenchViewModel`、`HistoricalTrendWorkbenchCoordinator`、`HistoricalTrendChartAdapter` 或桥接模块。
+当前约束：
+
+- 后续历史趋势功能不再进入 `MainWindowViewModel`，应进入 `HistoricalTrendWorkbenchViewModel`、`HistoricalTrendWorkbenchCoordinator`、`HistoricalTrendChartAdapter` 或桥接模块。
+- `MainWindowViewModel` 当前仍保留旧 XAML 绑定兼容属性和命令包装；这些包装可以保留到 UI 迁移完成，但不应继续承载工作台规则。
+- 不应把“文件行数下降”视为最终目标；最终目标是根 ViewModel 只组合子 ViewModel 和转发全局通知。
 
 ## 6. 禁止事项
 
@@ -291,18 +295,20 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 ## 7. 架构重构完成标准
 
-本轮架构重构达到以下标准后，才能进入历史趋势功能迁移：
+进入历史趋势功能迁移前至少应达到以下标准：
 
 - 有独立历史趋势数据集模型：已完成。
 - 有 PLC 帧到历史数据集的桥接入口：已完成。
 - 有纯 C# 历史工作台状态和协调器：已完成。
 - 有实时/历史两个图表适配器：已完成。
 - 有共享 ScottPlot 绘图模块：已完成。
-- 有历史趋势专用 ViewModel：已完成。
+- 有历史趋势专用 ViewModel：已完成，并已承接历史范围、滑块和 Y 轴状态逻辑。
 - 有实时/调试子 ViewModel 入口：已完成。
 - 有覆盖桥接和工作台状态的测试：已完成。
+- `MainWindowViewModel` 不再承载历史工作台核心规则：阶段性完成。
+- `MainWindowViewModel` 退化为最终组合根：未完成。
 
-因此，下一阶段可以开始讨论和迁移历史趋势功能，但不应先回到 `MainWindowViewModel` 内堆叠实现。
+因此，下一阶段可以开始讨论历史趋势功能迁移的具体交互方案，但如果要严格完成架构重构，还应继续拆出 PLC 调试/回放、实时采集控制、配置和离线分析等功能簇。
 
 ## 8. 当前代码变更记录
 
@@ -316,5 +322,6 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 新增历史趋势工作台模型、协调器和桥接模块。
 - 新增 `HistoricalTrendWorkbenchViewModel`、`PlcLiveMonitorViewModel`、`PlcDebugViewModel`。
 - `MainWindowViewModel` 挂载子 ViewModel，作为后续绑定迁移的组合根。
+- `HistoricalTrendWorkbenchViewModel` 已接管历史趋势时间范围、滑块换算、Y 轴范围和图表请求事件。
 
-这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。
+这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。
