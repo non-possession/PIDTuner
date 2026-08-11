@@ -53,7 +53,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
-    private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
     private PidResponseMetrics? _lastMetrics;
     private PidResponseAssessment? _lastAssessment;
@@ -62,15 +61,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _lastSourceFileName = string.Empty;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
-    private string _plcConfigurationName = "default-siemens-s7-project";
-    private string _plcProtocol = "Siemens S7";
-    private string _plcIpAddress = "192.168.0.1";
-    private int _plcRack;
-    private int _plcSlot = 1;
-    private int _plcTimeoutMilliseconds = 3000;
-    private int _plcDefaultSamplingMilliseconds = 500;
-    private int _plcMinimumSamplingMilliseconds = PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
-    private string _plcConfigurationStatus = "PLC 配置尚未保存。";
     private string _sampleCount = "-";
     private string _overshootPercent = "-";
     private string _riseTime = "-";
@@ -99,7 +89,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
-    private ObservableCollection<TagDefinitionViewModel> _tagDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
@@ -108,7 +97,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<PidParameterSetViewModel> _parameterSets = [];
     private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
-    private TagDefinitionViewModel? _selectedTagDefinition;
     private TestSessionListItemViewModel? _selectedHistorySession;
     private TestSessionListItemViewModel? _baselineHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
@@ -188,6 +176,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
         Debug = new PlcDebugViewModel(PlcMonitorTags, liveDiagnosticsStore);
         Debug.PropertyChanged += Debug_PropertyChanged;
+        PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
+        PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -204,7 +194,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
         _plcLiveDiagnosticsTimer.Tick += async (_, _) => await StopExpiredPlcLiveDiagnosticsAsync();
         RefreshFieldDefinitions();
-        RefreshTagDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -268,6 +257,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public PlcDebugViewModel Debug { get; }
 
+    public PlcConfigurationEditorViewModel PlcConfigurationEditor { get; }
+
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
     public IReadOnlyList<string> AvailableFieldDataTypes { get; } =
@@ -296,56 +287,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string PlcConfigurationName
     {
-        get => _plcConfigurationName;
-        set => SetProperty(ref _plcConfigurationName, value);
+        get => PlcConfigurationEditor.ConfigurationName;
+        set => PlcConfigurationEditor.ConfigurationName = value;
     }
 
     public string PlcProtocol
     {
-        get => _plcProtocol;
-        set => SetProperty(ref _plcProtocol, value);
+        get => PlcConfigurationEditor.Protocol;
+        set => PlcConfigurationEditor.Protocol = value;
     }
 
     public string PlcIpAddress
     {
-        get => _plcIpAddress;
-        set => SetProperty(ref _plcIpAddress, value);
+        get => PlcConfigurationEditor.IpAddress;
+        set => PlcConfigurationEditor.IpAddress = value;
     }
 
     public int PlcRack
     {
-        get => _plcRack;
-        set => SetProperty(ref _plcRack, value);
+        get => PlcConfigurationEditor.Rack;
+        set => PlcConfigurationEditor.Rack = value;
     }
 
     public int PlcSlot
     {
-        get => _plcSlot;
-        set => SetProperty(ref _plcSlot, value);
+        get => PlcConfigurationEditor.Slot;
+        set => PlcConfigurationEditor.Slot = value;
     }
 
     public int PlcTimeoutMilliseconds
     {
-        get => _plcTimeoutMilliseconds;
-        set => SetProperty(ref _plcTimeoutMilliseconds, value);
+        get => PlcConfigurationEditor.TimeoutMilliseconds;
+        set => PlcConfigurationEditor.TimeoutMilliseconds = value;
     }
 
     public int PlcDefaultSamplingMilliseconds
     {
-        get => _plcDefaultSamplingMilliseconds;
-        set => SetProperty(ref _plcDefaultSamplingMilliseconds, value);
+        get => PlcConfigurationEditor.DefaultSamplingMilliseconds;
+        set => PlcConfigurationEditor.DefaultSamplingMilliseconds = value;
     }
 
     public int PlcMinimumSamplingMilliseconds
     {
-        get => _plcMinimumSamplingMilliseconds;
-        set => SetProperty(ref _plcMinimumSamplingMilliseconds, value);
+        get => PlcConfigurationEditor.MinimumSamplingMilliseconds;
+        set => PlcConfigurationEditor.MinimumSamplingMilliseconds = value;
     }
 
     public string PlcConfigurationStatus
     {
-        get => _plcConfigurationStatus;
-        private set => SetProperty(ref _plcConfigurationStatus, value);
+        get => PlcConfigurationEditor.Status;
+        private set => _ = value;
     }
 
     public string PlcCommunicationStatus
@@ -734,8 +725,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<TagDefinitionViewModel> TagDefinitions
     {
-        get => _tagDefinitions;
-        private set => SetProperty(ref _tagDefinitions, value);
+        get => PlcConfigurationEditor.TagDefinitions;
+        private set => _ = value;
     }
 
     public ObservableCollection<TestSessionListItemViewModel> HistorySessions
@@ -824,8 +815,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public TagDefinitionViewModel? SelectedTagDefinition
     {
-        get => _selectedTagDefinition;
-        set => SetProperty(ref _selectedTagDefinition, value);
+        get => PlcConfigurationEditor.SelectedTagDefinition;
+        set => PlcConfigurationEditor.SelectedTagDefinition = value;
     }
 
     public PlcTagMonitorViewModel? SelectedPlcMonitorTag
@@ -976,6 +967,46 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void PlcConfigurationEditor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(PlcConfigurationEditorViewModel.ConfigurationName):
+                OnPropertyChanged(nameof(PlcConfigurationName));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.Protocol):
+                OnPropertyChanged(nameof(PlcProtocol));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.IpAddress):
+                OnPropertyChanged(nameof(PlcIpAddress));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.Rack):
+                OnPropertyChanged(nameof(PlcRack));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.Slot):
+                OnPropertyChanged(nameof(PlcSlot));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.TimeoutMilliseconds):
+                OnPropertyChanged(nameof(PlcTimeoutMilliseconds));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.DefaultSamplingMilliseconds):
+                OnPropertyChanged(nameof(PlcDefaultSamplingMilliseconds));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.MinimumSamplingMilliseconds):
+                OnPropertyChanged(nameof(PlcMinimumSamplingMilliseconds));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.Status):
+                OnPropertyChanged(nameof(PlcConfigurationStatus));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.TagDefinitions):
+                OnPropertyChanged(nameof(TagDefinitions));
+                break;
+            case nameof(PlcConfigurationEditorViewModel.SelectedTagDefinition):
+                OnPropertyChanged(nameof(SelectedTagDefinition));
+                break;
+        }
+    }
+
     private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1037,10 +1068,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            _plcConfiguration = BuildPlcConfigurationFromForm();
+            var configuration = BuildPlcConfigurationFromForm();
             await using var stream = File.Create(fileName);
-            await _plcProjectConfigurationStore.SaveAsync(_plcConfiguration, stream, CancellationToken.None);
-            PlcConfigurationStatus = $"已保存 {TagDefinitions.Count} 个点位。";
+            await _plcProjectConfigurationStore.SaveAsync(configuration, stream, CancellationToken.None);
+            PlcConfigurationEditor.MarkSaved();
             Notify("PLC 配置已保存", Path.GetFullPath(fileName), "Success");
         }
         catch (Exception exception)
@@ -1155,13 +1186,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void EnqueuePlcLiveDiagnosticsFrame(PlcAcquisitionFrame frame)
     {
         Debug.EnqueueDiagnosticsFrame(frame);
-    }
-
-    private static int ResolveMinimumSamplingMilliseconds(PlcProjectConfiguration configuration)
-    {
-        return configuration.MinimumSamplingMilliseconds > 0
-            ? configuration.MinimumSamplingMilliseconds
-            : PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     }
 
     private async Task StopLiveMonitoringAsync()
@@ -1666,9 +1690,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await using var stream = File.OpenRead(fileName);
-            _plcConfiguration = await _plcProjectConfigurationStore.LoadAsync(stream, CancellationToken.None);
-            ApplyPlcConfiguration(_plcConfiguration);
-            PlcConfigurationStatus = $"已加载 {TagDefinitions.Count} 个点位。";
+            var configuration = await _plcProjectConfigurationStore.LoadAsync(stream, CancellationToken.None);
+            ApplyPlcConfiguration(configuration);
             Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
             await CheckPlcCommunicationAsync();
         }
@@ -1680,25 +1703,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private Task AddTagAsync()
     {
-        var tag = TagDefinitionViewModel.CreateNew(TagDefinitions.Count + 1, PlcDefaultSamplingMilliseconds);
-        TagDefinitions.Add(tag);
-        SelectedTagDefinition = tag;
-        PlcConfigurationStatus = "已新增点位，请保存 PLC 配置。";
+        PlcConfigurationEditor.AddTag();
         Notify("点位已新增", "请编辑点位信息后保存 PLC 配置。", "Info");
         return Task.CompletedTask;
     }
 
     private Task RemoveTagAsync()
     {
-        if (SelectedTagDefinition is null)
+        if (!PlcConfigurationEditor.RemoveSelectedTag())
         {
             Notify("无法删除点位", "请先选择要删除的点位。", "Warning");
             return Task.CompletedTask;
         }
 
-        TagDefinitions.Remove(SelectedTagDefinition);
-        SelectedTagDefinition = null;
-        PlcConfigurationStatus = "已删除点位，请保存 PLC 配置。";
         Notify("点位已删除", "请保存 PLC 配置以保留修改。", "Info");
         return Task.CompletedTask;
     }
@@ -2476,23 +2493,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _fieldProfile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
     }
 
-    private void RefreshTagDefinitions()
-    {
-        TagDefinitions = new ObservableCollection<TagDefinitionViewModel>(
-            _plcConfiguration.Tags.Select(tag => new TagDefinitionViewModel(tag)));
-    }
-
     private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)
     {
-        PlcConfigurationName = configuration.Name;
-        PlcProtocol = configuration.Protocol;
-        PlcIpAddress = configuration.IpAddress;
-        PlcRack = configuration.Rack;
-        PlcSlot = configuration.Slot;
-        PlcTimeoutMilliseconds = configuration.TimeoutMilliseconds;
-        PlcDefaultSamplingMilliseconds = configuration.DefaultSamplingMilliseconds;
-        PlcMinimumSamplingMilliseconds = ResolveMinimumSamplingMilliseconds(configuration);
-        RefreshTagDefinitions();
+        PlcConfigurationEditor.ApplyConfiguration(configuration);
         PlcMonitorTags.Clear();
         SelectedPlcMonitorTag = null;
         PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
@@ -2500,27 +2503,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private PlcProjectConfiguration BuildPlcConfigurationFromForm()
     {
-        var tags = TagDefinitions.Select(tag => tag.ToDefinition()).ToArray();
-        var duplicateName = tags
-            .GroupBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-
-        if (duplicateName is not null)
-        {
-            throw new InvalidOperationException($"点位名称重复：{duplicateName.Key}");
-        }
-
-        return new PlcProjectConfiguration(
-            1,
-            PlcConfigurationName.Trim(),
-            PlcProtocol.Trim(),
-            PlcIpAddress.Trim(),
-            PlcRack,
-            PlcSlot,
-            PlcTimeoutMilliseconds,
-            PlcDefaultSamplingMilliseconds,
-            PlcMinimumSamplingMilliseconds,
-            tags);
+        return PlcConfigurationEditor.BuildConfiguration();
     }
 
     private PidSampleFieldProfile BuildFieldProfileFromGrid()

@@ -2,7 +2,7 @@
 
 本文档记录 PIDTuner 在 V2.0 阶段进行历史趋势工作台迁移前的架构重构依据。它不是功能需求清单，而是后续代码变更的模块边界、职责划分和迁移顺序。
 
-当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期、PLC 实时采集运行态、PLC 1s 记录与文件保存已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分配置和离线分析流程。
+当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期、PLC 实时采集运行态、PLC 1s 记录与文件保存、PLC 配置编辑状态已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分离线分析流程和旧 XAML 绑定包装。
 
 ## 1. 重构目标
 
@@ -119,7 +119,24 @@ V2.0 的架构目标是：
 
 说明：当前已建立纯状态模型、协调器、历史适配器和历史 ViewModel。尚未迁移 WPFHistoricalTrend 的具体滑块/拖拽/缩放控件。
 
-### 3.4 桥接模块
+### 3.4 PLC 配置模块
+
+已建立：
+
+- `PlcConfigurationEditorViewModel`
+
+目标职责：
+
+- PLC 连接配置表单状态。
+- 点位配置集合和当前选中点位。
+- 新增/删除点位。
+- 加载配置后同步表单。
+- 从表单构建 `PlcProjectConfiguration`。
+- 校验重复点位名称。
+
+该模块不处理趋势绘图、PLC 通信检查、实时采集和历史工作台状态。根 ViewModel 暂时保留旧属性包装，以兼容现有 XAML 绑定。
+
+### 3.5 桥接模块
 
 已建立：
 
@@ -136,7 +153,7 @@ V2.0 的架构目标是：
 
 桥接模块是必要的，因为 PLC 采集帧是采集链路模型，而历史趋势工作台需要的是按曲线组织、可按时间区间查询的数据集。
 
-### 3.5 调试模块
+### 3.6 调试模块
 
 已建立或演进为：
 
@@ -156,7 +173,7 @@ V2.0 的架构目标是：
 
 说明：当前 `PlcDebugViewModel` 已挂载到 `MainWindowViewModel`，并共享当前点位集合。后续可把调试页 XAML 绑定迁移到该子 ViewModel。
 
-### 3.6 共享绘图模块
+### 3.7 共享绘图模块
 
 当前已引入：
 
@@ -265,11 +282,8 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 - `PlcLiveMonitorViewModel`
 - `PlcDebugViewModel`
+- `PlcConfigurationEditorViewModel`
 - `HistoricalTrendWorkbenchViewModel`
-
-暂未新增：
-
-- `PlcConfigurationViewModel`
 
 迁移方式：
 
@@ -286,6 +300,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - PLC 实时诊断会话生命周期已经迁入 `PlcDebugViewModel`，根 ViewModel 只负责按钮命令、计时器启停和通知转发。
 - PLC 实时采集运行态已经迁入 `PlcLiveMonitorViewModel`，根 ViewModel 不再直接持有 `PlcAcquisitionEngine` 和 `PlcSampleBuffer`。
 - PLC 1s 记录已经迁入 `PlcOneSecondRecorder`，根 ViewModel 不再直接实现一次性采样循环、采集帧诊断构造和记录 JSON 保存。
+- PLC 配置编辑状态已经迁入 `PlcConfigurationEditorViewModel`，根 ViewModel 不再直接保存连接表单字段、点位表集合和点位选中状态。
 - 不应把“文件行数下降”视为最终目标；最终目标是根 ViewModel 只组合子 ViewModel 和转发全局通知。
 
 ## 6. 禁止事项
@@ -316,6 +331,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - PLC 实时诊断会话生命周期从 `MainWindowViewModel` 迁出：已完成。
 - PLC 实时采集运行态从 `MainWindowViewModel` 迁出：已完成。
 - PLC 1s 记录与文件保存从 `MainWindowViewModel` 迁出：已完成。
+- PLC 配置编辑状态从 `MainWindowViewModel` 迁出：已完成。
 
 因此，下一阶段可以开始讨论历史趋势功能迁移的具体交互方案，但如果要严格完成架构重构，还应继续拆出 PLC 调试/回放、实时采集控制、配置和离线分析等功能簇。
 
@@ -336,5 +352,6 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `PlcDebugViewModel` 已接管 PLC 实时诊断 session 的启动、过期停止、手动停止、帧入队、摘要文本和按钮文本状态。
 - `PlcLiveMonitorViewModel` 已接管 PLC 实时采集的启动、停止、采集周期解析、采集 buffer、呈现帧 drain 和采集诊断摘要文本。
 - 新增 `PlcOneSecondRecorder`，接管 1s 记录的启用点位校验、最快点位周期解析、单会话采样、诊断帧构造和记录 JSON 保存。
+- 新增 `PlcConfigurationEditorViewModel`，接管 PLC 连接表单字段、点位表、选中点位、新增/删除点位、配置构建和重复点位名称校验。
 
 这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。
