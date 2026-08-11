@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using PIDTuner.Application.Interfaces;
+using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Plc;
 
 namespace PIDTuner.Desktop.ViewModels;
@@ -16,10 +18,15 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
     private int _replayNextFrameIndex;
     private int _replayDisplayedFrameIndex = -1;
     private int _sourceReplayIntervalMilliseconds = 100;
+    private readonly IPlcLiveDiagnosticsStore _diagnosticsStore;
+    private IPlcLiveDiagnosticsSession? _diagnosticsSession;
 
-    public PlcDebugViewModel(ObservableCollection<PlcTagMonitorViewModel> detailedTags)
+    public PlcDebugViewModel(
+        ObservableCollection<PlcTagMonitorViewModel> detailedTags,
+        IPlcLiveDiagnosticsStore diagnosticsStore)
     {
         DetailedTags = detailedTags;
+        _diagnosticsStore = diagnosticsStore;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -92,8 +99,16 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
     public bool IsDiagnosticsRunning
     {
         get => _isDiagnosticsRunning;
-        set => SetProperty(ref _isDiagnosticsRunning, value);
+        private set
+        {
+            if (SetProperty(ref _isDiagnosticsRunning, value))
+            {
+                OnPropertyChanged(nameof(DiagnosticsButtonText));
+            }
+        }
     }
+
+    public string DiagnosticsButtonText => IsDiagnosticsRunning ? "停止诊断" : "启动诊断";
 
     public bool IsReplayRunning
     {
@@ -124,6 +139,90 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
         ReplayDisplayedFrameIndex = -1;
         IsReplayRunning = false;
         UpdateReplayStatus("已加载");
+    }
+
+    public async Task<PlcDiagnosticsOperationResult> StartDiagnosticsAsync(
+        PlcProjectConfiguration configuration,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _diagnosticsSession = await _diagnosticsStore.StartSessionAsync(configuration, duration, cancellationToken);
+            IsDiagnosticsRunning = true;
+            DiagnosticsStatus =
+                $"实时诊断运行中：{duration.TotalMinutes:0.##} min，到期 {FormatTimestamp(_diagnosticsSession.EndsAtUtc)}，数据库 {_diagnosticsSession.DatabasePath}";
+            return new PlcDiagnosticsOperationResult(
+                ShouldKeepTimerRunning: true,
+                NotificationTitle: "实时诊断已启动",
+                NotificationMessage: _diagnosticsSession.DatabasePath,
+                NotificationKind: "Info");
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsStatus = $"实时诊断启动失败：{exception.Message}";
+            return new PlcDiagnosticsOperationResult(
+                ShouldKeepTimerRunning: false,
+                NotificationTitle: "实时诊断启动失败",
+                NotificationMessage: exception.Message,
+                NotificationKind: "Error");
+        }
+    }
+
+    public async Task<PlcDiagnosticsOperationResult> StopExpiredDiagnosticsAsync(CancellationToken cancellationToken)
+    {
+        if (_diagnosticsSession is null || DateTimeOffset.UtcNow < _diagnosticsSession.EndsAtUtc)
+        {
+            return PlcDiagnosticsOperationResult.None(ShouldKeepTimerRunning: IsDiagnosticsRunning);
+        }
+
+        return await StopDiagnosticsAsync("诊断时长已到，数据库写入已自动关闭。", cancellationToken);
+    }
+
+    public async Task<PlcDiagnosticsOperationResult> StopDiagnosticsAsync(
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (_diagnosticsSession is null)
+        {
+            IsDiagnosticsRunning = false;
+            return PlcDiagnosticsOperationResult.None(ShouldKeepTimerRunning: false);
+        }
+
+        var session = _diagnosticsSession;
+        _diagnosticsSession = null;
+        IsDiagnosticsRunning = false;
+
+        try
+        {
+            var summary = await session.StopAsync(cancellationToken);
+            DiagnosticsStatus = FormatDiagnosticsSummary(reason, summary);
+            return new PlcDiagnosticsOperationResult(
+                ShouldKeepTimerRunning: false,
+                NotificationTitle: "实时诊断已完成",
+                NotificationMessage: $"{summary.DatabasePath}；{FormatDiagnosticsSummary(string.Empty, summary)}",
+                NotificationKind: "Success");
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsStatus = $"实时诊断停止失败：{exception.Message}";
+            return new PlcDiagnosticsOperationResult(
+                ShouldKeepTimerRunning: false,
+                NotificationTitle: "实时诊断停止失败",
+                NotificationMessage: exception.Message,
+                NotificationKind: "Error");
+        }
+    }
+
+    public void EnqueueDiagnosticsFrame(PlcAcquisitionFrame frame)
+    {
+        var session = _diagnosticsSession;
+        if (session is null || frame.Diagnostics.PlannedTimestampUtc < session.StartedAtUtc)
+        {
+            return;
+        }
+
+        session.Enqueue(frame);
     }
 
     public PlcReplayOperationResult StartReplay()
@@ -272,6 +371,33 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
             $"{phase}：第 {DisplayedReplayFrameNumber}/{LoadedReplayFrames.Count} 帧，源周期 {SourceReplayIntervalMilliseconds} ms，播放间隔 {EffectiveReplayIntervalMilliseconds} ms，速度 {ReplaySpeedText}";
     }
 
+    private static string FormatDiagnosticsSummary(string reason, PlcLiveDiagnosticsSummary summary)
+    {
+        var prefix = string.IsNullOrWhiteSpace(reason) ? "实时诊断" : reason;
+        return string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "{0}：{1} 帧，样本 {2}，调度延迟 avg {3:0.#} ms / max {4:0.#} ms，读取耗时 avg {5:0.#} ms / max {6:0.#} ms，读取操作 {7} 次 avg {8:0.#} ms / max {9:0.#} ms / 慢操作 {10} 次，迟到 {11} 帧，队列丢帧 {12}，数据库 {13}",
+            prefix,
+            summary.FrameCount,
+            summary.SnapshotCount,
+            summary.AverageScheduleDelayMilliseconds,
+            summary.MaxScheduleDelayMilliseconds,
+            summary.AverageReadDurationMilliseconds,
+            summary.MaxReadDurationMilliseconds,
+            summary.ReadOperationCount,
+            summary.AverageReadOperationDurationMilliseconds,
+            summary.MaxReadOperationDurationMilliseconds,
+            summary.SlowReadOperationCount,
+            summary.LateFrameCount,
+            summary.DiagnosticsQueueDroppedFrameCount,
+            summary.DatabasePath);
+    }
+
+    private static string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        return timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -304,4 +430,14 @@ public sealed record PlcReplayOperationResult(
 
     public static PlcReplayOperationResult Warning(string title, string message) =>
         new(string.Empty, false, null, null, title, message, "Warning");
+}
+
+public sealed record PlcDiagnosticsOperationResult(
+    bool ShouldKeepTimerRunning,
+    string? NotificationTitle,
+    string? NotificationMessage,
+    string? NotificationKind)
+{
+    public static PlcDiagnosticsOperationResult None(bool ShouldKeepTimerRunning) =>
+        new(ShouldKeepTimerRunning, null, null, null);
 }
