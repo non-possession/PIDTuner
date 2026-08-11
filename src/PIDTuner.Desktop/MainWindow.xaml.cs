@@ -23,6 +23,8 @@ public partial class MainWindow : Window
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
         _viewModel.PlcSnapshotFramesApplied += ApplyPlcTrendSnapshotFrames;
         _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
+        _viewModel.PlcHistoricalViewportRequested += ApplyPlcHistoricalViewport;
+        _viewModel.PlcTrendYRangeRequested += ApplyPlcTrendYRange;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.PlcMonitorTags.CollectionChanged += PlcMonitorTags_CollectionChanged;
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
@@ -116,9 +118,26 @@ public partial class MainWindow : Window
     private async void PlcTrendWindow5Minutes_Click(object sender, RoutedEventArgs e) =>
         await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(5));
 
-    private void PlcTrendFitY_Click(object sender, RoutedEventArgs e)
+    private void ApplyPlcHistoricalViewport(DateTimeOffset? start, DateTimeOffset? end)
     {
-        _plcTrendChartAdapter.AutoFitY();
+        _plcTrendChartAdapter.ShowFullHistory = true;
+        _plcTrendChartAdapter.SetHistoricalVisibleRange(start, end);
+        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
+    private void ApplyPlcTrendYRange(double? min, double? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            _plcTrendChartAdapter.SetManualYRange(min.Value, max.Value);
+        }
+        else
+        {
+            _plcTrendChartAdapter.ClearManualYRange();
+        }
+
+        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 

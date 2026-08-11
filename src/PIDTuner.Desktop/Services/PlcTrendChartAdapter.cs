@@ -37,6 +37,9 @@ public sealed class PlcTrendChartAdapter
     private TimeSpan _liveSamplingInterval = DefaultLiveSamplingInterval;
     private bool _showFullHistory;
     private bool _isLiveScrollingPaused;
+    private DateTimeOffset? _historicalVisibleStart;
+    private DateTimeOffset? _historicalVisibleEnd;
+    private (double Min, double Max)? _manualYRange;
 
     public PlcTrendChartAdapter(WpfPlot plot)
     {
@@ -78,6 +81,22 @@ public sealed class PlcTrendChartAdapter
     {
         get => _isLiveScrollingPaused;
         set => _isLiveScrollingPaused = value;
+    }
+
+    public void SetHistoricalVisibleRange(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        _historicalVisibleStart = start;
+        _historicalVisibleEnd = end;
+    }
+
+    public void SetManualYRange(double min, double max)
+    {
+        _manualYRange = (min, max);
+    }
+
+    public void ClearManualYRange()
+    {
+        _manualYRange = null;
     }
 
     public void Clear()
@@ -131,7 +150,7 @@ public sealed class PlcTrendChartAdapter
         }
 
         var latest = range.Value.Latest;
-        var windowStart = ShowFullHistory ? range.Value.Earliest : latest - VisibleWindow;
+        var (windowStart, windowEnd) = GetVisibleTimeRange(range.Value.Earliest, latest);
         var colorIndex = 0;
         foreach (var tag in monitorTags.Where(tag => tag.IsTrendVisible))
         {
@@ -141,7 +160,7 @@ public sealed class PlcTrendChartAdapter
             }
 
             var visiblePoints = points
-                .Where(point => point.Timestamp >= windowStart && point.Timestamp <= latest)
+                .Where(point => point.Timestamp >= windowStart && point.Timestamp <= windowEnd)
                 .ToArray();
             if (visiblePoints.Length == 0)
             {
@@ -159,10 +178,25 @@ public sealed class PlcTrendChartAdapter
         }
 
         _plot.Plot.Axes.DateTimeTicksBottom();
-        _plot.Plot.Axes.SetLimitsX(windowStart.LocalDateTime.ToOADate(), latest.LocalDateTime.ToOADate());
+        var xStart = windowStart.LocalDateTime.ToOADate();
+        var xEnd = windowEnd.LocalDateTime.ToOADate();
+        if (xStart >= xEnd)
+        {
+            xStart = windowStart.AddMilliseconds(-500).LocalDateTime.ToOADate();
+            xEnd = windowEnd.AddMilliseconds(500).LocalDateTime.ToOADate();
+        }
+
+        _plot.Plot.Axes.SetLimitsX(xStart, xEnd);
         if (monitorTags.Any(tag => tag.IsTrendVisible && _pointsByTag.ContainsKey(tag.TagId)))
         {
-            _plot.Plot.Axes.AutoScaleY();
+            if (_manualYRange is { } manualYRange)
+            {
+                _plot.Plot.Axes.SetLimitsY(manualYRange.Min, manualYRange.Max);
+            }
+            else
+            {
+                _plot.Plot.Axes.AutoScaleY();
+            }
         }
 
         _plot.Refresh();
@@ -170,6 +204,7 @@ public sealed class PlcTrendChartAdapter
 
     public void AutoFitY()
     {
+        ClearManualYRange();
         _plot.Plot.Axes.AutoScaleY();
         _plot.Refresh();
     }
@@ -389,6 +424,30 @@ public sealed class PlcTrendChartAdapter
             .ToArray();
 
         return points.Length == 0 ? null : (points.Min(), points.Max());
+    }
+
+    private (DateTimeOffset Start, DateTimeOffset End) GetVisibleTimeRange(
+        DateTimeOffset earliest,
+        DateTimeOffset latest)
+    {
+        if (!ShowFullHistory)
+        {
+            return (latest - VisibleWindow, latest);
+        }
+
+        var start = _historicalVisibleStart ?? earliest;
+        var end = _historicalVisibleEnd ?? latest;
+        if (start < earliest)
+        {
+            start = earliest;
+        }
+
+        if (end > latest)
+        {
+            end = latest;
+        }
+
+        return start <= end ? (start, end) : (earliest, latest);
     }
 
     private static TimeSpan Max(TimeSpan left, TimeSpan right) => left >= right ? left : right;

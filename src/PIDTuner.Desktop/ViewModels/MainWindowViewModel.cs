@@ -134,6 +134,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcTrendModeStatus = "当前趋势：实时";
     private string _plcHistoricalRangeStartText = string.Empty;
     private string _plcHistoricalRangeEndText = string.Empty;
+    private string _plcTrendYMinText = string.Empty;
+    private string _plcTrendYMaxText = string.Empty;
     private string _plcLiveDiagnosticsStatus = "实时诊断：尚未启动。";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
@@ -222,6 +224,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         TogglePlcLiveTrendPauseCommand = new AsyncCommand(TogglePlcLiveTrendPauseAsync);
         ApplyPlcHistoricalRangeCommand = new AsyncCommand(ApplyPlcHistoricalRangeAsync);
         ResetPlcHistoricalRangeCommand = new AsyncCommand(ResetPlcHistoricalRangeAsync);
+        ApplyPlcTrendYRangeCommand = new AsyncCommand(ApplyPlcTrendYRangeAsync);
+        ResetPlcTrendYRangeCommand = new AsyncCommand(ResetPlcTrendYRangeAsync);
         TogglePlcReplayCommand = new AsyncCommand(TogglePlcReplayAsync);
         StepPlcReplayBackwardCommand = new AsyncCommand(StepPlcReplayBackwardAsync);
         StepPlcReplayForwardCommand = new AsyncCommand(StepPlcReplayForwardAsync);
@@ -256,6 +260,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event Action<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>>? PlcSnapshotFramesApplied;
 
     public event Action? PlcTrendResetRequested;
+
+    public event Action<DateTimeOffset?, DateTimeOffset?>? PlcHistoricalViewportRequested;
+
+    public event Action<double?, double?>? PlcTrendYRangeRequested;
 
     public string Title { get; } = "PIDTuner";
 
@@ -403,6 +411,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _plcHistoricalRangeEndText;
         set => SetProperty(ref _plcHistoricalRangeEndText, value);
+    }
+
+    public string PlcTrendYMinText
+    {
+        get => _plcTrendYMinText;
+        set => SetProperty(ref _plcTrendYMinText, value);
+    }
+
+    public string PlcTrendYMaxText
+    {
+        get => _plcTrendYMaxText;
+        set => SetProperty(ref _plcTrendYMaxText, value);
     }
 
     public bool IsPlcHistoricalTrendMode
@@ -758,6 +778,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand ApplyPlcHistoricalRangeCommand { get; }
 
     public ICommand ResetPlcHistoricalRangeCommand { get; }
+
+    public ICommand ApplyPlcTrendYRangeCommand { get; }
+
+    public ICommand ResetPlcTrendYRangeCommand { get; }
 
     public ICommand TogglePlcReplayCommand { get; }
 
@@ -1402,17 +1426,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        var selectedFrames = FilterPlcReplayFrames(start, end);
-        if (selectedFrames.Count == 0)
+        var dataRange = GetPlcReplayTimestampRange(_loadedPlcReplayFrames);
+        if (dataRange is null)
         {
-            Notify("历史趋势区间无数据", "当前时间范围内没有 PLC 记录帧。", "Warning");
+            Notify("历史趋势区间无数据", "当前 PLC 记录没有可用时间戳。", "Warning");
             return Task.CompletedTask;
         }
 
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
-        PlcTrendResetRequested?.Invoke();
-        ShowLoadedPlcHistoricalTrend(selectedFrames);
+        var visibleStart = start ?? dataRange.Value.Start;
+        var visibleEnd = end ?? dataRange.Value.End;
+        if (visibleEnd < dataRange.Value.Start || visibleStart > dataRange.Value.End)
+        {
+            Notify("历史趋势区间无数据", "当前时间范围不在已加载 PLC 记录内。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        IsPlcHistoricalTrendMode = true;
+        PlcHistoricalViewportRequested?.Invoke(visibleStart, visibleEnd);
+        PlcMonitorStatus = $"历史趋势视图已调整：{FormatPlcHistoricalRangeTimestamp(visibleStart)} - {FormatPlcHistoricalRangeTimestamp(visibleEnd)}。";
+        UpdatePlcReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
 
@@ -1424,10 +1456,48 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SetPlcHistoricalRangeTextFromFrames(_loadedPlcReplayFrames);
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
-        PlcTrendResetRequested?.Invoke();
-        ShowLoadedPlcHistoricalTrend();
+        IsPlcHistoricalTrendMode = true;
+        var dataRange = GetPlcReplayTimestampRange(_loadedPlcReplayFrames);
+        PlcHistoricalViewportRequested?.Invoke(dataRange?.Start, dataRange?.End);
+        PlcMonitorStatus = $"历史趋势已恢复全量视图：{_loadedPlcReplayFrames.Count} 帧。";
+        UpdatePlcReplayStatus("全量历史");
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyPlcTrendYRangeAsync()
+    {
+        var hasMin = !string.IsNullOrWhiteSpace(PlcTrendYMinText);
+        var hasMax = !string.IsNullOrWhiteSpace(PlcTrendYMaxText);
+        if (!hasMin && !hasMax)
+        {
+            return ResetPlcTrendYRangeAsync();
+        }
+
+        if (!hasMin || !hasMax ||
+            !TryParseAxisValue(PlcTrendYMinText, out var min) ||
+            !TryParseAxisValue(PlcTrendYMaxText, out var max))
+        {
+            Notify("Y 轴范围无效", "请同时输入可识别的 Y 最小值和最大值。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        if (min >= max)
+        {
+            Notify("Y 轴范围无效", "Y 最小值必须小于最大值。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        PlcTrendYRangeRequested?.Invoke(min, max);
+        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{min.ToString("0.###", CultureInfo.InvariantCulture)} - {max.ToString("0.###", CultureInfo.InvariantCulture)}。";
+        return Task.CompletedTask;
+    }
+
+    public Task ResetPlcTrendYRangeAsync()
+    {
+        PlcTrendYMinText = string.Empty;
+        PlcTrendYMaxText = string.Empty;
+        PlcTrendYRangeRequested?.Invoke(null, null);
+        PlcMonitorStatus = "趋势 Y 轴已恢复自动适配。";
         return Task.CompletedTask;
     }
 
@@ -1605,6 +1675,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             .ToArray();
     }
 
+    private static (DateTimeOffset Start, DateTimeOffset End)? GetPlcReplayTimestampRange(
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
+    {
+        var timestamps = frames
+            .Select(FrameTimestamp)
+            .Where(timestamp => timestamp.HasValue)
+            .Select(timestamp => timestamp!.Value)
+            .Order()
+            .ToArray();
+
+        return timestamps.Length == 0 ? null : (timestamps[0], timestamps[^1]);
+    }
+
     private void SetPlcHistoricalRangeTextFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
     {
         var timestamps = frames
@@ -1658,6 +1741,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         error = $"无法识别时间：{text}";
         return false;
+    }
+
+    private static bool TryParseAxisValue(string text, out double value)
+    {
+        return double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.CurrentCulture,
+                out value) ||
+            double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value);
     }
 
     private bool EnsurePlcReplayLoaded()

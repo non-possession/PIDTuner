@@ -427,8 +427,8 @@
                   <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <DockPanel>
-                  <WrapPanel DockPanel.Dock="Left">
+                <StackPanel>
+                  <WrapPanel>
                     <Button Content="10s"
                             Width="48"
                             Height="28"
@@ -489,11 +489,28 @@
                             Width="76"
                             Height="28"
                             Margin="0,0,6,0" />
-                    <Button Content="适配Y"
+                    <TextBlock Text="Y"
+                               VerticalAlignment="Center"
+                               Margin="4,0,6,0"
+                               Foreground="#374151" />
+                    <TextBox Text="{Binding PlcTrendYMinText, UpdateSourceTrigger=PropertyChanged}"
+                             Width="64"
+                             Height="28"
+                             Margin="0,0,6,0" />
+                    <TextBox Text="{Binding PlcTrendYMaxText, UpdateSourceTrigger=PropertyChanged}"
+                             Width="64"
+                             Height="28"
+                             Margin="0,0,6,0" />
+                    <Button Command="{Binding ApplyPlcTrendYRangeCommand}"
+                            Content="应用Y"
                             Width="60"
                             Height="28"
-                            Margin="0,0,16,0"
-                            Click="PlcTrendFitY_Click" />
+                            Margin="0,0,6,0" />
+                    <Button Command="{Binding ResetPlcTrendYRangeCommand}"
+                            Content="自动Y"
+                            Width="60"
+                            Height="28"
+                            Margin="0,0,6,0" />
                     <Button Content="导出可见"
                             Width="60"
                             Height="28"
@@ -528,10 +545,10 @@
                                Foreground="#374151" />
                   </WrapPanel>
                   <TextBlock x:Name="PlcTrendStatusTextBlock"
-                             Margin="18,0,0,0"
+                             Margin="0,6,0,0"
                              VerticalAlignment="Center"
                              Foreground="#374151" />
-                </DockPanel>
+                </StackPanel>
 
                 <scottPlot:WpfPlot x:Name="PlcTrendPlot"
                                    Grid.Row="1"

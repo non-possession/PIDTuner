@@ -1252,9 +1252,18 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     var resetCount = 0;
     var appliedCount = 0;
     var batchAppliedCount = 0;
+    var viewportRequestCount = 0;
+    DateTimeOffset? requestedViewportStart = null;
+    DateTimeOffset? requestedViewportEnd = null;
     loader.PlcTrendResetRequested += () => resetCount++;
     loader.PlcSnapshotsApplied += (_, _) => appliedCount++;
     loader.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
+    loader.PlcHistoricalViewportRequested += (start, end) =>
+    {
+        viewportRequestCount++;
+        requestedViewportStart = start;
+        requestedViewportEnd = end;
+    };
 
     await loader.LoadPlcRecordingAsync();
 
@@ -1288,10 +1297,13 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     loader.PlcHistoricalRangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
     loader.PlcHistoricalRangeEndText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
     await loader.ApplyPlcHistoricalRangeAsync();
-    AssertContains("1/", loader.PlcMonitorStatus);
+    AssertEqual(1, viewportRequestCount, "historical range requests viewport update");
+    AssertEqual(selectedHistoricalTimestamp, requestedViewportStart, "historical viewport start");
+    AssertEqual(selectedHistoricalTimestamp, requestedViewportEnd, "historical viewport end");
     AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical range keeps trend mode");
 
     await loader.ResetPlcHistoricalRangeAsync();
+    AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
 
     loader.UsePlcLiveTrendMode();
