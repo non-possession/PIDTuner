@@ -26,6 +26,52 @@
       <Setter Property="Padding"
               Value="8,4" />
     </Style>
+    <Style x:Key="TrendModeButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Background"
+              Value="#E5E7EB" />
+      <Setter Property="BorderBrush"
+              Value="#9CA3AF" />
+      <Setter Property="Foreground"
+              Value="#1F2937" />
+      <Setter Property="Height"
+              Value="36" />
+      <Setter Property="Width"
+              Value="96" />
+      <Setter Property="Margin"
+              Value="0,0,12,8" />
+    </Style>
+    <Style x:Key="LiveTrendModeButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource TrendModeButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsPlcLiveTrendMode}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="#DCFCE7" />
+          <Setter Property="BorderBrush"
+                  Value="#22C55E" />
+          <Setter Property="Foreground"
+                  Value="#166534" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="HistoricalTrendModeButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource TrendModeButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsPlcHistoricalTrendMode}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="#DBEAFE" />
+          <Setter Property="BorderBrush"
+                  Value="#3B82F6" />
+          <Setter Property="Foreground"
+                  Value="#1D4ED8" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
     <Style TargetType="{x:Type DataGrid}">
       <Setter Property="FontSize"
               Value="13" />
@@ -95,7 +141,7 @@
       </Border>
 
       <TabControl Grid.Row="2"
-                  SelectedIndex="2"
+                  SelectedIndex="1"
                   Margin="0,16,0,0">
         <TabItem Header="连接与配置">
           <Grid Margin="16">
@@ -302,11 +348,6 @@
 
             <StackPanel>
               <WrapPanel>
-                <Button Command="{Binding CheckPlcCommunicationCommand}"
-                        Content="检查通信"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
                 <Button Command="{Binding RefreshPlcMonitorCommand}"
                         Content="刷新点位"
                         Width="96"
@@ -314,64 +355,30 @@
                         Margin="0,0,12,8" />
                 <Button Command="{Binding ShowPlcLiveTrendCommand}"
                         Content="实时趋势"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
+                        Style="{StaticResource LiveTrendModeButtonStyle}" />
                 <Button Command="{Binding ShowPlcHistoricalTrendCommand}"
                         Content="历史趋势"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
+                        Style="{StaticResource HistoricalTrendModeButtonStyle}" />
                 <Button Command="{Binding TogglePlcMonitoringCommand}"
                         Content="启动/停止"
                         Width="96"
                         Height="36"
                         Margin="0,0,12,8" />
-                <Button Command="{Binding RecordPlcOneSecondCommand}"
-                        Content="记录 1s"
+                <Button Content="导出可见"
                         Width="96"
                         Height="36"
-                        Margin="0,0,12,8" />
-                <Button Command="{Binding LoadPlcRecordingCommand}"
-                        Content="打开记录"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <Button Command="{Binding TogglePlcReplayCommand}"
-                        Content="播放/暂停"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <Button Command="{Binding StepPlcReplayBackwardCommand}"
-                        Content="上一帧"
-                        Width="76"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <Button Command="{Binding StepPlcReplayForwardCommand}"
-                        Content="下一帧"
-                        Width="76"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <TextBlock Text="{Binding PlcMonitorStatus}"
-                           VerticalAlignment="Center"
-                           Margin="4,0,0,8"
-                           Foreground="#374151" />
+                        Margin="0,0,12,8"
+                        Click="PlcTrendExportVisible_Click" />
                 <TextBlock Text="{Binding PlcTrendModeStatus}"
                            VerticalAlignment="Center"
-                           Margin="18,0,0,8"
+                           Margin="8,0,0,8"
                            FontWeight="SemiBold"
                            Foreground="#111827" />
-                <TextBlock Text="{Binding PlcCommunicationStatus}"
+                <TextBlock Text="{Binding PlcMonitorStatus}"
                            VerticalAlignment="Center"
                            Margin="18,0,0,8"
                            Foreground="#374151" />
               </WrapPanel>
-              <TextBlock Text="{Binding PlcAcquisitionDiagnosticsStatus}"
-                         Margin="0,0,0,6"
-                         FontSize="14"
-                         FontWeight="SemiBold"
-                         Foreground="#0F766E"
-                         TextWrapping="Wrap" />
             </StackPanel>
 
             <DataGrid Grid.Row="2"
@@ -449,147 +456,7 @@
                             Height="28"
                             Margin="0,0,16,0"
                             Click="PlcTrendWindow5Minutes_Click" />
-                    <Button Command="{Binding TogglePlcLiveTrendPauseCommand}"
-                            Content="{Binding PlcLiveTrendPauseButtonText}"
-                            Width="80"
-                            Height="28"
-                            Margin="0,0,16,0" />
-                    <TextBlock Text="诊断 min ≤30"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0"
-                               Foreground="#374151" />
-                    <TextBox Text="{Binding PlcDiagnosticsDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
-                             Width="44"
-                             Height="28"
-                             Margin="0,0,6,0" />
-                    <Button Command="{Binding TogglePlcLiveDiagnosticsCommand}"
-                            Content="{Binding PlcLiveDiagnosticsButtonText}"
-                            Width="76"
-                            Height="28"
-                            Margin="0,0,16,0" />
-                    <Button Command="{Binding ResetPlcHistoricalRangeCommand}"
-                            Content="全量历史"
-                            Width="76"
-                            Height="28"
-                            Margin="0,0,16,0" />
-                    <Button Command="{Binding ResetPlcTrendYRangeCommand}"
-                            Content="自动Y"
-                            Width="60"
-                            Height="28"
-                            Margin="0,0,16,0" />
-                    <Button Content="导出可见"
-                            Width="72"
-                            Height="28"
-                            Margin="0,0,16,0"
-                            Click="PlcTrendExportVisible_Click" />
-                    <Button Command="{Binding SetPlcReplaySpeedHalfCommand}"
-                            Content="0.5x"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,8,0" />
-                    <Button Command="{Binding SetPlcReplaySpeedNormalCommand}"
-                            Content="1x"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,8,0" />
-                    <Button Command="{Binding SetPlcReplaySpeedDoubleCommand}"
-                            Content="2x"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,8,0" />
-                    <Button Command="{Binding SetPlcReplaySpeedFiveCommand}"
-                            Content="5x"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,16,0" />
-                    <TextBlock Text="{Binding PlcReplayStatus}"
-                               VerticalAlignment="Center"
-                               Foreground="#374151" />
-                    <TextBlock Text="{Binding PlcLiveDiagnosticsStatus}"
-                               VerticalAlignment="Center"
-                               Margin="16,0,0,0"
-                               Foreground="#374151" />
                   </WrapPanel>
-                  <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="56" />
-                      <ColumnDefinition Width="150" />
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="150" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="X窗口"
-                               Grid.Column="0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="#374151" />
-                    <TextBlock Text="{Binding PlcHistoricalViewportStartLabel}"
-                               Grid.Column="1"
-                               VerticalAlignment="Center"
-                               Foreground="#374151" />
-                    <Slider Value="{Binding PlcHistoricalViewportStart, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="{Binding PlcHistoricalViewportMinimum}"
-                            Maximum="{Binding PlcHistoricalViewportMaximum}"
-                            IsEnabled="{Binding IsPlcHistoricalViewportEnabled}"
-                            IsMoveToPointEnabled="True"
-                            SmallChange="1"
-                            LargeChange="50"
-                            Grid.Column="2"
-                            Margin="8,0" />
-                    <Slider Value="{Binding PlcHistoricalViewportEnd, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="{Binding PlcHistoricalViewportMinimum}"
-                            Maximum="{Binding PlcHistoricalViewportMaximum}"
-                            IsEnabled="{Binding IsPlcHistoricalViewportEnabled}"
-                            IsMoveToPointEnabled="True"
-                            SmallChange="1"
-                            LargeChange="50"
-                            Grid.Column="3"
-                            Margin="8,0" />
-                    <TextBlock Text="{Binding PlcHistoricalViewportEndLabel}"
-                               Grid.Column="4"
-                               VerticalAlignment="Center"
-                               Foreground="#374151" />
-                  </Grid>
-                  <Grid Margin="0,6,0,0">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="56" />
-                      <ColumnDefinition Width="80" />
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="80" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Y范围"
-                               Grid.Column="0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="#374151" />
-                    <TextBlock Text="{Binding PlcTrendYMinText}"
-                               Grid.Column="1"
-                               VerticalAlignment="Center"
-                               Foreground="#374151" />
-                    <Slider Value="{Binding PlcTrendYLower, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="{Binding PlcTrendYSliderMinimum}"
-                            Maximum="{Binding PlcTrendYSliderMaximum}"
-                            IsEnabled="{Binding IsPlcTrendYSliderEnabled}"
-                            IsMoveToPointEnabled="True"
-                            SmallChange="1"
-                            LargeChange="50"
-                            Grid.Column="2"
-                            Margin="8,0" />
-                    <Slider Value="{Binding PlcTrendYUpper, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="{Binding PlcTrendYSliderMinimum}"
-                            Maximum="{Binding PlcTrendYSliderMaximum}"
-                            IsEnabled="{Binding IsPlcTrendYSliderEnabled}"
-                            IsMoveToPointEnabled="True"
-                            SmallChange="1"
-                            LargeChange="50"
-                            Grid.Column="3"
-                            Margin="8,0" />
-                    <TextBlock Text="{Binding PlcTrendYMaxText}"
-                               Grid.Column="4"
-                               VerticalAlignment="Center"
-                               Foreground="#374151" />
-                  </Grid>
                   <TextBlock x:Name="PlcTrendStatusTextBlock"
                              Margin="0,6,0,0"
                              VerticalAlignment="Center"
@@ -603,6 +470,134 @@
                                    MouseLeave="PlcTrendPlot_MouseLeave" />
               </Grid>
             </Border>
+          </Grid>
+        </TabItem>
+        <TabItem Header="调试">
+          <Grid Margin="16">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <WrapPanel>
+              <Button Command="{Binding RecordPlcOneSecondCommand}"
+                      Content="记录 1s"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding LoadPlcRecordingCommand}"
+                      Content="打开记录"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding TogglePlcReplayCommand}"
+                      Content="播放/暂停"
+                      Width="96"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding StepPlcReplayBackwardCommand}"
+                      Content="上一帧"
+                      Width="76"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding StepPlcReplayForwardCommand}"
+                      Content="下一帧"
+                      Width="76"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <Button Command="{Binding SetPlcReplaySpeedHalfCommand}"
+                      Content="0.5x"
+                      Width="56"
+                      Height="36"
+                      Margin="0,0,8,8" />
+              <Button Command="{Binding SetPlcReplaySpeedNormalCommand}"
+                      Content="1x"
+                      Width="56"
+                      Height="36"
+                      Margin="0,0,8,8" />
+              <Button Command="{Binding SetPlcReplaySpeedDoubleCommand}"
+                      Content="2x"
+                      Width="56"
+                      Height="36"
+                      Margin="0,0,8,8" />
+              <Button Command="{Binding SetPlcReplaySpeedFiveCommand}"
+                      Content="5x"
+                      Width="56"
+                      Height="36"
+                      Margin="0,0,12,8" />
+              <TextBlock Text="诊断 min ≤30"
+                         VerticalAlignment="Center"
+                         Margin="8,0,6,8"
+                         Foreground="#374151" />
+              <TextBox Text="{Binding PlcDiagnosticsDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
+                       Width="44"
+                       Height="28"
+                       Margin="0,0,6,8" />
+              <Button Command="{Binding TogglePlcLiveDiagnosticsCommand}"
+                      Content="{Binding PlcLiveDiagnosticsButtonText}"
+                      Width="88"
+                      Height="36"
+                      Margin="0,0,12,8" />
+            </WrapPanel>
+
+            <StackPanel Grid.Row="1"
+                        Margin="0,10,0,12">
+              <TextBlock Text="{Binding PlcReplayStatus}"
+                         FontWeight="SemiBold"
+                         Foreground="#374151"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding PlcLiveDiagnosticsStatus}"
+                         Margin="0,6,0,0"
+                         Foreground="#374151"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding PlcAcquisitionDiagnosticsStatus}"
+                         Margin="0,6,0,0"
+                         FontWeight="SemiBold"
+                         Foreground="#0F766E"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+
+            <DataGrid Grid.Row="2"
+                      ItemsSource="{Binding PlcMonitorTags}"
+                      SelectedItem="{Binding SelectedPlcMonitorTag}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="False"
+                      HeadersVisibility="Column">
+              <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="趋势"
+                                        Binding="{Binding IsTrendVisible, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="52" />
+                <DataGridTextColumn Header="名称"
+                                    Binding="{Binding Name}"
+                                    IsReadOnly="True"
+                                    Width="100" />
+                <DataGridTextColumn Header="地址"
+                                    Binding="{Binding Address}"
+                                    IsReadOnly="True"
+                                    Width="150" />
+                <DataGridTextColumn Header="当前值"
+                                    Binding="{Binding ValueText}"
+                                    IsReadOnly="True"
+                                    Width="100" />
+                <DataGridTextColumn Header="单位"
+                                    Binding="{Binding Unit}"
+                                    IsReadOnly="True"
+                                    Width="80" />
+                <DataGridTextColumn Header="质量"
+                                    Binding="{Binding Quality}"
+                                    IsReadOnly="True"
+                                    Width="100" />
+                <DataGridTextColumn Header="来源"
+                                    Binding="{Binding Source}"
+                                    IsReadOnly="True"
+                                    Width="100" />
+                <DataGridTextColumn Header="时间"
+                                    Binding="{Binding TimestampText}"
+                                    IsReadOnly="True"
+                                    Width="120" />
+              </DataGrid.Columns>
+            </DataGrid>
           </Grid>
         </TabItem>
         <TabItem Header="分析">

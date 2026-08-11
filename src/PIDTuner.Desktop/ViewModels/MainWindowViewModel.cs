@@ -547,8 +547,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool IsPlcHistoricalTrendMode
     {
         get => _isPlcHistoricalTrendMode;
-        private set => SetProperty(ref _isPlcHistoricalTrendMode, value);
+        private set
+        {
+            if (SetProperty(ref _isPlcHistoricalTrendMode, value))
+            {
+                OnPropertyChanged(nameof(IsPlcLiveTrendMode));
+            }
+        }
     }
+
+    public bool IsPlcLiveTrendMode => !IsPlcHistoricalTrendMode;
 
     public bool IsPlcLiveTrendPaused
     {
@@ -1515,7 +1523,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         StopPlcReplay();
         if (_loadedPlcReplayFrames.Count == 0)
         {
-            await LoadPlcRecordingAsync(showFullHistory: true);
+            IsPlcHistoricalTrendMode = true;
+            IsPlcLiveTrendPaused = true;
+            PlcTrendModeStatus = "当前趋势：历史";
+            PlcMonitorStatus = "历史趋势模式：尚未加载历史记录。";
+            UpdatePlcReplayStatus("历史趋势");
             return;
         }
 
@@ -2240,7 +2252,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private async Task LoadPlcConfigurationAsync()
+    public async Task LoadPlcConfigurationAsync()
     {
         var fileName = _openFileDialogService.PickPlcProjectConfigurationFile();
         if (string.IsNullOrWhiteSpace(fileName))
@@ -2255,6 +2267,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ApplyPlcConfiguration(_plcConfiguration);
             PlcConfigurationStatus = $"已加载 {TagDefinitions.Count} 个点位。";
             Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
+            await CheckPlcCommunicationAsync();
         }
         catch (Exception exception)
         {

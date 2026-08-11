@@ -51,6 +51,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
+    ("main view model checks plc communication after loading configuration", MainViewModelChecksPlcCommunicationAfterLoadingConfiguration),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
     ("main view model reuses a plc session while live monitoring", MainViewModelReusesPlcSessionWhileLiveMonitoring),
@@ -1001,6 +1002,41 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
 }
 
+static async Task MainViewModelChecksPlcCommunicationAfterLoadingConfiguration()
+{
+    var directory = CreateTestStorageDirectory();
+    var plcConfigurationPath = Path.Combine(directory, "plc-project.json");
+    var configuration = new PlcProjectConfiguration(
+        1,
+        "loaded-loop",
+        "Preview",
+        "10.10.0.8",
+        0,
+        1,
+        3000,
+        500,
+        100,
+        PlcProjectConfiguration.CreateDefault().Tags);
+    await using (var stream = File.Create(plcConfigurationPath))
+    {
+        await new JsonPlcProjectConfigurationStore().SaveAsync(configuration, stream, CancellationToken.None);
+    }
+
+    var probe = new FixedPlcConnectivityProbe(true);
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(plcProjectConfigurationFile: plcConfigurationPath),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        probe,
+        testSessionStorageDirectory: directory);
+
+    await viewModel.LoadPlcConfigurationAsync();
+
+    AssertEqual(1, probe.CheckCount, "plc load configuration communication check count");
+    AssertEqual("10.10.0.8", probe.LastHost, "plc load configuration communication check host");
+    AssertEqual("PLC 通信检查通过", viewModel.NotificationTitle, "plc load configuration communication notification");
+}
+
 static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
 {
     var directory = CreateTestStorageDirectory();
@@ -1166,8 +1202,11 @@ static async Task MainViewModelTogglesLiveTrendScrollingPause()
     AssertEqual("暂停滚动", viewModel.PlcLiveTrendPauseButtonText, "resumed live trend pause button text");
 
     await viewModel.ShowPlcHistoricalTrendAsync();
+    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "historical trend pauses live scrolling");
     await viewModel.TogglePlcLiveTrendPauseAsync();
-    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "historical trend ignores live pause toggle");
+    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "historical trend ignores manual pause toggle");
+    viewModel.UsePlcLiveTrendMode();
+    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "live trend mode resumes scrolling");
 }
 
 static Task PlcMonitorRowDisplaysMilliseconds()
@@ -1739,10 +1778,16 @@ file sealed class NoFileDialogService(
 
 file sealed class FixedPlcConnectivityProbe(bool reachable) : IPlcConnectivityProbe
 {
+    public int CheckCount { get; private set; }
+
+    public string? LastHost { get; private set; }
+
     public Task<PlcCommunicationCheck> CheckAsync(
         PlcProjectConfiguration configuration,
         CancellationToken cancellationToken)
     {
+        CheckCount++;
+        LastHost = configuration.IpAddress;
         return Task.FromResult(new PlcCommunicationCheck(
             reachable,
             configuration.IpAddress,
