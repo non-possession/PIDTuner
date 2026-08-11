@@ -281,6 +281,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 - 后续历史趋势功能不再进入 `MainWindowViewModel`，应进入 `HistoricalTrendWorkbenchViewModel`、`HistoricalTrendWorkbenchCoordinator`、`HistoricalTrendChartAdapter` 或桥接模块。
 - `MainWindowViewModel` 当前仍保留旧 XAML 绑定兼容属性和命令包装；这些包装可以保留到 UI 迁移完成，但不应继续承载工作台规则。
+- PLC 回放状态机已经迁入 `PlcDebugViewModel`，根 ViewModel 不再保存回放帧、下一帧索引、当前帧索引、倍速和回放状态文本计算。
 - 不应把“文件行数下降”视为最终目标；最终目标是根 ViewModel 只组合子 ViewModel 和转发全局通知。
 
 ## 6. 禁止事项
@@ -307,6 +308,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 有覆盖桥接和工作台状态的测试：已完成。
 - `MainWindowViewModel` 不再承载历史工作台核心规则：阶段性完成。
 - `MainWindowViewModel` 退化为最终组合根：未完成。
+- PLC 回放状态机从 `MainWindowViewModel` 迁出：已完成。
 
 因此，下一阶段可以开始讨论历史趋势功能迁移的具体交互方案，但如果要严格完成架构重构，还应继续拆出 PLC 调试/回放、实时采集控制、配置和离线分析等功能簇。
 
@@ -323,5 +325,6 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 新增 `HistoricalTrendWorkbenchViewModel`、`PlcLiveMonitorViewModel`、`PlcDebugViewModel`。
 - `MainWindowViewModel` 挂载子 ViewModel，作为后续绑定迁移的组合根。
 - `HistoricalTrendWorkbenchViewModel` 已接管历史趋势时间范围、滑块换算、Y 轴范围和图表请求事件。
+- `PlcDebugViewModel` 已接管 PLC 回放帧集合、回放索引、播放速度、播放状态文本和单帧/连续播放状态机。
 
 这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。

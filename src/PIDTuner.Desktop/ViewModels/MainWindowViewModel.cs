@@ -57,11 +57,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcAcquisitionEngine _livePlcAcquisitionEngine;
     private IPlcLiveDiagnosticsSession? _plcLiveDiagnosticsSession;
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
-    private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _loadedPlcReplayFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
-    private int _plcReplayNextFrameIndex;
-    private int _plcReplayDisplayedFrameIndex = -1;
-    private int _loadedPlcReplayIntervalMilliseconds = 100;
-    private double _plcReplaySpeedMultiplier = 1d;
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private PlcProjectConfiguration _plcConfiguration = PlcProjectConfiguration.CreateDefault();
     private AnalysisWindow? _lastAnalysisWindow;
@@ -130,12 +125,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
-    private string _plcReplayStatus = "尚未加载 PLC 记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
     private string _plcLiveDiagnosticsStatus = "实时诊断：尚未启动。";
     private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcMonitoring;
-    private bool _isPlcReplayRunning;
     private bool _isPlcHistoricalTrendMode;
     private bool _isPlcLiveTrendPaused;
     private bool _isPlcLiveDiagnosticsRunning;
@@ -199,6 +192,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "plc-live-diagnostics.sqlite"));
         LiveMonitor = new PlcLiveMonitorViewModel(PlcMonitorTags);
         Debug = new PlcDebugViewModel(PlcMonitorTags);
+        Debug.PropertyChanged += Debug_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -207,7 +201,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcMonitorStatus = message;
             if (!string.IsNullOrWhiteSpace(replayPhase))
             {
-                UpdatePlcReplayStatus(replayPhase);
+                Debug.UpdateReplayStatus(replayPhase);
             }
         };
         _livePlcAcquisitionEngine = new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync);
@@ -413,13 +407,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string PlcReplayStatus
     {
-        get => _plcReplayStatus;
+        get => Debug.ReplayStatus;
         private set
         {
-            if (SetProperty(ref _plcReplayStatus, value))
-            {
-                Debug.ReplayStatus = value;
-            }
+            Debug.ReplayStatus = value;
+            OnPropertyChanged();
         }
     }
 
@@ -570,7 +562,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public string PlcReplaySpeedText => $"{_plcReplaySpeedMultiplier:0.##}x";
+    public string PlcReplaySpeedText => Debug.ReplaySpeedText;
 
     public bool IsPlcMonitoring
     {
@@ -586,13 +578,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsPlcReplayRunning
     {
-        get => _isPlcReplayRunning;
+        get => Debug.IsReplayRunning;
         private set
         {
-            if (SetProperty(ref _isPlcReplayRunning, value))
+            if (value)
             {
-                Debug.IsReplayRunning = value;
+                return;
             }
+
+            Debug.StopReplay();
+            OnPropertyChanged();
         }
     }
 
@@ -1000,6 +995,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         foreach (var propertyName in MapHistoricalTrendProperty(e.PropertyName))
         {
             OnPropertyChanged(propertyName);
+        }
+    }
+
+    private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(PlcDebugViewModel.ReplayStatus):
+                OnPropertyChanged(nameof(PlcReplayStatus));
+                break;
+            case nameof(PlcDebugViewModel.IsReplayRunning):
+                OnPropertyChanged(nameof(IsPlcReplayRunning));
+                break;
+            case nameof(PlcDebugViewModel.ReplaySpeedText):
+            case nameof(PlcDebugViewModel.ReplaySpeedMultiplier):
+                OnPropertyChanged(nameof(PlcReplaySpeedText));
+                break;
         }
     }
 
@@ -1483,10 +1495,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             StopPlcReplay();
-            _loadedPlcReplayFrames = recording.Frames;
-            _loadedPlcReplayIntervalMilliseconds = Math.Max(10, recording.IntervalMilliseconds);
-            _plcReplayNextFrameIndex = 0;
-            _plcReplayDisplayedFrameIndex = -1;
+            Debug.LoadReplay(recording.Frames, recording.IntervalMilliseconds);
             _lastPlcRecordingFrames = recording.Frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
             HistoricalTrendWorkbench.SetRangeTextFromFrames(recording.Frames);
@@ -1503,12 +1512,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 IsPlcHistoricalTrendMode = false;
                 IsPlcLiveTrendPaused = false;
                 PlcTrendModeStatus = "当前趋势：实时";
-                ApplyPlcReplayFrame(0, advance: true);
+                ApplyPlcReplayOperation(Debug.ApplyReplayFrame(0, advance: true, "已定位"));
             }
 
             PlcMonitorStatus =
-                $"已加载 PLC 记录：{recording.FrameCount} 帧，{recording.SnapshotCount} 条快照，周期 {_loadedPlcReplayIntervalMilliseconds} ms。";
-            UpdatePlcReplayStatus("已加载");
+                $"已加载 PLC 记录：{recording.FrameCount} 帧，{recording.SnapshotCount} 条快照，周期 {Debug.SourceReplayIntervalMilliseconds} ms。";
+            Debug.UpdateReplayStatus("已加载");
             Notify(
                 "PLC 记录已加载",
                 string.Join(Environment.NewLine, PlcMonitorStatus, $"文件位置：{Path.GetFullPath(fileName)}"),
@@ -1557,13 +1566,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         await StopLiveMonitoringAsync();
         StopPlcReplay();
-        if (_loadedPlcReplayFrames.Count == 0)
+        if (!Debug.HasReplayFrames)
         {
             IsPlcHistoricalTrendMode = true;
             IsPlcLiveTrendPaused = true;
             PlcTrendModeStatus = "当前趋势：历史";
             PlcMonitorStatus = "历史趋势模式：尚未加载历史记录。";
-            UpdatePlcReplayStatus("历史趋势");
+            Debug.UpdateReplayStatus("历史趋势");
             return;
         }
 
@@ -1594,7 +1603,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         IsPlcHistoricalTrendMode = true;
         PlcMonitorStatus = $"历史趋势视图已调整：{PlcHistoricalRangeStartText} - {PlcHistoricalRangeEndText}。";
-        UpdatePlcReplayStatus("历史趋势视图");
+        Debug.UpdateReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
 
@@ -1605,16 +1614,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        HistoricalTrendWorkbench.SetRangeTextFromFrames(_loadedPlcReplayFrames);
+        HistoricalTrendWorkbench.SetRangeTextFromFrames(Debug.LoadedReplayFrames);
         IsPlcHistoricalTrendMode = true;
-        var dataRange = GetPlcReplayTimestampRange(_loadedPlcReplayFrames);
+        var dataRange = GetPlcReplayTimestampRange(Debug.LoadedReplayFrames);
         if (dataRange is not null)
         {
             HistoricalTrendWorkbench.ResetTimeRangeToFull();
         }
 
-        PlcMonitorStatus = $"历史趋势已恢复全量视图：{_loadedPlcReplayFrames.Count} 帧。";
-        UpdatePlcReplayStatus("全量历史");
+        PlcMonitorStatus = $"历史趋势已恢复全量视图：{Debug.LoadedReplayFrames.Count} 帧。";
+        Debug.UpdateReplayStatus("全量历史");
         return Task.CompletedTask;
     }
 
@@ -1642,33 +1651,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         if (IsPlcReplayRunning)
         {
-            StopPlcReplay();
-            PlcMonitorStatus = $"PLC 记录回放已暂停：第 {DisplayedPlcReplayFrameNumber()}/{_loadedPlcReplayFrames.Count} 帧。";
-            UpdatePlcReplayStatus("已暂停");
+            _plcReplayTimer.Stop();
+            ApplyPlcReplayOperation(Debug.PauseReplay());
             return Task.CompletedTask;
         }
 
-        if (_loadedPlcReplayFrames.Count == 0)
+        var result = Debug.StartReplay();
+        ApplyPlcReplayOperation(result);
+        if (Debug.IsReplayRunning)
         {
-            Notify("无法回放 PLC 记录", "请先打开一个 PLC 记录 JSON 文件。", "Warning");
-            return Task.CompletedTask;
+            _plcReplayTimer.Interval = TimeSpan.FromMilliseconds(Debug.EffectiveReplayIntervalMilliseconds);
+            _plcReplayTimer.Start();
         }
 
-        if (_plcReplayNextFrameIndex >= _loadedPlcReplayFrames.Count)
-        {
-            _plcReplayNextFrameIndex = 0;
-            _plcReplayDisplayedFrameIndex = -1;
-            PlcMonitorTags.Clear();
-            SelectedPlcMonitorTag = null;
-            PlcTrendResetRequested?.Invoke();
-        }
-
-        ApplyPlcReplayTimerInterval();
-        IsPlcReplayRunning = true;
-        _plcReplayTimer.Start();
-        PlcMonitorStatus =
-            $"PLC 记录回放中：源周期 {_loadedPlcReplayIntervalMilliseconds} ms，速度 {PlcReplaySpeedText}，下一帧 {_plcReplayNextFrameIndex + 1}/{_loadedPlcReplayFrames.Count}。";
-        UpdatePlcReplayStatus("播放中");
         return Task.CompletedTask;
     }
 
@@ -1679,11 +1674,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        StopPlcReplay();
-        var targetFrameIndex = Math.Max(0, _plcReplayDisplayedFrameIndex - 1);
-        RebuildPlcReplayToFrame(targetFrameIndex);
-        PlcMonitorStatus = $"PLC 记录回放：已回到第 {targetFrameIndex + 1}/{_loadedPlcReplayFrames.Count} 帧。";
-        UpdatePlcReplayStatus("单帧后退");
+        _plcReplayTimer.Stop();
+        ApplyPlcReplayOperation(Debug.StepBackward());
         return Task.CompletedTask;
     }
 
@@ -1694,86 +1686,71 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        StopPlcReplay();
-        if (_plcReplayNextFrameIndex >= _loadedPlcReplayFrames.Count)
-        {
-            PlcMonitorStatus = $"PLC 记录回放已在最后一帧：{_loadedPlcReplayFrames.Count}/{_loadedPlcReplayFrames.Count}。";
-            UpdatePlcReplayStatus("已到末尾");
-            return Task.CompletedTask;
-        }
-
-        ApplyPlcReplayFrame(_plcReplayNextFrameIndex, advance: true);
-        UpdatePlcReplayStatus("单帧前进");
+        _plcReplayTimer.Stop();
+        ApplyPlcReplayOperation(Debug.StepForward());
         return Task.CompletedTask;
     }
 
     public Task SetPlcReplaySpeedAsync(double speedMultiplier)
     {
-        _plcReplaySpeedMultiplier = Math.Clamp(speedMultiplier, 0.5d, 5d);
-        Debug.ReplaySpeedMultiplier = _plcReplaySpeedMultiplier;
-        OnPropertyChanged(nameof(PlcReplaySpeedText));
+        Debug.SetReplaySpeed(speedMultiplier);
         if (IsPlcReplayRunning)
         {
-            ApplyPlcReplayTimerInterval();
+            _plcReplayTimer.Interval = TimeSpan.FromMilliseconds(Debug.EffectiveReplayIntervalMilliseconds);
         }
 
-        UpdatePlcReplayStatus("速度已调整");
         return Task.CompletedTask;
     }
 
     private void ApplyNextPlcReplayFrame()
     {
-        if (_plcReplayNextFrameIndex >= _loadedPlcReplayFrames.Count)
+        var result = Debug.ApplyNextReplayFrame();
+        if (!Debug.IsReplayRunning)
         {
-            StopPlcReplay();
-            PlcMonitorStatus = $"PLC 记录回放完成：{_loadedPlcReplayFrames.Count} 帧。";
-            UpdatePlcReplayStatus("回放完成");
-            Notify("PLC 记录回放完成", PlcMonitorStatus, "Success");
-            return;
+            _plcReplayTimer.Stop();
         }
 
-        ApplyPlcReplayFrame(_plcReplayNextFrameIndex, advance: true);
+        ApplyPlcReplayOperation(result);
     }
 
-    private void ApplyPlcReplayFrame(int frameIndex, bool advance)
+    private void ApplyPlcReplayOperation(PlcReplayOperationResult result)
     {
-        if (_loadedPlcReplayFrames.Count == 0)
+        if (result.ResetTrend)
         {
-            return;
+            PlcMonitorTags.Clear();
+            SelectedPlcMonitorTag = null;
+            PlcTrendResetRequested?.Invoke();
         }
 
-        var index = Math.Clamp(frameIndex, 0, _loadedPlcReplayFrames.Count - 1);
-        var frame = _loadedPlcReplayFrames[index];
-        ApplyPlcMonitorSnapshots(frame);
-        _plcReplayDisplayedFrameIndex = index;
-        PlcMonitorStatus = $"PLC 记录回放：第 {index + 1}/{_loadedPlcReplayFrames.Count} 帧，{frame.Count} 个点位。";
-        if (advance)
+        if (result.FramesToApply is not null)
         {
-            _plcReplayNextFrameIndex = Math.Min(index + 1, _loadedPlcReplayFrames.Count);
+            foreach (var frame in result.FramesToApply)
+            {
+                ApplyPlcMonitorSnapshots(frame);
+            }
         }
 
-        UpdatePlcReplayStatus(IsPlcReplayRunning ? "播放中" : "已定位");
-    }
-
-    private void RebuildPlcReplayToFrame(int frameIndex)
-    {
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
-        PlcTrendResetRequested?.Invoke();
-
-        var targetFrameIndex = Math.Clamp(frameIndex, 0, _loadedPlcReplayFrames.Count - 1);
-        for (var index = 0; index <= targetFrameIndex; index++)
+        if (result.FrameToApply is not null)
         {
-            ApplyPlcMonitorSnapshots(_loadedPlcReplayFrames[index]);
+            ApplyPlcMonitorSnapshots(result.FrameToApply);
         }
 
-        _plcReplayDisplayedFrameIndex = targetFrameIndex;
-        _plcReplayNextFrameIndex = Math.Min(targetFrameIndex + 1, _loadedPlcReplayFrames.Count);
+        if (!string.IsNullOrWhiteSpace(result.MonitorStatus))
+        {
+            PlcMonitorStatus = result.MonitorStatus;
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.NotificationTitle) &&
+            !string.IsNullOrWhiteSpace(result.NotificationMessage) &&
+            !string.IsNullOrWhiteSpace(result.NotificationKind))
+        {
+            Notify(result.NotificationTitle, result.NotificationMessage, result.NotificationKind);
+        }
     }
 
     private void ShowLoadedPlcHistoricalTrend()
     {
-        ShowLoadedPlcHistoricalTrend(_loadedPlcReplayFrames);
+        ShowLoadedPlcHistoricalTrend(Debug.LoadedReplayFrames);
     }
 
     private void ShowLoadedPlcHistoricalTrend(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
@@ -1793,10 +1770,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         PlcSnapshotFramesApplied?.Invoke(frames);
-        _plcReplayDisplayedFrameIndex = Math.Max(0, _loadedPlcReplayFrames.Count - 1);
-        _plcReplayNextFrameIndex = _loadedPlcReplayFrames.Count;
-        PlcMonitorStatus = $"历史趋势已显示：{frames.Count}/{_loadedPlcReplayFrames.Count} 帧。";
-        UpdatePlcReplayStatus("历史趋势");
+        Debug.MarkHistoricalReplayDisplayed();
+        PlcMonitorStatus = $"历史趋势已显示：{frames.Count}/{Debug.LoadedReplayFrames.Count} 帧。";
     }
 
     private static (DateTimeOffset Start, DateTimeOffset End)? GetPlcReplayTimestampRange(
@@ -1824,7 +1799,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private bool EnsurePlcReplayLoaded()
     {
-        if (_loadedPlcReplayFrames.Count > 0)
+        if (Debug.HasReplayFrames)
         {
             return true;
         }
@@ -1833,38 +1808,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return false;
     }
 
-    private void ApplyPlcReplayTimerInterval()
-    {
-        var effectiveIntervalMilliseconds = Math.Max(
-            10,
-            (int)Math.Round(_loadedPlcReplayIntervalMilliseconds / _plcReplaySpeedMultiplier));
-        _plcReplayTimer.Interval = TimeSpan.FromMilliseconds(effectiveIntervalMilliseconds);
-    }
-
-    private int DisplayedPlcReplayFrameNumber()
-    {
-        return _plcReplayDisplayedFrameIndex >= 0 ? _plcReplayDisplayedFrameIndex + 1 : 0;
-    }
-
-    private void UpdatePlcReplayStatus(string phase)
-    {
-        if (_loadedPlcReplayFrames.Count == 0)
-        {
-            PlcReplayStatus = "尚未加载 PLC 记录。";
-            return;
-        }
-
-        var effectiveIntervalMilliseconds = Math.Max(
-            10,
-            (int)Math.Round(_loadedPlcReplayIntervalMilliseconds / _plcReplaySpeedMultiplier));
-        PlcReplayStatus =
-            $"{phase}：第 {DisplayedPlcReplayFrameNumber()}/{_loadedPlcReplayFrames.Count} 帧，源周期 {_loadedPlcReplayIntervalMilliseconds} ms，播放间隔 {effectiveIntervalMilliseconds} ms，速度 {PlcReplaySpeedText}";
-    }
-
     private void StopPlcReplay()
     {
         _plcReplayTimer.Stop();
-        IsPlcReplayRunning = false;
+        Debug.StopReplay();
     }
 
     private async Task<IPlcTagSnapshotReadSession> OpenPlcSnapshotSessionAsync(
