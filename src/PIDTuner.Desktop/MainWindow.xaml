@@ -341,135 +341,131 @@
         <TabItem Header="实时监控">
           <Grid Margin="16">
             <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
               <RowDefinition Height="Auto" />
-              <RowDefinition Height="3*" />
-              <RowDefinition Height="180" />
             </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="270" />
+            </Grid.ColumnDefinitions>
 
-            <StackPanel>
-              <WrapPanel>
-                <Button Command="{Binding RefreshPlcMonitorCommand}"
-                        Content="刷新点位"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <Button Command="{Binding ShowPlcLiveTrendCommand}"
-                        Content="实时趋势"
-                        Style="{StaticResource LiveTrendModeButtonStyle}" />
-                <Button Command="{Binding ShowPlcHistoricalTrendCommand}"
-                        Content="历史趋势"
-                        Style="{StaticResource HistoricalTrendModeButtonStyle}" />
-                <Button Command="{Binding TogglePlcMonitoringCommand}"
-                        Content="启动/停止"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8" />
-                <Button Content="导出可见"
-                        Width="96"
-                        Height="36"
-                        Margin="0,0,12,8"
-                        Click="PlcTrendExportVisible_Click" />
-                <TextBlock Text="{Binding PlcTrendModeStatus}"
-                           VerticalAlignment="Center"
-                           Margin="8,0,0,8"
-                           FontWeight="SemiBold"
-                           Foreground="#111827" />
-                <TextBlock Text="{Binding PlcMonitorStatus}"
-                           VerticalAlignment="Center"
-                           Margin="18,0,0,8"
-                           Foreground="#374151" />
-              </WrapPanel>
-            </StackPanel>
-
-            <DataGrid Grid.Row="2"
-                      ItemsSource="{Binding PlcMonitorTags}"
-                      SelectedItem="{Binding SelectedPlcMonitorTag}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="False"
-                      Margin="0,12,0,0"
-                      HeadersVisibility="Column">
-              <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="趋势"
-                                        Binding="{Binding IsTrendVisible, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="52" />
-                <DataGridTextColumn Header="名称"
-                                    Binding="{Binding Name}"
-                                    IsReadOnly="True"
-                                    Width="100" />
-                <DataGridTextColumn Header="地址"
-                                    Binding="{Binding Address}"
-                                    IsReadOnly="True"
-                                    Width="150" />
-                <DataGridTextColumn Header="当前值"
-                                    Binding="{Binding ValueText}"
-                                    IsReadOnly="True"
-                                    Width="100" />
-                <DataGridTextColumn Header="单位"
-                                    Binding="{Binding Unit}"
-                                    IsReadOnly="True"
-                                    Width="80" />
-                <DataGridTextColumn Header="质量"
-                                    Binding="{Binding Quality}"
-                                    IsReadOnly="True"
-                                    Width="100" />
-                <DataGridTextColumn Header="来源"
-                                    Binding="{Binding Source}"
-                                    IsReadOnly="True"
-                                    Width="100" />
-                <DataGridTextColumn Header="时间"
-                                    Binding="{Binding TimestampText}"
-                                    IsReadOnly="True"
-                                    Width="120" />
-              </DataGrid.Columns>
-            </DataGrid>
-
-            <Border Grid.Row="1"
-                    Margin="0,16,0,0"
+            <Border Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,14,0"
                     BorderBrush="#CBD5E1"
                     BorderThickness="1"
                     Background="#F8FAFC">
               <Grid Margin="10">
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <StackPanel>
-                  <WrapPanel>
-                    <Button Content="10s"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,8,0"
-                            Click="PlcTrendWindow10Seconds_Click" />
-                    <Button Content="30s"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,8,0"
-                            Click="PlcTrendWindow30Seconds_Click" />
-                    <Button Content="1min"
-                            Width="56"
-                            Height="28"
-                            Margin="0,0,8,0"
-                            Click="PlcTrendWindow1Minute_Click" />
-                    <Button Content="5min"
-                            Width="56"
-                            Height="28"
-                            Margin="0,0,16,0"
-                            Click="PlcTrendWindow5Minutes_Click" />
-                  </WrapPanel>
-                  <TextBlock x:Name="PlcTrendStatusTextBlock"
-                             Margin="0,6,0,0"
-                             VerticalAlignment="Center"
-                             Foreground="#374151" />
-                </StackPanel>
-
                 <scottPlot:WpfPlot x:Name="PlcTrendPlot"
-                                   Grid.Row="1"
-                                   Margin="0,10,0,0"
                                    MouseMove="PlcTrendPlot_MouseMove"
                                    MouseLeave="PlcTrendPlot_MouseLeave" />
               </Grid>
             </Border>
+
+            <Border Grid.Row="0"
+                    Grid.Column="1"
+                    BorderBrush="#CBD5E1"
+                    BorderThickness="1"
+                    Background="#F8FAFC">
+              <TabControl ItemsSource="{Binding PlcMonitorTags}"
+                          SelectedItem="{Binding SelectedPlcMonitorTag}"
+                          Margin="8">
+                <TabControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                  <DataTemplate>
+                    <StackPanel Margin="10">
+                      <TextBlock Text="名称"
+                                 Foreground="#6B7280" />
+                      <TextBlock Text="{Binding Name}"
+                                 FontSize="18"
+                                 FontWeight="SemiBold"
+                                 Foreground="#111827"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Text="地址"
+                                 Margin="0,14,0,0"
+                                 Foreground="#6B7280" />
+                      <TextBlock Text="{Binding Address}"
+                                 FontSize="16"
+                                 FontWeight="SemiBold"
+                                 Foreground="#111827"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Text="当前值"
+                                 Margin="0,14,0,0"
+                                 Foreground="#6B7280" />
+                      <TextBlock Text="{Binding ValueText}"
+                                 FontSize="24"
+                                 FontWeight="SemiBold"
+                                 Foreground="#0F766E"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+                  </DataTemplate>
+                </TabControl.ContentTemplate>
+              </TabControl>
+            </Border>
+
+            <TextBlock x:Name="PlcTrendStatusTextBlock"
+                       Grid.Row="1"
+                       Grid.Column="0"
+                       Margin="0,10,14,0"
+                       VerticalAlignment="Center"
+                       Foreground="#374151" />
+
+            <WrapPanel Grid.Row="1"
+                       Grid.Column="1"
+                       Margin="0,10,0,0"
+                       HorizontalAlignment="Right">
+              <Button Content="10s"
+                      Width="48"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow10Seconds_Click" />
+              <Button Content="30s"
+                      Width="48"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow30Seconds_Click" />
+              <Button Content="1min"
+                      Width="56"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow1Minute_Click" />
+              <Button Content="5min"
+                      Width="56"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow5Minutes_Click" />
+              <Button Command="{Binding RefreshPlcMonitorCommand}"
+                      Content="刷新点位"
+                      Width="82"
+                      Height="28"
+                      Margin="0,0,8,8" />
+              <Button Command="{Binding TogglePlcMonitoringCommand}"
+                      Content="启动/停止"
+                      Width="82"
+                      Height="28"
+                      Margin="0,0,8,8" />
+              <Button Content="导出可见"
+                      Width="82"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendExportVisible_Click" />
+              <Button Command="{Binding ShowPlcLiveTrendCommand}"
+                      Content="实时趋势"
+                      Height="28"
+                      Width="82"
+                      Margin="0,0,8,8"
+                      Style="{StaticResource LiveTrendModeButtonStyle}" />
+              <Button Command="{Binding ShowPlcHistoricalTrendCommand}"
+                      Content="历史趋势"
+                      Height="28"
+                      Width="82"
+                      Margin="0,0,0,8"
+                      Style="{StaticResource HistoricalTrendModeButtonStyle}" />
+            </WrapPanel>
           </Grid>
         </TabItem>
         <TabItem Header="调试">
@@ -543,8 +539,12 @@
 
             <StackPanel Grid.Row="1"
                         Margin="0,10,0,12">
-              <TextBlock Text="{Binding PlcReplayStatus}"
+              <TextBlock Text="{Binding PlcMonitorStatus}"
                          FontWeight="SemiBold"
+                         Foreground="#374151"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding PlcReplayStatus}"
+                         Margin="0,6,0,0"
                          Foreground="#374151"
                          TextWrapping="Wrap" />
               <TextBlock Text="{Binding PlcLiveDiagnosticsStatus}"
