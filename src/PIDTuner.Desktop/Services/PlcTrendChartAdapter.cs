@@ -1,13 +1,9 @@
 using System.Globalization;
-using System.IO;
 using System.Windows;
 using PIDTuner.Desktop.ViewModels;
 using PIDTuner.Domain.Plc;
 using ScottPlot;
-using ScottPlot.Plottables;
 using ScottPlot.WPF;
-using ScottPlotColor = ScottPlot.Color;
-using ScottPlotColors = ScottPlot.Colors;
 
 namespace PIDTuner.Desktop.Services;
 
@@ -18,18 +14,8 @@ public sealed class PlcTrendChartAdapter
     private static readonly TimeSpan DefaultLiveSamplingInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly WpfPlot _plot;
+    private readonly SharedScottPlotTrendRenderer _renderer = new();
     private readonly Dictionary<Guid, List<PlcTrendPoint>> _pointsByTag = [];
-    private readonly ScottPlotColor[] _colors =
-    [
-        ScottPlotColors.CornflowerBlue,
-        ScottPlotColors.MediumSeaGreen,
-        ScottPlotColors.Orange,
-        ScottPlotColors.MediumVioletRed,
-        ScottPlotColors.Teal,
-        ScottPlotColors.IndianRed,
-        ScottPlotColors.Gold,
-        ScottPlotColors.MediumPurple,
-    ];
 
     private TimeSpan _visibleWindow = TimeSpan.FromSeconds(30);
     private TimeSpan _maxLiveTrendWindow = TimeSpan.FromMinutes(5);
@@ -44,7 +30,7 @@ public sealed class PlcTrendChartAdapter
     public PlcTrendChartAdapter(WpfPlot plot)
     {
         _plot = plot;
-        ConfigurePlot();
+        _renderer.ConfigurePlot(_plot, ShowFullHistory);
     }
 
     public TimeSpan VisibleWindow
@@ -103,7 +89,7 @@ public sealed class PlcTrendChartAdapter
     {
         _pointsByTag.Clear();
         _plot.Plot.Clear();
-        ConfigurePlot();
+        _renderer.ConfigurePlot(_plot, ShowFullHistory);
         _plot.Refresh();
     }
 
@@ -139,67 +125,25 @@ public sealed class PlcTrendChartAdapter
 
     public void Render(IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
     {
-        _plot.Plot.Clear();
-        ConfigurePlot();
-
         var range = GetTimestampRange();
         if (range is null)
         {
+            _plot.Plot.Clear();
+            _renderer.ConfigurePlot(_plot, ShowFullHistory);
             _plot.Refresh();
             return;
         }
 
         var latest = range.Value.Latest;
         var (windowStart, windowEnd) = GetVisibleTimeRange(range.Value.Earliest, latest);
-        var colorIndex = 0;
-        foreach (var tag in monitorTags.Where(tag => tag.IsTrendVisible))
-        {
-            if (!_pointsByTag.TryGetValue(tag.TagId, out var points))
-            {
-                continue;
-            }
-
-            var visiblePoints = points
-                .Where(point => point.Timestamp >= windowStart && point.Timestamp <= windowEnd)
-                .ToArray();
-            if (visiblePoints.Length == 0)
-            {
-                continue;
-            }
-
-            var xs = visiblePoints.Select(point => point.Timestamp.LocalDateTime.ToOADate()).ToArray();
-            var ys = visiblePoints.Select(point => point.Value).ToArray();
-            Scatter scatter = _plot.Plot.Add.Scatter(xs, ys);
-            scatter.LegendText = string.IsNullOrWhiteSpace(tag.Unit) ? tag.Name : $"{tag.Name} ({tag.Unit})";
-            scatter.LineWidth = 2;
-            scatter.MarkerSize = visiblePoints.Length > 200 ? 0 : 4;
-            scatter.Color = _colors[colorIndex % _colors.Length];
-            colorIndex++;
-        }
-
-        _plot.Plot.Axes.DateTimeTicksBottom();
-        var xStart = windowStart.LocalDateTime.ToOADate();
-        var xEnd = windowEnd.LocalDateTime.ToOADate();
-        if (xStart >= xEnd)
-        {
-            xStart = windowStart.AddMilliseconds(-500).LocalDateTime.ToOADate();
-            xEnd = windowEnd.AddMilliseconds(500).LocalDateTime.ToOADate();
-        }
-
-        _plot.Plot.Axes.SetLimitsX(xStart, xEnd);
-        if (monitorTags.Any(tag => tag.IsTrendVisible && _pointsByTag.ContainsKey(tag.TagId)))
-        {
-            if (_manualYRange is { } manualYRange)
-            {
-                _plot.Plot.Axes.SetLimitsY(manualYRange.Min, manualYRange.Max);
-            }
-            else
-            {
-                _plot.Plot.Axes.AutoScaleY();
-            }
-        }
-
-        _plot.Refresh();
+        _renderer.Render(
+            _plot,
+            _pointsByTag,
+            monitorTags,
+            windowStart,
+            windowEnd,
+            _manualYRange,
+            ShowFullHistory);
     }
 
     public void AutoFitY()
@@ -299,57 +243,6 @@ public sealed class PlcTrendChartAdapter
         return summaries.Count == 0
             ? string.Empty
             : $"光标 {target:HH:mm:ss.fff} | 最近值：{string.Join(" | ", summaries.Take(4))}";
-    }
-
-    private void ConfigurePlot()
-    {
-        ConfigurePlotFonts();
-        _plot.Plot.Title("PLC 实时趋势");
-        _plot.Plot.Title(ShowFullHistory ? "PLC 历史趋势" : "PLC 实时趋势");
-        _plot.Plot.XLabel("时间");
-        _plot.Plot.YLabel("点位值");
-        _plot.Plot.ShowLegend();
-    }
-
-    private void ConfigurePlotFonts()
-    {
-        RegisterFontFile("Microsoft YaHei", @"C:\Windows\Fonts\msyh.ttc");
-        RegisterFontFile("SimHei", @"C:\Windows\Fonts\simhei.ttf");
-
-        string[] fontCandidates =
-        [
-            "Microsoft YaHei",
-            "SimHei",
-            "Microsoft JhengHei",
-            "Arial Unicode MS",
-            "Noto Sans CJK SC",
-        ];
-
-        foreach (var fontName in fontCandidates)
-        {
-            if (ScottPlot.Fonts.GetTypeface(fontName, bold: false, italic: false) is not null)
-            {
-                _plot.Plot.Font.Set(fontName);
-                return;
-            }
-        }
-    }
-
-    private static void RegisterFontFile(string fontName, string fontPath)
-    {
-        if (!File.Exists(fontPath))
-        {
-            return;
-        }
-
-        try
-        {
-            ScottPlot.Fonts.AddFontFile(fontName, fontPath, bold: false, italic: false);
-        }
-        catch
-        {
-            // Font registration is best effort; ScottPlot can still render with its default font.
-        }
     }
 
     private void RemoveInactiveTags(IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
@@ -453,6 +346,4 @@ public sealed class PlcTrendChartAdapter
     private static TimeSpan Max(TimeSpan left, TimeSpan right) => left >= right ? left : right;
 
     private static TimeSpan EnsurePositive(TimeSpan value, TimeSpan fallback) => value > TimeSpan.Zero ? value : fallback;
-
-    private readonly record struct PlcTrendPoint(DateTimeOffset Timestamp, double Value);
 }
