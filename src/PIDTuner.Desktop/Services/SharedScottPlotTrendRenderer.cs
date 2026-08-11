@@ -1,5 +1,4 @@
 using System.IO;
-using PIDTuner.Desktop.ViewModels;
 using ScottPlot;
 using ScottPlot.Plottables;
 using ScottPlot.WPF;
@@ -37,8 +36,7 @@ internal sealed class SharedScottPlotTrendRenderer
 
     public void Render(
         WpfPlot plot,
-        IReadOnlyDictionary<Guid, List<PlcTrendPoint>> pointsByTag,
-        IReadOnlyList<PlcTagMonitorViewModel> monitorTags,
+        IReadOnlyList<PlcTrendRenderSeries> series,
         DateTimeOffset windowStart,
         DateTimeOffset windowEnd,
         (double Min, double Max)? manualYRange,
@@ -48,14 +46,9 @@ internal sealed class SharedScottPlotTrendRenderer
         ConfigurePlot(plot, isHistoricalMode);
 
         var colorIndex = 0;
-        foreach (var tag in monitorTags.Where(tag => tag.IsTrendVisible))
+        foreach (var item in series)
         {
-            if (!pointsByTag.TryGetValue(tag.TagId, out var points))
-            {
-                continue;
-            }
-
-            var visiblePoints = points
+            var visiblePoints = item.Points
                 .Where(point => point.Timestamp >= windowStart && point.Timestamp <= windowEnd)
                 .ToArray();
             if (visiblePoints.Length == 0)
@@ -66,7 +59,7 @@ internal sealed class SharedScottPlotTrendRenderer
             var xs = visiblePoints.Select(point => point.Timestamp.LocalDateTime.ToOADate()).ToArray();
             var ys = visiblePoints.Select(point => point.Value).ToArray();
             Scatter scatter = plot.Plot.Add.Scatter(xs, ys);
-            scatter.LegendText = string.IsNullOrWhiteSpace(tag.Unit) ? tag.Name : $"{tag.Name} ({tag.Unit})";
+            scatter.LegendText = string.IsNullOrWhiteSpace(item.Unit) ? item.Name : $"{item.Name} ({item.Unit})";
             scatter.LineWidth = 2;
             scatter.MarkerSize = visiblePoints.Length > 200 ? 0 : 4;
             scatter.Color = _colors[colorIndex % _colors.Length];
@@ -83,7 +76,7 @@ internal sealed class SharedScottPlotTrendRenderer
         }
 
         plot.Plot.Axes.SetLimitsX(xStart, xEnd);
-        if (monitorTags.Any(tag => tag.IsTrendVisible && pointsByTag.ContainsKey(tag.TagId)))
+        if (series.Any(item => item.Points.Count > 0))
         {
             if (manualYRange is { } yRange)
             {

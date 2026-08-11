@@ -12,13 +12,13 @@ public partial class MainWindow : Window
     private static readonly TimeSpan MaxLiveTrendWindow = TimeSpan.FromMinutes(5);
 
     private readonly MainWindowViewModel _viewModel;
-    private readonly PlcTrendChartAdapter _plcTrendChartAdapter;
+    private readonly LivePlcTrendAdapter _plcTrendChartAdapter;
 
     public MainWindow()
     {
         InitializeComponent();
         _viewModel = (MainWindowViewModel)DataContext;
-        _plcTrendChartAdapter = new PlcTrendChartAdapter(PlcTrendPlot);
+        _plcTrendChartAdapter = new LivePlcTrendAdapter(PlcTrendPlot);
         ConfigurePlcTrendRetention();
         _viewModel.PlcSnapshotsApplied += ApplyPlcTrendSnapshots;
         _viewModel.PlcSnapshotFramesApplied += ApplyPlcTrendSnapshotFrames;

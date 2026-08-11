@@ -220,6 +220,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "local",
                 "plc-diagnostics",
                 "plc-live-diagnostics.sqlite"));
+        LiveMonitor = new PlcLiveMonitorViewModel(PlcMonitorTags);
+        Debug = new PlcDebugViewModel(PlcMonitorTags);
         _livePlcAcquisitionEngine = new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync);
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
         _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
@@ -285,6 +287,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event Action<double?, double?>? PlcTrendYRangeRequested;
 
     public string Title { get; } = "PIDTuner";
+
+    public PlcLiveMonitorViewModel LiveMonitor { get; }
+
+    public PlcDebugViewModel Debug { get; }
+
+    public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
     public IReadOnlyList<string> AvailableFieldDataTypes { get; } =
         Enum.GetNames<PidSampleFieldDataType>();
@@ -385,7 +393,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string PlcLiveDiagnosticsStatus
     {
         get => _plcLiveDiagnosticsStatus;
-        private set => SetProperty(ref _plcLiveDiagnosticsStatus, value);
+        private set
+        {
+            if (SetProperty(ref _plcLiveDiagnosticsStatus, value))
+            {
+                Debug.DiagnosticsStatus = value;
+            }
+        }
     }
 
     public int PlcDiagnosticsDurationMinutes
@@ -401,6 +415,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetProperty(ref _isPlcLiveDiagnosticsRunning, value))
             {
+                Debug.IsDiagnosticsRunning = value;
                 OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
             }
         }
@@ -411,7 +426,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string PlcReplayStatus
     {
         get => _plcReplayStatus;
-        private set => SetProperty(ref _plcReplayStatus, value);
+        private set
+        {
+            if (SetProperty(ref _plcReplayStatus, value))
+            {
+                Debug.ReplayStatus = value;
+            }
+        }
     }
 
     public string PlcTrendModeStatus
@@ -565,6 +586,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetProperty(ref _isPlcLiveTrendPaused, value))
             {
+                LiveMonitor.IsLiveTrendPaused = value;
                 OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
             }
         }
@@ -575,7 +597,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public int CurrentPlcAcquisitionIntervalMilliseconds
     {
         get => _currentPlcAcquisitionIntervalMilliseconds;
-        private set => SetProperty(ref _currentPlcAcquisitionIntervalMilliseconds, value);
+        private set
+        {
+            if (SetProperty(ref _currentPlcAcquisitionIntervalMilliseconds, value))
+            {
+                LiveMonitor.CurrentAcquisitionIntervalMilliseconds = value;
+            }
+        }
     }
 
     public string PlcReplaySpeedText => $"{_plcReplaySpeedMultiplier:0.##}x";
@@ -583,13 +611,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool IsPlcMonitoring
     {
         get => _isPlcMonitoring;
-        private set => SetProperty(ref _isPlcMonitoring, value);
+        private set
+        {
+            if (SetProperty(ref _isPlcMonitoring, value))
+            {
+                LiveMonitor.IsMonitoring = value;
+            }
+        }
     }
 
     public bool IsPlcReplayRunning
     {
         get => _isPlcReplayRunning;
-        private set => SetProperty(ref _isPlcReplayRunning, value);
+        private set
+        {
+            if (SetProperty(ref _isPlcReplayRunning, value))
+            {
+                Debug.IsReplayRunning = value;
+            }
+        }
     }
 
     public string SampleCount
@@ -1710,6 +1750,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public Task SetPlcReplaySpeedAsync(double speedMultiplier)
     {
         _plcReplaySpeedMultiplier = Math.Clamp(speedMultiplier, 0.5d, 5d);
+        Debug.ReplaySpeedMultiplier = _plcReplaySpeedMultiplier;
         OnPropertyChanged(nameof(PlcReplaySpeedText));
         if (IsPlcReplayRunning)
         {

@@ -2,6 +2,8 @@
 
 本文档记录 PIDTuner 在 V2.0 阶段进行历史趋势工作台迁移前的架构重构依据。它不是功能需求清单，而是后续代码变更的模块边界、职责划分和迁移顺序。
 
+当前状态：架构重构基线已落地。历史趋势的具体 UI 交互、WPFHistoricalTrend 交互迁移和可见数据导出增强尚未进入功能实现阶段。
+
 ## 1. 重构目标
 
 V2.0 的架构目标是：
@@ -79,9 +81,8 @@ V2.0 的架构目标是：
 
 ### 3.2 实时趋势模块
 
-建议新增或演进为：
+已建立或演进为：
 
-- `PlcLiveMonitorView`
 - `PlcLiveMonitorViewModel`
 - `LivePlcTrendAdapter`
 
@@ -94,11 +95,12 @@ V2.0 的架构目标是：
 
 实时趋势适配器只处理实时追加数据和滚动窗口，不承担历史工作台的静态查询与轴控制。
 
+说明：当前 `MainWindow.xaml` 仍使用既有页面结构。`PlcLiveMonitorViewModel` 已挂载到 `MainWindowViewModel`，后续迁移 XAML 绑定时不需要继续扩大根 ViewModel。
+
 ### 3.3 历史趋势工作台模块
 
-建议新增：
+已建立：
 
-- `HistoricalTrendWorkbenchView`
 - `HistoricalTrendWorkbenchViewModel`
 - `HistoricalTrendWorkbenchState`
 - `HistoricalTrendWorkbenchCoordinator`
@@ -115,13 +117,15 @@ V2.0 的架构目标是：
 
 历史趋势进入后曲线必须静置，不跟随实时刷新。所有缩放、平移和导出操作都应围绕工作台状态进行。
 
+说明：当前已建立纯状态模型、协调器、历史适配器和历史 ViewModel。尚未迁移 WPFHistoricalTrend 的具体滑块/拖拽/缩放控件。
+
 ### 3.4 桥接模块
 
-建议新增：
+已建立：
 
 - `PlcTrendDatasetBridge`
-- `PlcTrendDataset`
-- `PlcTrendSeries`
+- `HistoricalTrendDataset`
+- `HistoricalTrendSeries`
 
 目标职责：
 
@@ -134,9 +138,8 @@ V2.0 的架构目标是：
 
 ### 3.5 调试模块
 
-建议新增或演进为：
+已建立或演进为：
 
-- `PlcDebugView`
 - `PlcDebugViewModel`
 
 目标职责：
@@ -150,12 +153,15 @@ V2.0 的架构目标是：
 
 调试功能不应留在实时监控主界面，也不应继续与历史趋势工作台逻辑耦合。
 
+说明：当前 `PlcDebugViewModel` 已挂载到 `MainWindowViewModel`，并共享当前点位集合。后续可把调试页 XAML 绑定迁移到该子 ViewModel。
+
 ### 3.6 共享绘图模块
 
 当前已引入：
 
 - `src/PIDTuner.Desktop/Services/SharedScottPlotTrendRenderer.cs`
 - `src/PIDTuner.Desktop/Services/PlcTrendPoint.cs`
+- `src/PIDTuner.Desktop/Services/PlcTrendRenderSeries.cs`
 
 当前职责：
 
@@ -167,9 +173,10 @@ V2.0 的架构目标是：
 
 当前调用方：
 
-- `src/PIDTuner.Desktop/Services/PlcTrendChartAdapter.cs`
+- `src/PIDTuner.Desktop/Services/LivePlcTrendAdapter.cs`
+- `src/PIDTuner.Desktop/Services/HistoricalTrendChartAdapter.cs`
 
-后续 `LivePlcTrendAdapter` 和 `HistoricalTrendChartAdapter` 都应调用该共享模块。共享绘图模块不保存业务状态，不读取 PLC，不访问文件。
+`PlcTrendChartAdapter` 保留为静态兼容入口，仅转发保留窗口计算。共享绘图模块不保存业务状态，不读取 PLC，不访问文件。
 
 ## 4. 关键接口原则
 
@@ -209,22 +216,25 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 ### 阶段 A：建立共享绘图底座
 
-状态：已开始。
+状态：已完成。
 
 已完成：
 
-- 从现有 `PlcTrendChartAdapter` 中抽出 `SharedScottPlotTrendRenderer`。
-- 保持现有实时趋势外部调用接口不变。
-- 为后续历史趋势适配器预留共享绘图入口。
+- 从现有趋势适配器中抽出 `SharedScottPlotTrendRenderer`。
+- 把实时趋势适配器演进为 `LivePlcTrendAdapter`。
+- 引入 `PlcTrendRenderSeries`，使共享渲染模块不依赖实时监控 ViewModel。
+- 保留 `PlcTrendChartAdapter.CalculateLiveRetentionWindow` 兼容入口。
 
 ### 阶段 B：建立历史趋势工作台模型
 
-后续新增：
+状态：已完成。
+
+已新增：
 
 - `HistoricalTrendWorkbenchState`
 - `HistoricalTrendWorkbenchCoordinator`
-- `PlcTrendDataset`
-- `PlcTrendSeries`
+- `HistoricalTrendDataset`
+- `HistoricalTrendSeries`
 - `PlcTrendDatasetBridge`
 
 验收标准：
@@ -234,7 +244,9 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 ### 阶段 C：建立历史趋势适配器
 
-后续新增：
+状态：已完成架构入口。
+
+已新增：
 
 - `HistoricalTrendChartAdapter`
 
@@ -242,15 +254,20 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 
 - 可以接收桥接后的历史数据集。
 - 可以应用工作台状态绘制静态历史曲线。
-- 可以返回当前画布可见范围。
+- 可以通过工作台状态表达当前可见范围；实际画布交互导出将在历史趋势功能迁移阶段接入。
 
 ### 阶段 D：拆分 ViewModel
 
-后续拆分：
+状态：已完成架构入口，未完成全部 XAML 绑定迁移。
+
+已新增：
 
 - `PlcLiveMonitorViewModel`
 - `PlcDebugViewModel`
 - `HistoricalTrendWorkbenchViewModel`
+
+暂未新增：
+
 - `PlcConfigurationViewModel`
 
 迁移方式：
@@ -259,6 +276,8 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 每次迁移一个功能簇。
 - 每次迁移后保持现有用户功能可运行。
 - `MainWindowViewModel` 最终退化为组合根和全局状态入口。
+
+当前约束：后续历史趋势功能不再进入 `MainWindowViewModel`，应进入 `HistoricalTrendWorkbenchViewModel`、`HistoricalTrendWorkbenchCoordinator`、`HistoricalTrendChartAdapter` 或桥接模块。
 
 ## 6. 禁止事项
 
@@ -270,12 +289,32 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - 在两个图表适配器中重复 ScottPlot 字体、颜色、图例、坐标轴样式。
 - 为了迁移 WPFHistoricalTrend 而破坏 PIDTuner 现有项目层次。
 
-## 7. 当前代码变更记录
+## 7. 架构重构完成标准
 
-本次重构已经完成第一步：
+本轮架构重构达到以下标准后，才能进入历史趋势功能迁移：
+
+- 有独立历史趋势数据集模型：已完成。
+- 有 PLC 帧到历史数据集的桥接入口：已完成。
+- 有纯 C# 历史工作台状态和协调器：已完成。
+- 有实时/历史两个图表适配器：已完成。
+- 有共享 ScottPlot 绘图模块：已完成。
+- 有历史趋势专用 ViewModel：已完成。
+- 有实时/调试子 ViewModel 入口：已完成。
+- 有覆盖桥接和工作台状态的测试：已完成。
+
+因此，下一阶段可以开始讨论和迁移历史趋势功能，但不应先回到 `MainWindowViewModel` 内堆叠实现。
+
+## 8. 当前代码变更记录
+
+本次重构已经完成：
 
 - 新增 `SharedScottPlotTrendRenderer` 作为共享 ScottPlot 绘图模块。
 - 新增 `PlcTrendPoint` 作为桌面图表层内部趋势点模型。
-- 修改 `PlcTrendChartAdapter`，让它继续负责实时/现有趋势数据管理，但把绘图实现委托给共享渲染模块。
+- 新增 `PlcTrendRenderSeries`，隔离渲染输入与具体 ViewModel。
+- 新增 `LivePlcTrendAdapter`，承接实时趋势滚动绘制。
+- 新增 `HistoricalTrendChartAdapter`，承接历史趋势静态绘制入口。
+- 新增历史趋势工作台模型、协调器和桥接模块。
+- 新增 `HistoricalTrendWorkbenchViewModel`、`PlcLiveMonitorViewModel`、`PlcDebugViewModel`。
+- `MainWindowViewModel` 挂载子 ViewModel，作为后续绑定迁移的组合根。
 
-这一步不改变用户可见功能，目的是为后续 `LivePlcTrendAdapter` 与 `HistoricalTrendChartAdapter` 分离打基础。
+这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。

@@ -30,6 +30,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("configurable csv exchange maps renamed fields and preserves extra metadata", ConfigurableCsvExchangeMapsRenamedFields),
     ("configurable csv exchange imports quoted metadata with commas", ConfigurableCsvExchangeImportsQuotedMetadataWithCommas),
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
+    ("plc trend dataset bridge groups frames by tag", PlcTrendDatasetBridgeGroupsFramesByTag),
+    ("historical trend workbench clamps ranges and filters series", HistoricalTrendWorkbenchClampsRangesAndFiltersSeries),
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
@@ -291,6 +293,85 @@ static Task TrendSeriesBuilderNormalizesPidSamples()
     AssertClose(1, trend.ProcessValue.Points[2].NormalizedX, 0.001, "last normalized X");
     AssertClose(0.1, trend.ProcessValue.Points[0].NormalizedY, 0.001, "first normalized Y");
     AssertClose(1, trend.ProcessValue.Points[2].NormalizedY, 0.001, "last normalized Y");
+
+    return Task.CompletedTask;
+}
+
+static Task PlcTrendDatasetBridgeGroupsFramesByTag()
+{
+    var start = new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero);
+    var spId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+    var pvId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+    var frames = new[]
+    {
+        new[]
+        {
+            new PlcTagSnapshot(spId, "SP", "DB1.DBD6", 10, "degC", start, "Good", "PLC"),
+            new PlcTagSnapshot(pvId, "PV", "DB1.DBD10", 8, "degC", start, "Good", "PLC")
+        },
+        new[]
+        {
+            new PlcTagSnapshot(spId, "SP", "DB1.DBD6", 11, "degC", start.AddMilliseconds(100), "Good", "PLC"),
+            new PlcTagSnapshot(pvId, "PV", "DB1.DBD10", double.NaN, "degC", start.AddMilliseconds(100), "Bad", "PLC")
+        }
+    };
+
+    var dataset = new PlcTrendDatasetBridge().BuildDataset(frames);
+
+    AssertEqual(2, dataset.Series.Count, "historical dataset series count");
+    AssertEqual(start, dataset.Start, "historical dataset start");
+    AssertEqual(start.AddMilliseconds(100), dataset.End, "historical dataset end");
+    AssertEqual(2, dataset.Series.Single(series => series.SeriesId == spId).Points.Count, "SP points count");
+    AssertEqual(1, dataset.Series.Single(series => series.SeriesId == pvId).Points.Count, "PV ignores non-finite values");
+
+    return Task.CompletedTask;
+}
+
+static Task HistoricalTrendWorkbenchClampsRangesAndFiltersSeries()
+{
+    var start = new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero);
+    var spId = Guid.Parse("20000000-0000-0000-0000-000000000001");
+    var pvId = Guid.Parse("20000000-0000-0000-0000-000000000002");
+    var dataset = new HistoricalTrendDataset(new[]
+    {
+        new HistoricalTrendSeries(
+            spId,
+            "SP",
+            "DB1.DBD6",
+            null,
+            new[]
+            {
+                new HistoricalTrendPoint(start, 10, "Good", "Test"),
+                new HistoricalTrendPoint(start.AddSeconds(1), 11, "Good", "Test"),
+                new HistoricalTrendPoint(start.AddSeconds(2), 12, "Good", "Test")
+            }),
+        new HistoricalTrendSeries(
+            pvId,
+            "PV",
+            "DB1.DBD10",
+            null,
+            new[]
+            {
+                new HistoricalTrendPoint(start, 8, "Good", "Test"),
+                new HistoricalTrendPoint(start.AddSeconds(1), 9, "Good", "Test"),
+                new HistoricalTrendPoint(start.AddSeconds(2), 10, "Good", "Test")
+            })
+    });
+    var coordinator = new HistoricalTrendWorkbenchCoordinator();
+
+    var state = coordinator.LoadDataset(dataset);
+    state = coordinator.SetVisibleTimeRange(state, start.AddMilliseconds(500), start.AddSeconds(5));
+    state = coordinator.SetVisibleYRange(state, 20, 0);
+    state = coordinator.SetSeriesVisibility(state, pvId, isVisible: false);
+    var visibleSeries = coordinator.GetVisibleSeries(state);
+
+    AssertEqual(start.AddMilliseconds(500), state.VisibleTimeRange?.Start, "historical visible range start");
+    AssertEqual(start.AddSeconds(2), state.VisibleTimeRange?.End, "historical visible range end clamps to dataset");
+    AssertEqual(0d, state.VisibleYRange?.Minimum, "historical y range swaps minimum");
+    AssertEqual(20d, state.VisibleYRange?.Maximum, "historical y range swaps maximum");
+    AssertEqual(1, visibleSeries.Count, "hidden series removed");
+    AssertEqual(spId, visibleSeries[0].SeriesId, "remaining visible series");
+    AssertEqual(2, visibleSeries[0].Points.Count, "visible points filtered by time");
 
     return Task.CompletedTask;
 }
