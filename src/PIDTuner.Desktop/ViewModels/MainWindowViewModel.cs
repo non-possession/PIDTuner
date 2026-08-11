@@ -17,7 +17,6 @@ using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Models;
 using PIDTuner.Domain.Plc;
-using PIDTuner.Domain.Trends;
 using PIDTuner.Infrastructure.Analysis;
 using PIDTuner.Infrastructure.Configuration;
 using PIDTuner.Infrastructure.Csv;
@@ -34,10 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly IPlcProjectConfigurationStore _plcProjectConfigurationStore;
     private readonly BasicPidAnalysisService _pidAnalysisService = new();
-    private readonly PidResponseAssessmentService _assessmentService = new();
-    private readonly PidTuningRecommendationService _recommendationService = new();
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
-    private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
     private readonly AnalysisWindowParser _analysisWindowParser = new();
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
@@ -53,31 +49,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
-    private AnalysisWindow? _lastAnalysisWindow;
-    private PidResponseMetrics? _lastMetrics;
-    private PidResponseAssessment? _lastAssessment;
-    private IReadOnlyList<PidSample> _lastSamples = Array.Empty<PidSample>();
-    private Guid? _lastTestSessionId;
-    private string _lastSourceFileName = string.Empty;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
-    private string _sampleCount = "-";
-    private string _overshootPercent = "-";
-    private string _riseTime = "-";
-    private string _settlingTime = "-";
-    private string _steadyStateError = "-";
-    private string _peakProcessValue = "-";
-    private string _peakTime = "-";
-    private string _minimumProcessValue = "-";
-    private string _meanAbsoluteError = "-";
-    private string _meanSquaredError = "-";
-    private string _integralAbsoluteError = "-";
-    private string _outputStandardDeviation = "-";
-    private string _responseFlags = "-";
     private string _analysisStartText = string.Empty;
     private string _analysisEndText = string.Empty;
-    private string _activeAnalysisWindow = "-";
-    private string _assessmentSummary = "-";
     private string _notificationTitle = string.Empty;
     private string _notificationMessage = string.Empty;
     private string _notificationKind = "Info";
@@ -85,12 +60,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _historyStatus = "尚未加载历史记录。";
     private string _historySearchText = string.Empty;
     private string _selectedHistoryDetails = "请选择一条历史记录。";
-    private PointCollection _setPointPoints = new();
-    private PointCollection _processValuePoints = new();
-    private PointCollection _manipulatedValuePoints = new();
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
-    private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
     private ObservableCollection<HistoryComparisonMetricViewModel> _historyComparisonMetrics = [];
@@ -101,7 +72,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private TestSessionListItemViewModel? _baselineHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
-    private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
     private string _recommendationReviewNote = string.Empty;
     private string _recommendationReviewStatus = "尚未记录建议审查。";
 
@@ -178,6 +148,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Debug.PropertyChanged += Debug_PropertyChanged;
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
+        OfflineAnalysis = new OfflineAnalysisViewModel();
+        OfflineAnalysis.PropertyChanged += OfflineAnalysis_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -258,6 +230,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public PlcDebugViewModel Debug { get; }
 
     public PlcConfigurationEditorViewModel PlcConfigurationEditor { get; }
+
+    public OfflineAnalysisViewModel OfflineAnalysis { get; }
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
@@ -545,80 +519,80 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string SampleCount
     {
-        get => _sampleCount;
-        private set => SetProperty(ref _sampleCount, value);
+        get => OfflineAnalysis.SampleCount;
+        private set => _ = value;
     }
 
     public string OvershootPercent
     {
-        get => _overshootPercent;
-        private set => SetProperty(ref _overshootPercent, value);
+        get => OfflineAnalysis.OvershootPercent;
+        private set => _ = value;
     }
 
     public string RiseTime
     {
-        get => _riseTime;
-        private set => SetProperty(ref _riseTime, value);
+        get => OfflineAnalysis.RiseTime;
+        private set => _ = value;
     }
 
     public string SettlingTime
     {
-        get => _settlingTime;
-        private set => SetProperty(ref _settlingTime, value);
+        get => OfflineAnalysis.SettlingTime;
+        private set => _ = value;
     }
 
     public string SteadyStateError
     {
-        get => _steadyStateError;
-        private set => SetProperty(ref _steadyStateError, value);
+        get => OfflineAnalysis.SteadyStateError;
+        private set => _ = value;
     }
 
     public string PeakProcessValue
     {
-        get => _peakProcessValue;
-        private set => SetProperty(ref _peakProcessValue, value);
+        get => OfflineAnalysis.PeakProcessValue;
+        private set => _ = value;
     }
 
     public string PeakTime
     {
-        get => _peakTime;
-        private set => SetProperty(ref _peakTime, value);
+        get => OfflineAnalysis.PeakTime;
+        private set => _ = value;
     }
 
     public string MinimumProcessValue
     {
-        get => _minimumProcessValue;
-        private set => SetProperty(ref _minimumProcessValue, value);
+        get => OfflineAnalysis.MinimumProcessValue;
+        private set => _ = value;
     }
 
     public string MeanAbsoluteError
     {
-        get => _meanAbsoluteError;
-        private set => SetProperty(ref _meanAbsoluteError, value);
+        get => OfflineAnalysis.MeanAbsoluteError;
+        private set => _ = value;
     }
 
     public string MeanSquaredError
     {
-        get => _meanSquaredError;
-        private set => SetProperty(ref _meanSquaredError, value);
+        get => OfflineAnalysis.MeanSquaredError;
+        private set => _ = value;
     }
 
     public string IntegralAbsoluteError
     {
-        get => _integralAbsoluteError;
-        private set => SetProperty(ref _integralAbsoluteError, value);
+        get => OfflineAnalysis.IntegralAbsoluteError;
+        private set => _ = value;
     }
 
     public string OutputStandardDeviation
     {
-        get => _outputStandardDeviation;
-        private set => SetProperty(ref _outputStandardDeviation, value);
+        get => OfflineAnalysis.OutputStandardDeviation;
+        private set => _ = value;
     }
 
     public string ResponseFlags
     {
-        get => _responseFlags;
-        private set => SetProperty(ref _responseFlags, value);
+        get => OfflineAnalysis.ResponseFlags;
+        private set => _ = value;
     }
 
     public string AnalysisStartText
@@ -635,14 +609,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string ActiveAnalysisWindow
     {
-        get => _activeAnalysisWindow;
-        private set => SetProperty(ref _activeAnalysisWindow, value);
+        get => OfflineAnalysis.ActiveAnalysisWindow;
+        private set => _ = value;
     }
 
     public string AssessmentSummary
     {
-        get => _assessmentSummary;
-        private set => SetProperty(ref _assessmentSummary, value);
+        get => OfflineAnalysis.AssessmentSummary;
+        private set => _ = value;
     }
 
     public string NotificationTitle
@@ -701,20 +675,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public PointCollection SetPointPoints
     {
-        get => _setPointPoints;
-        private set => SetProperty(ref _setPointPoints, value);
+        get => OfflineAnalysis.SetPointPoints;
+        private set => _ = value;
     }
 
     public PointCollection ProcessValuePoints
     {
-        get => _processValuePoints;
-        private set => SetProperty(ref _processValuePoints, value);
+        get => OfflineAnalysis.ProcessValuePoints;
+        private set => _ = value;
     }
 
     public PointCollection ManipulatedValuePoints
     {
-        get => _manipulatedValuePoints;
-        private set => SetProperty(ref _manipulatedValuePoints, value);
+        get => OfflineAnalysis.ManipulatedValuePoints;
+        private set => _ = value;
     }
 
     public ObservableCollection<PidSampleFieldDefinitionViewModel> FieldDefinitions
@@ -737,8 +711,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<PidTuningRecommendationViewModel> TuningRecommendations
     {
-        get => _tuningRecommendations;
-        private set => SetProperty(ref _tuningRecommendations, value);
+        get => OfflineAnalysis.TuningRecommendations;
+        private set => _ = value;
     }
 
     public ObservableCollection<PidRecommendationReviewViewModel> RecommendationReviews
@@ -767,8 +741,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string RecommendationSummary
     {
-        get => _recommendationSummary;
-        private set => SetProperty(ref _recommendationSummary, value);
+        get => OfflineAnalysis.RecommendationSummary;
+        private set => _ = value;
     }
 
     public string RecommendationReviewNote
@@ -1007,6 +981,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void OfflineAnalysis_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        foreach (var propertyName in MapOfflineAnalysisProperty(e.PropertyName))
+        {
+            OnPropertyChanged(propertyName);
+        }
+    }
+
     private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1054,6 +1036,34 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             nameof(HistoricalTrendWorkbenchViewModel.YUpper) => [nameof(PlcTrendYUpper)],
             nameof(HistoricalTrendWorkbenchViewModel.IsViewportEnabled) => [nameof(IsPlcHistoricalViewportEnabled)],
             nameof(HistoricalTrendWorkbenchViewModel.IsYSliderEnabled) => [nameof(IsPlcTrendYSliderEnabled)],
+            _ => Array.Empty<string>()
+        };
+    }
+
+    private static IReadOnlyList<string> MapOfflineAnalysisProperty(string? propertyName)
+    {
+        return propertyName switch
+        {
+            nameof(OfflineAnalysisViewModel.SampleCount) => [nameof(SampleCount)],
+            nameof(OfflineAnalysisViewModel.OvershootPercent) => [nameof(OvershootPercent)],
+            nameof(OfflineAnalysisViewModel.RiseTime) => [nameof(RiseTime)],
+            nameof(OfflineAnalysisViewModel.SettlingTime) => [nameof(SettlingTime)],
+            nameof(OfflineAnalysisViewModel.SteadyStateError) => [nameof(SteadyStateError)],
+            nameof(OfflineAnalysisViewModel.PeakProcessValue) => [nameof(PeakProcessValue)],
+            nameof(OfflineAnalysisViewModel.PeakTime) => [nameof(PeakTime)],
+            nameof(OfflineAnalysisViewModel.MinimumProcessValue) => [nameof(MinimumProcessValue)],
+            nameof(OfflineAnalysisViewModel.MeanAbsoluteError) => [nameof(MeanAbsoluteError)],
+            nameof(OfflineAnalysisViewModel.MeanSquaredError) => [nameof(MeanSquaredError)],
+            nameof(OfflineAnalysisViewModel.IntegralAbsoluteError) => [nameof(IntegralAbsoluteError)],
+            nameof(OfflineAnalysisViewModel.OutputStandardDeviation) => [nameof(OutputStandardDeviation)],
+            nameof(OfflineAnalysisViewModel.ResponseFlags) => [nameof(ResponseFlags)],
+            nameof(OfflineAnalysisViewModel.ActiveAnalysisWindow) => [nameof(ActiveAnalysisWindow)],
+            nameof(OfflineAnalysisViewModel.AssessmentSummary) => [nameof(AssessmentSummary)],
+            nameof(OfflineAnalysisViewModel.TuningRecommendations) => [nameof(TuningRecommendations)],
+            nameof(OfflineAnalysisViewModel.RecommendationSummary) => [nameof(RecommendationSummary)],
+            nameof(OfflineAnalysisViewModel.SetPointPoints) => [nameof(SetPointPoints)],
+            nameof(OfflineAnalysisViewModel.ProcessValuePoints) => [nameof(ProcessValuePoints)],
+            nameof(OfflineAnalysisViewModel.ManipulatedValuePoints) => [nameof(ManipulatedValuePoints)],
             _ => Array.Empty<string>()
         };
     }
@@ -1722,7 +1732,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task SaveTestSessionAsync()
     {
-        if (_lastAnalysisWindow is null || _lastSamples.Count == 0)
+        if (OfflineAnalysis.LastAnalysisWindow is null || OfflineAnalysis.LastSamples.Count == 0)
         {
             Notify("无法保存试验记录", "请先导入 CSV 并完成一次分析。", "Warning");
             return;
@@ -1730,7 +1740,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var sessionId = _lastSamples
+            var sessionId = OfflineAnalysis.LastSamples
                 .Select(sample => sample.TestSessionId)
                 .FirstOrDefault(id => id != Guid.Empty);
 
@@ -1739,25 +1749,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 sessionId = Guid.NewGuid();
             }
 
-            var samples = _lastSamples
+            var samples = OfflineAnalysis.LastSamples
                 .Select(sample => sample with { TestSessionId = sessionId })
                 .ToArray();
 
             var session = new TestSession(
                 sessionId,
                 Guid.Empty,
-                string.IsNullOrWhiteSpace(_lastSourceFileName)
+                string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
                     ? $"offline-session-{sessionId:N}"
-                    : Path.GetFileNameWithoutExtension(_lastSourceFileName),
-                _lastAnalysisWindow.Start,
-                _lastAnalysisWindow.End,
+                    : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName),
+                OfflineAnalysis.LastAnalysisWindow.Start,
+                OfflineAnalysis.LastAnalysisWindow.End,
                 null,
                 "Offline CSV analysis",
                 $"Profile: {_fieldProfile.ProfileName}");
 
             await _testSessionRepository.SaveAsync(session, CancellationToken.None);
             await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
-            _lastTestSessionId = sessionId;
+            OfflineAnalysis.MarkSavedSession(sessionId);
             await LoadHistoryAsync(showNotification: false);
             Notify(
                 "试验记录已保存",
@@ -2039,18 +2049,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task SaveParameterSetAsync()
     {
-        if (_lastSamples.Count == 0)
+        if (OfflineAnalysis.LastSamples.Count == 0)
         {
             Notify("无法保存参数方案", "请先导入 CSV、载入示例或打开历史记录。", "Warning");
             return;
         }
 
-        var sourceName = string.IsNullOrWhiteSpace(_lastSourceFileName)
+        var sourceName = string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
             ? "current-analysis"
-            : Path.GetFileNameWithoutExtension(_lastSourceFileName);
+            : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName);
         var parameterSet = _parameterSetExtractor.Extract(
-            _lastSamples,
-            _lastTestSessionId == Guid.Empty ? null : _lastTestSessionId,
+            OfflineAnalysis.LastSamples,
+            OfflineAnalysis.LastTestSessionId == Guid.Empty ? null : OfflineAnalysis.LastTestSessionId,
             sourceName,
             $"Captured from {sourceName}");
 
@@ -2064,7 +2074,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         await LoadParameterSetsAsync(showNotification: false);
         Notify(
             "参数方案已保存",
-            $"{parameterSet.Name}: Kp={FormatNullable(parameterSet.Kp, "0.###")}, Ki/Ti={FormatNullable(parameterSet.KiOrTi, "0.###")}, Kd/Td={FormatNullable(parameterSet.KdOrTd, "0.###")}",
+            $"{parameterSet.Name}: Kp={FormatParameterValue(parameterSet.Kp)}, Ki/Ti={FormatParameterValue(parameterSet.KiOrTi)}, Kd/Td={FormatParameterValue(parameterSet.KdOrTd)}",
             "Success");
     }
 
@@ -2085,10 +2095,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var review = new PidRecommendationReview(
                 Guid.NewGuid(),
-                _lastTestSessionId,
-                string.IsNullOrWhiteSpace(_lastSourceFileName)
+                OfflineAnalysis.LastTestSessionId,
+                string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
                     ? "current-analysis"
-                    : Path.GetFileNameWithoutExtension(_lastSourceFileName),
+                    : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName),
                 SelectedTuningRecommendation.Recommendation.Parameter,
                 SelectedTuningRecommendation.Recommendation.Direction,
                 SelectedTuningRecommendation.Recommendation.Adjustment,
@@ -2185,6 +2195,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return value.HasValue ? value.Value.ToString(format, CultureInfo.InvariantCulture) : "-";
     }
 
+    private static string FormatParameterValue(double? value)
+    {
+        return value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-";
+    }
+
     private static string FormatDelta(double? value, string format)
     {
         if (!value.HasValue)
@@ -2243,7 +2258,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExportAnalysisResultAsync()
     {
-        if (_lastAnalysisWindow is null || _lastMetrics is null || _lastAssessment is null)
+        if (OfflineAnalysis.LastAnalysisWindow is null
+            || OfflineAnalysis.LastMetrics is null
+            || OfflineAnalysis.LastAssessment is null)
         {
             Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
             return;
@@ -2259,9 +2276,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             await using var stream = File.Create(fileName);
             await _analysisResultExporter.ExportAsync(
-                _lastAnalysisWindow,
-                _lastMetrics,
-                _lastAssessment,
+                OfflineAnalysis.LastAnalysisWindow,
+                OfflineAnalysis.LastMetrics,
+                OfflineAnalysis.LastAssessment,
                 stream,
                 CancellationToken.None);
             Notify("分析结果已导出", Path.GetFullPath(fileName), "Success");
@@ -2388,41 +2405,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         AnalysisWindow window,
         PidResponseMetrics metrics)
     {
-        ActiveAnalysisWindow =
-            $"{window.Start.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} - {window.End.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}";
-        SampleCount = samples.Count.ToString(CultureInfo.InvariantCulture);
-        OvershootPercent = FormatNullable(metrics.OvershootPercent, "0.### '%'");
-        RiseTime = FormatNullable(metrics.RiseTime);
-        SettlingTime = FormatNullable(metrics.SettlingTime);
-        SteadyStateError = FormatNullable(metrics.SteadyStateError, "0.###");
-        PeakProcessValue = FormatNullable(metrics.PeakProcessValue, "0.###");
-        PeakTime = FormatNullable(metrics.PeakTime);
-        MinimumProcessValue = FormatNullable(metrics.MinimumProcessValue, "0.###");
-        MeanAbsoluteError = FormatNullable(metrics.MeanAbsoluteError, "0.###");
-        MeanSquaredError = FormatNullable(metrics.MeanSquaredError, "0.###");
-        IntegralAbsoluteError = FormatNullable(metrics.IntegralAbsoluteError, "0.###");
-        OutputStandardDeviation = FormatNullable(metrics.OutputStandardDeviation, "0.###");
-        ResponseFlags = FormatResponseFlags(metrics);
-        var assessment = _assessmentService.Assess(metrics);
-        AssessmentSummary = assessment.Summary;
-        _lastAnalysisWindow = window;
-        _lastMetrics = metrics;
-        _lastAssessment = assessment;
-        _lastSamples = samples;
-        _lastSourceFileName = sourceName;
-        _lastTestSessionId = samples.Select(sample => sample.TestSessionId).FirstOrDefault(id => id != Guid.Empty);
-        UpdateTuningRecommendations(metrics);
-        UpdateTrendPreview(samples);
-    }
-
-    private void UpdateTuningRecommendations(PidResponseMetrics metrics)
-    {
-        var recommendations = _recommendationService.Recommend(metrics);
-        TuningRecommendations = new ObservableCollection<PidTuningRecommendationViewModel>(
-            recommendations.Select(recommendation => new PidTuningRecommendationViewModel(recommendation)));
-        RecommendationSummary = TuningRecommendations.Count == 0
-            ? "当前没有可用建议。"
-            : $"已生成 {TuningRecommendations.Count} 条保守调整建议，写回 PLC 前必须由工程师确认。";
+        OfflineAnalysis.ApplyResult(sourceName, samples, window, metrics);
     }
 
     private Task DismissNotificationAsync()
@@ -2438,53 +2421,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         NotificationMessage = message;
         NotificationKind = kind;
         IsNotificationVisible = true;
-    }
-
-    private static string FormatNullable(double? value, string format)
-    {
-        return value.HasValue ? value.Value.ToString(format, CultureInfo.InvariantCulture) : "-";
-    }
-
-    private static string FormatNullable(TimeSpan? value)
-    {
-        return value.HasValue ? value.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture) : "-";
-    }
-
-    private static string FormatResponseFlags(PidResponseMetrics metrics)
-    {
-        var flags = new List<string>();
-        if (metrics.HasSustainedOscillation == true)
-        {
-            flags.Add("振荡");
-        }
-
-        if (metrics.HasOutputSaturation == true)
-        {
-            flags.Add("输出饱和");
-        }
-
-        return flags.Count == 0 ? "正常" : string.Join(" / ", flags);
-    }
-
-    private void UpdateTrendPreview(IReadOnlyList<PidSample> samples)
-    {
-        var trend = _trendSeriesBuilder.Build(samples);
-        SetPointPoints = ToPointCollection(trend.SetPoint);
-        ProcessValuePoints = ToPointCollection(trend.ProcessValue);
-        ManipulatedValuePoints = ToPointCollection(trend.ManipulatedValue);
-    }
-
-    private static PointCollection ToPointCollection(TrendSeries series)
-    {
-        const double width = 520;
-        const double height = 160;
-
-        var points = series.Points
-            .Select(point => new System.Windows.Point(
-                point.NormalizedX * width,
-                height - point.NormalizedY * height));
-
-        return new PointCollection(points);
     }
 
     private void RefreshFieldDefinitions()
