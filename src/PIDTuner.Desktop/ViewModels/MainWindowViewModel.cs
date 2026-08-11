@@ -30,6 +30,8 @@ namespace PIDTuner.Desktop.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     public const int LiveMonitorUiRefreshMilliseconds = 250;
+    private const double AxisSliderMinimum = 0d;
+    private const double AxisSliderMaximum = 1000d;
 
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
@@ -146,6 +148,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private double _plcTrendYSliderMaximum = 1d;
     private double _plcTrendYLower;
     private double _plcTrendYUpper = 1d;
+    private DateTimeOffset? _plcHistoricalTotalStart;
+    private DateTimeOffset? _plcHistoricalTotalEnd;
+    private double _plcTrendYTotalMinimum;
+    private double _plcTrendYTotalMaximum = 1d;
     private bool _isPlcHistoricalViewportEnabled;
     private bool _isPlcTrendYSliderEnabled;
     private bool _isUpdatingTrendSliderState;
@@ -1817,16 +1823,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             IsPlcHistoricalViewportEnabled = timeRange is not null;
             if (timeRange is not null)
             {
-                var minimum = ToAxisSliderValue(timeRange.Value.Start);
-                var maximum = ToAxisSliderValue(timeRange.Value.End);
-                if (minimum >= maximum)
-                {
-                    maximum = minimum + 1d;
-                }
-
-                PlcHistoricalViewportMinimum = minimum;
-                PlcHistoricalViewportMaximum = maximum;
-                SetHistoricalViewportSliderValues(minimum, maximum);
+                _plcHistoricalTotalStart = timeRange.Value.Start;
+                _plcHistoricalTotalEnd = timeRange.Value.End > timeRange.Value.Start
+                    ? timeRange.Value.End
+                    : timeRange.Value.Start.AddMilliseconds(1);
+                PlcHistoricalViewportMinimum = AxisSliderMinimum;
+                PlcHistoricalViewportMaximum = AxisSliderMaximum;
+                SetHistoricalViewportSliderValues(AxisSliderMinimum, AxisSliderMaximum);
                 UpdateHistoricalViewportText(timeRange.Value.Start, timeRange.Value.End);
             }
 
@@ -1843,10 +1846,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 }
 
                 var padding = Math.Max((maximum - minimum) * 0.05d, 1d);
-                PlcTrendYSliderMinimum = minimum - padding;
-                PlcTrendYSliderMaximum = maximum + padding;
-                SetYSliderValues(PlcTrendYSliderMinimum, PlcTrendYSliderMaximum);
-                UpdateYRangeText(PlcTrendYLower, PlcTrendYUpper);
+                _plcTrendYTotalMinimum = minimum - padding;
+                _plcTrendYTotalMaximum = maximum + padding;
+                PlcTrendYSliderMinimum = AxisSliderMinimum;
+                PlcTrendYSliderMaximum = AxisSliderMaximum;
+                SetYSliderValues(AxisSliderMinimum, AxisSliderMaximum);
+                UpdateYRangeText(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum);
             }
         }
         finally
@@ -1875,8 +1880,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var start = FromAxisSliderValue(PlcHistoricalViewportStart);
-        var end = FromAxisSliderValue(PlcHistoricalViewportEnd);
+        if (!_plcHistoricalTotalStart.HasValue || !_plcHistoricalTotalEnd.HasValue)
+        {
+            return;
+        }
+
+        var start = InterpolateTimestamp(
+            _plcHistoricalTotalStart.Value,
+            _plcHistoricalTotalEnd.Value,
+            PlcHistoricalViewportStart);
+        var end = InterpolateTimestamp(
+            _plcHistoricalTotalStart.Value,
+            _plcHistoricalTotalEnd.Value,
+            PlcHistoricalViewportEnd);
         ApplyHistoricalViewport(start, end, updateSliderValues: false);
         PlcMonitorStatus = $"历史趋势视图已调整：{FormatPlcHistoricalRangeTimestamp(start)} - {FormatPlcHistoricalRangeTimestamp(end)}。";
         UpdatePlcReplayStatus("历史趋势视图");
@@ -1899,14 +1915,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             try
             {
                 SetHistoricalViewportSliderValues(
-                    ClampAxisSliderValue(
-                        ToAxisSliderValue(start),
-                        PlcHistoricalViewportMinimum,
-                        PlcHistoricalViewportMaximum),
-                    ClampAxisSliderValue(
-                        ToAxisSliderValue(end),
-                        PlcHistoricalViewportMinimum,
-                        PlcHistoricalViewportMaximum));
+                    TimestampToSliderValue(start),
+                    TimestampToSliderValue(end));
             }
             finally
             {
@@ -1924,8 +1934,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        ApplyYRange(PlcTrendYLower, PlcTrendYUpper, updateSliderValues: false);
-        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{PlcTrendYLower.ToString("0.###", CultureInfo.InvariantCulture)} - {PlcTrendYUpper.ToString("0.###", CultureInfo.InvariantCulture)}。";
+        var min = InterpolateAxisValue(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum, PlcTrendYLower);
+        var max = InterpolateAxisValue(_plcTrendYTotalMinimum, _plcTrendYTotalMaximum, PlcTrendYUpper);
+        ApplyYRange(min, max, updateSliderValues: false);
+        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{min.ToString("0.###", CultureInfo.InvariantCulture)} - {max.ToString("0.###", CultureInfo.InvariantCulture)}。";
     }
 
     private void ApplyYRange(double min, double max, bool updateSliderValues)
@@ -1942,8 +1954,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             try
             {
                 SetYSliderValues(
-                    ClampAxisSliderValue(min, PlcTrendYSliderMinimum, PlcTrendYSliderMaximum),
-                    ClampAxisSliderValue(max, PlcTrendYSliderMinimum, PlcTrendYSliderMaximum));
+                    AxisValueToSliderValue(min),
+                    AxisValueToSliderValue(max));
             }
             finally
             {
@@ -2077,14 +2089,53 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Math.Clamp(value, minimum, maximum);
     }
 
-    private static double ToAxisSliderValue(DateTimeOffset timestamp)
+    private double TimestampToSliderValue(DateTimeOffset timestamp)
     {
-        return timestamp.ToUnixTimeMilliseconds();
+        if (!_plcHistoricalTotalStart.HasValue || !_plcHistoricalTotalEnd.HasValue)
+        {
+            return AxisSliderMinimum;
+        }
+
+        var totalMilliseconds = Math.Max(
+            1d,
+            (_plcHistoricalTotalEnd.Value - _plcHistoricalTotalStart.Value).TotalMilliseconds);
+        var offsetMilliseconds = (timestamp - _plcHistoricalTotalStart.Value).TotalMilliseconds;
+        return ClampAxisSliderValue(
+            AxisSliderMinimum + (offsetMilliseconds / totalMilliseconds * AxisSliderMaximum),
+            AxisSliderMinimum,
+            AxisSliderMaximum);
     }
 
-    private static DateTimeOffset FromAxisSliderValue(double value)
+    private double AxisValueToSliderValue(double value)
     {
-        return DateTimeOffset.FromUnixTimeMilliseconds((long)Math.Round(value));
+        var span = Math.Max(double.Epsilon, _plcTrendYTotalMaximum - _plcTrendYTotalMinimum);
+        return ClampAxisSliderValue(
+            AxisSliderMinimum + ((value - _plcTrendYTotalMinimum) / span * AxisSliderMaximum),
+            AxisSliderMinimum,
+            AxisSliderMaximum);
+    }
+
+    private static DateTimeOffset InterpolateTimestamp(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        double sliderValue)
+    {
+        var fraction = SliderFraction(sliderValue);
+        var ticks = start.Ticks + (long)Math.Round((end.Ticks - start.Ticks) * fraction);
+        return new DateTimeOffset(ticks, start.Offset);
+    }
+
+    private static double InterpolateAxisValue(double minimum, double maximum, double sliderValue)
+    {
+        return minimum + ((maximum - minimum) * SliderFraction(sliderValue));
+    }
+
+    private static double SliderFraction(double sliderValue)
+    {
+        return Math.Clamp(
+            (sliderValue - AxisSliderMinimum) / (AxisSliderMaximum - AxisSliderMinimum),
+            0d,
+            1d);
     }
 
     private bool EnsurePlcReplayLoaded()
