@@ -1508,13 +1508,13 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual(true, viewModel.IsNotificationVisible, "analysis notification visibility");
     AssertEqual("离线分析已完成", viewModel.NotificationTitle, "analysis notification title");
     AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
-    AssertEqual(true, viewModel.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
-    AssertContains("保守调整建议", viewModel.RecommendationSummary);
+    AssertEqual(true, viewModel.OfflineAnalysis.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
+    AssertContains("保守调整建议", viewModel.OfflineAnalysis.RecommendationSummary);
     await viewModel.SaveParameterSetAsync();
     AssertEqual("参数方案已保存", viewModel.NotificationTitle, "parameter set notification title");
     AssertEqual(1, viewModel.ParameterSets.Count, "parameter set count after save");
     AssertEqual("1.2", viewModel.ParameterSets[0].Kp, "parameter set Kp display");
-    viewModel.SelectedTuningRecommendation = viewModel.TuningRecommendations.First(item => item.Parameter == "Kp");
+    viewModel.SelectedTuningRecommendation = viewModel.OfflineAnalysis.TuningRecommendations.First(item => item.Parameter == "Kp");
     viewModel.RecommendationReviewNote = "现场确认先小步调整";
     await viewModel.AcceptRecommendationAsync();
     AssertEqual("建议审查已记录", viewModel.NotificationTitle, "review notification title");
@@ -1576,7 +1576,7 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     await viewModel.OpenHistorySessionAsync();
 
     AssertEqual("历史记录已打开", viewModel.NotificationTitle, "open history notification title");
-    AssertEqual("7", viewModel.SampleCount, "history sample count");
+    AssertEqual("7", viewModel.OfflineAnalysis.SampleCount, "history sample count");
 
     await viewModel.ExportHistorySamplesAsync();
 

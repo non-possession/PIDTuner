@@ -213,6 +213,12 @@ V2.0 的架构目标是：
 
 当前 `MainWindowViewModel` 仍保留 CSV 文件选择、字段配置和若干旧 XAML 兼容绑定。试验记录保存、历史列表加载、历史样本加载、历史样本导出和建议审查仓储编排已迁入 `ExperimentSessionCoordinator`；指标展示状态、当前结果和 CSV 分析执行不应再回到根 ViewModel。
 
+绑定收口：
+
+- 分析页的窗口输入、指标展示、评估摘要和离线趋势预览已直接绑定 `OfflineAnalysis.*`。
+- 参数调整页的建议摘要和建议列表已直接绑定 `OfflineAnalysis.*`。
+- `MainWindowViewModel` 不再提供 `SampleCount`、`OvershootPercent`、`AnalysisStartText`、`TuningRecommendations`、`SetPointPoints` 等离线分析包装属性。
+
 ### 3.9 实验历史与审查模块
 
 已建立：

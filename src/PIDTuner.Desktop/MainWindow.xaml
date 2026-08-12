@@ -1,4 +1,4 @@
-<Window x:Class="PIDTuner.Desktop.MainWindow"
+﻿<Window x:Class="PIDTuner.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:scottPlot="clr-namespace:ScottPlot.WPF;assembly=ScottPlot.WPF"
@@ -653,14 +653,14 @@
               <TextBlock Text="分析开始"
                          VerticalAlignment="Center"
                          Foreground="#6B7280" />
-              <TextBox Text="{Binding AnalysisStartText, UpdateSourceTrigger=PropertyChanged}"
+              <TextBox Text="{Binding OfflineAnalysis.AnalysisStartText, UpdateSourceTrigger=PropertyChanged}"
                        Width="260"
                        Height="28"
                        Margin="8,0,20,0" />
               <TextBlock Text="分析结束"
                          VerticalAlignment="Center"
                          Foreground="#6B7280" />
-              <TextBox Text="{Binding AnalysisEndText, UpdateSourceTrigger=PropertyChanged}"
+              <TextBox Text="{Binding OfflineAnalysis.AnalysisEndText, UpdateSourceTrigger=PropertyChanged}"
                        Width="260"
                        Height="28"
                        Margin="8,0,0,0" />
@@ -668,7 +668,7 @@
                          VerticalAlignment="Center"
                          Margin="20,0,0,0"
                          Foreground="#6B7280" />
-              <TextBlock Text="{Binding ActiveAnalysisWindow}"
+              <TextBlock Text="{Binding OfflineAnalysis.ActiveAnalysisWindow}"
                          VerticalAlignment="Center"
                          Margin="8,0,0,0"
                          Foreground="#374151" />
@@ -681,77 +681,77 @@
               <StackPanel>
                 <TextBlock Text="样本数"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding SampleCount}"
+                <TextBlock Text="{Binding OfflineAnalysis.SampleCount}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel>
                 <TextBlock Text="超调量"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding OvershootPercent}"
+                <TextBlock Text="{Binding OfflineAnalysis.OvershootPercent}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel>
                 <TextBlock Text="上升时间"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding RiseTime}"
+                <TextBlock Text="{Binding OfflineAnalysis.RiseTime}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel>
                 <TextBlock Text="调节时间"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding SettlingTime}"
+                <TextBlock Text="{Binding OfflineAnalysis.SettlingTime}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel>
                 <TextBlock Text="稳态误差"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding SteadyStateError}"
+                <TextBlock Text="{Binding OfflineAnalysis.SteadyStateError}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel Margin="0,10,0,0">
                 <TextBlock Text="峰值"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding PeakProcessValue}"
+                <TextBlock Text="{Binding OfflineAnalysis.PeakProcessValue}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel Margin="0,10,0,0">
                 <TextBlock Text="峰值时间"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding PeakTime}"
+                <TextBlock Text="{Binding OfflineAnalysis.PeakTime}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel Margin="0,10,0,0">
                 <TextBlock Text="平均绝对误差"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding MeanAbsoluteError}"
+                <TextBlock Text="{Binding OfflineAnalysis.MeanAbsoluteError}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel Margin="0,10,0,0">
                 <TextBlock Text="误差积分"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding IntegralAbsoluteError}"
+                <TextBlock Text="{Binding OfflineAnalysis.IntegralAbsoluteError}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
               <StackPanel Margin="0,10,0,0">
                 <TextBlock Text="状态标记"
                            Foreground="#6B7280" />
-                <TextBlock Text="{Binding ResponseFlags}"
+                <TextBlock Text="{Binding OfflineAnalysis.ResponseFlags}"
                            FontSize="18"
                            FontWeight="SemiBold" />
               </StackPanel>
             </UniformGrid>
 
             <TextBlock Grid.Row="3"
-                       Text="{Binding AssessmentSummary}"
+                       Text="{Binding OfflineAnalysis.AssessmentSummary}"
                        Margin="0,12,0,0"
                        Foreground="#374151"
                        TextWrapping="Wrap" />
@@ -819,13 +819,13 @@
                         X2="520"
                         Y2="120"
                         Stroke="#E5E7EB" />
-                  <Polyline Points="{Binding SetPointPoints}"
+                  <Polyline Points="{Binding OfflineAnalysis.SetPointPoints}"
                             Stroke="#2563EB"
                             StrokeThickness="2" />
-                  <Polyline Points="{Binding ProcessValuePoints}"
+                  <Polyline Points="{Binding OfflineAnalysis.ProcessValuePoints}"
                             Stroke="#059669"
                             StrokeThickness="2" />
-                  <Polyline Points="{Binding ManipulatedValuePoints}"
+                  <Polyline Points="{Binding OfflineAnalysis.ManipulatedValuePoints}"
                             Stroke="#DC2626"
                             StrokeThickness="2" />
                 </Canvas>
@@ -916,12 +916,12 @@
               <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <TextBlock Text="{Binding RecommendationSummary}"
+            <TextBlock Text="{Binding OfflineAnalysis.RecommendationSummary}"
                        Foreground="#374151"
                        TextWrapping="Wrap" />
 
             <DataGrid Grid.Row="1"
-                      ItemsSource="{Binding TuningRecommendations}"
+                      ItemsSource="{Binding OfflineAnalysis.TuningRecommendations}"
                       SelectedItem="{Binding SelectedTuningRecommendation}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
@@ -1204,3 +1204,4 @@
     </Grid>
   </DockPanel>
 </Window>
+

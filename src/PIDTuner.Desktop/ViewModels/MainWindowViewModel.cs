@@ -359,108 +359,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public string SampleCount
-    {
-        get => OfflineAnalysis.SampleCount;
-        private set => _ = value;
-    }
-
-    public string OvershootPercent
-    {
-        get => OfflineAnalysis.OvershootPercent;
-        private set => _ = value;
-    }
-
-    public string RiseTime
-    {
-        get => OfflineAnalysis.RiseTime;
-        private set => _ = value;
-    }
-
-    public string SettlingTime
-    {
-        get => OfflineAnalysis.SettlingTime;
-        private set => _ = value;
-    }
-
-    public string SteadyStateError
-    {
-        get => OfflineAnalysis.SteadyStateError;
-        private set => _ = value;
-    }
-
-    public string PeakProcessValue
-    {
-        get => OfflineAnalysis.PeakProcessValue;
-        private set => _ = value;
-    }
-
-    public string PeakTime
-    {
-        get => OfflineAnalysis.PeakTime;
-        private set => _ = value;
-    }
-
-    public string MinimumProcessValue
-    {
-        get => OfflineAnalysis.MinimumProcessValue;
-        private set => _ = value;
-    }
-
-    public string MeanAbsoluteError
-    {
-        get => OfflineAnalysis.MeanAbsoluteError;
-        private set => _ = value;
-    }
-
-    public string MeanSquaredError
-    {
-        get => OfflineAnalysis.MeanSquaredError;
-        private set => _ = value;
-    }
-
-    public string IntegralAbsoluteError
-    {
-        get => OfflineAnalysis.IntegralAbsoluteError;
-        private set => _ = value;
-    }
-
-    public string OutputStandardDeviation
-    {
-        get => OfflineAnalysis.OutputStandardDeviation;
-        private set => _ = value;
-    }
-
-    public string ResponseFlags
-    {
-        get => OfflineAnalysis.ResponseFlags;
-        private set => _ = value;
-    }
-
-    public string AnalysisStartText
-    {
-        get => OfflineAnalysis.AnalysisStartText;
-        set => OfflineAnalysis.AnalysisStartText = value;
-    }
-
-    public string AnalysisEndText
-    {
-        get => OfflineAnalysis.AnalysisEndText;
-        set => OfflineAnalysis.AnalysisEndText = value;
-    }
-
-    public string ActiveAnalysisWindow
-    {
-        get => OfflineAnalysis.ActiveAnalysisWindow;
-        private set => _ = value;
-    }
-
-    public string AssessmentSummary
-    {
-        get => OfflineAnalysis.AssessmentSummary;
-        private set => _ = value;
-    }
-
     public string NotificationTitle
     {
         get => _notificationTitle;
@@ -509,24 +407,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => _ = value;
     }
 
-    public PointCollection SetPointPoints
-    {
-        get => OfflineAnalysis.SetPointPoints;
-        private set => _ = value;
-    }
-
-    public PointCollection ProcessValuePoints
-    {
-        get => OfflineAnalysis.ProcessValuePoints;
-        private set => _ = value;
-    }
-
-    public PointCollection ManipulatedValuePoints
-    {
-        get => OfflineAnalysis.ManipulatedValuePoints;
-        private set => _ = value;
-    }
-
     public ObservableCollection<PidSampleFieldDefinitionViewModel> FieldDefinitions
     {
         get => _fieldDefinitions;
@@ -536,12 +416,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<TestSessionListItemViewModel> HistorySessions
     {
         get => ExperimentHistory.HistorySessions;
-        private set => _ = value;
-    }
-
-    public ObservableCollection<PidTuningRecommendationViewModel> TuningRecommendations
-    {
-        get => OfflineAnalysis.TuningRecommendations;
         private set => _ = value;
     }
 
@@ -566,12 +440,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<PidParameterSetViewModel> ParameterSets
     {
         get => ParameterSetLibrary.ParameterSets;
-        private set => _ = value;
-    }
-
-    public string RecommendationSummary
-    {
-        get => OfflineAnalysis.RecommendationSummary;
         private set => _ = value;
     }
 
@@ -763,10 +631,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void OfflineAnalysis_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        foreach (var propertyName in MapOfflineAnalysisProperty(e.PropertyName))
-        {
-            OnPropertyChanged(propertyName);
-        }
+        OnPropertyChanged(nameof(OfflineAnalysis));
     }
 
     private void ExperimentHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -815,36 +680,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
                 break;
         }
-    }
-
-    private static IReadOnlyList<string> MapOfflineAnalysisProperty(string? propertyName)
-    {
-        return propertyName switch
-        {
-            nameof(OfflineAnalysisViewModel.SampleCount) => [nameof(SampleCount)],
-            nameof(OfflineAnalysisViewModel.OvershootPercent) => [nameof(OvershootPercent)],
-            nameof(OfflineAnalysisViewModel.RiseTime) => [nameof(RiseTime)],
-            nameof(OfflineAnalysisViewModel.SettlingTime) => [nameof(SettlingTime)],
-            nameof(OfflineAnalysisViewModel.SteadyStateError) => [nameof(SteadyStateError)],
-            nameof(OfflineAnalysisViewModel.PeakProcessValue) => [nameof(PeakProcessValue)],
-            nameof(OfflineAnalysisViewModel.PeakTime) => [nameof(PeakTime)],
-            nameof(OfflineAnalysisViewModel.MinimumProcessValue) => [nameof(MinimumProcessValue)],
-            nameof(OfflineAnalysisViewModel.MeanAbsoluteError) => [nameof(MeanAbsoluteError)],
-            nameof(OfflineAnalysisViewModel.MeanSquaredError) => [nameof(MeanSquaredError)],
-            nameof(OfflineAnalysisViewModel.IntegralAbsoluteError) => [nameof(IntegralAbsoluteError)],
-            nameof(OfflineAnalysisViewModel.OutputStandardDeviation) => [nameof(OutputStandardDeviation)],
-            nameof(OfflineAnalysisViewModel.ResponseFlags) => [nameof(ResponseFlags)],
-            nameof(OfflineAnalysisViewModel.ActiveAnalysisWindow) => [nameof(ActiveAnalysisWindow)],
-            nameof(OfflineAnalysisViewModel.AssessmentSummary) => [nameof(AssessmentSummary)],
-            nameof(OfflineAnalysisViewModel.TuningRecommendations) => [nameof(TuningRecommendations)],
-            nameof(OfflineAnalysisViewModel.RecommendationSummary) => [nameof(RecommendationSummary)],
-            nameof(OfflineAnalysisViewModel.SetPointPoints) => [nameof(SetPointPoints)],
-            nameof(OfflineAnalysisViewModel.ProcessValuePoints) => [nameof(ProcessValuePoints)],
-            nameof(OfflineAnalysisViewModel.ManipulatedValuePoints) => [nameof(ManipulatedValuePoints)],
-            nameof(OfflineAnalysisViewModel.AnalysisStartText) => [nameof(AnalysisStartText)],
-            nameof(OfflineAnalysisViewModel.AnalysisEndText) => [nameof(AnalysisEndText)],
-            _ => Array.Empty<string>()
-        };
     }
 
     private static IReadOnlyList<string> MapExperimentHistoryProperty(string? propertyName)
