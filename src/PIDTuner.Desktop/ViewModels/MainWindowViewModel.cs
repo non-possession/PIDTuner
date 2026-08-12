@@ -52,29 +52,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _notificationMessage = string.Empty;
     private string _notificationKind = "Info";
     private bool _isNotificationVisible;
-    private string _historyStatus = "尚未加载历史记录。";
-    private string _historySearchText = string.Empty;
-    private string _selectedHistoryDetails = "请选择一条历史记录。";
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
-    private ObservableCollection<TestSessionListItemViewModel> _historySessions = [];
-    private ObservableCollection<PidRecommendationReviewViewModel> _recommendationReviews = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
-    private ObservableCollection<HistoryComparisonMetricViewModel> _historyComparisonMetrics = [];
     private ObservableCollection<PidParameterSetViewModel> _parameterSets = [];
-    private IReadOnlyList<TestSessionListItemViewModel> _allHistorySessions = Array.Empty<TestSessionListItemViewModel>();
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
-    private TestSessionListItemViewModel? _selectedHistorySession;
-    private TestSessionListItemViewModel? _baselineHistorySession;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
-    private string _recommendationReviewNote = string.Empty;
-    private string _recommendationReviewStatus = "尚未记录建议审查。";
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private string _plcTrendModeStatus = "当前趋势：实时";
-    private string _historyComparisonStatus = "尚未设置历史对比基准。";
     private bool _isPlcHistoricalTrendMode;
     private bool _isPlcLiveTrendPaused;
     private const int MaxPlcDiagnosticsDurationMinutes = 30;
@@ -145,6 +133,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         OfflineAnalysis = new OfflineAnalysisViewModel();
         OfflineAnalysis.PropertyChanged += OfflineAnalysis_PropertyChanged;
+        ExperimentHistory.PropertyChanged += ExperimentHistory_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -227,6 +216,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public PlcConfigurationEditorViewModel PlcConfigurationEditor { get; }
 
     public OfflineAnalysisViewModel OfflineAnalysis { get; }
+
+    public ExperimentHistoryViewModel ExperimentHistory { get; } = new();
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
@@ -640,32 +631,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string HistoryStatus
     {
-        get => _historyStatus;
-        private set => SetProperty(ref _historyStatus, value);
+        get => ExperimentHistory.HistoryStatus;
+        private set => _ = value;
     }
 
     public string HistoryComparisonStatus
     {
-        get => _historyComparisonStatus;
-        private set => SetProperty(ref _historyComparisonStatus, value);
+        get => ExperimentHistory.HistoryComparisonStatus;
+        private set => _ = value;
     }
 
     public string HistorySearchText
     {
-        get => _historySearchText;
-        set
-        {
-            if (SetProperty(ref _historySearchText, value))
-            {
-                ApplyHistoryFilter();
-            }
-        }
+        get => ExperimentHistory.HistorySearchText;
+        set => ExperimentHistory.HistorySearchText = value;
     }
 
     public string SelectedHistoryDetails
     {
-        get => _selectedHistoryDetails;
-        private set => SetProperty(ref _selectedHistoryDetails, value);
+        get => ExperimentHistory.SelectedHistoryDetails;
+        private set => _ = value;
     }
 
     public PointCollection SetPointPoints
@@ -700,8 +685,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<TestSessionListItemViewModel> HistorySessions
     {
-        get => _historySessions;
-        private set => SetProperty(ref _historySessions, value);
+        get => ExperimentHistory.HistorySessions;
+        private set => _ = value;
     }
 
     public ObservableCollection<PidTuningRecommendationViewModel> TuningRecommendations
@@ -712,8 +697,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<PidRecommendationReviewViewModel> RecommendationReviews
     {
-        get => _recommendationReviews;
-        private set => SetProperty(ref _recommendationReviews, value);
+        get => ExperimentHistory.RecommendationReviews;
+        private set => _ = value;
     }
 
     public ObservableCollection<PlcTagMonitorViewModel> PlcMonitorTags
@@ -724,8 +709,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<HistoryComparisonMetricViewModel> HistoryComparisonMetrics
     {
-        get => _historyComparisonMetrics;
-        private set => SetProperty(ref _historyComparisonMetrics, value);
+        get => ExperimentHistory.HistoryComparisonMetrics;
+        private set => _ = value;
     }
 
     public ObservableCollection<PidParameterSetViewModel> ParameterSets
@@ -742,14 +727,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string RecommendationReviewNote
     {
-        get => _recommendationReviewNote;
-        set => SetProperty(ref _recommendationReviewNote, value);
+        get => ExperimentHistory.RecommendationReviewNote;
+        set => ExperimentHistory.RecommendationReviewNote = value;
     }
 
     public string RecommendationReviewStatus
     {
-        get => _recommendationReviewStatus;
-        private set => SetProperty(ref _recommendationReviewStatus, value);
+        get => ExperimentHistory.RecommendationReviewStatus;
+        private set => _ = value;
     }
 
     public string ParameterSetStatus
@@ -766,14 +751,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public TestSessionListItemViewModel? SelectedHistorySession
     {
-        get => _selectedHistorySession;
-        set
-        {
-            if (SetProperty(ref _selectedHistorySession, value))
-            {
-                UpdateSelectedHistoryDetails();
-            }
-        }
+        get => ExperimentHistory.SelectedHistorySession;
+        set => ExperimentHistory.SelectedHistorySession = value;
     }
 
     public PidTuningRecommendationViewModel? SelectedTuningRecommendation
@@ -984,6 +963,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void ExperimentHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        foreach (var propertyName in MapExperimentHistoryProperty(e.PropertyName))
+        {
+            OnPropertyChanged(propertyName);
+        }
+    }
+
     private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1061,6 +1048,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             nameof(OfflineAnalysisViewModel.ManipulatedValuePoints) => [nameof(ManipulatedValuePoints)],
             nameof(OfflineAnalysisViewModel.AnalysisStartText) => [nameof(AnalysisStartText)],
             nameof(OfflineAnalysisViewModel.AnalysisEndText) => [nameof(AnalysisEndText)],
+            _ => Array.Empty<string>()
+        };
+    }
+
+    private static IReadOnlyList<string> MapExperimentHistoryProperty(string? propertyName)
+    {
+        return propertyName switch
+        {
+            nameof(ExperimentHistoryViewModel.HistoryStatus) => [nameof(HistoryStatus)],
+            nameof(ExperimentHistoryViewModel.HistoryComparisonStatus) => [nameof(HistoryComparisonStatus)],
+            nameof(ExperimentHistoryViewModel.HistorySearchText) => [nameof(HistorySearchText)],
+            nameof(ExperimentHistoryViewModel.SelectedHistoryDetails) => [nameof(SelectedHistoryDetails)],
+            nameof(ExperimentHistoryViewModel.HistorySessions) => [nameof(HistorySessions)],
+            nameof(ExperimentHistoryViewModel.RecommendationReviews) => [nameof(RecommendationReviews)],
+            nameof(ExperimentHistoryViewModel.HistoryComparisonMetrics) => [nameof(HistoryComparisonMetrics)],
+            nameof(ExperimentHistoryViewModel.RecommendationReviewNote) => [nameof(RecommendationReviewNote)],
+            nameof(ExperimentHistoryViewModel.RecommendationReviewStatus) => [nameof(RecommendationReviewStatus)],
+            nameof(ExperimentHistoryViewModel.SelectedHistorySession) => [nameof(SelectedHistorySession)],
             _ => Array.Empty<string>()
         };
     }
@@ -1923,16 +1928,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        _baselineHistorySession = SelectedHistorySession;
-        HistoryComparisonStatus = $"基准：{_baselineHistorySession.Name}";
-        HistoryComparisonMetrics.Clear();
+        ExperimentHistory.SetBaselineToSelected();
         Notify("历史对比基准已设置", HistoryComparisonStatus, "Info");
         return Task.CompletedTask;
     }
 
     public async Task CompareHistorySessionAsync()
     {
-        if (_baselineHistorySession is null)
+        var baselineHistorySession = ExperimentHistory.BaselineHistorySession;
+        if (baselineHistorySession is null)
         {
             Notify("无法对比历史记录", "请先选择一条记录并设为基准。", "Warning");
             return;
@@ -1944,7 +1948,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (SelectedHistorySession.Id == _baselineHistorySession.Id)
+        if (SelectedHistorySession.Id == baselineHistorySession.Id)
         {
             Notify("无法对比历史记录", "请选择不同于基准的历史记录。", "Warning");
             return;
@@ -1952,10 +1956,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var baseline = await AnalyzeHistorySessionAsync(_baselineHistorySession);
+            var baseline = await AnalyzeHistorySessionAsync(baselineHistorySession);
             var candidate = await AnalyzeHistorySessionAsync(SelectedHistorySession);
-            HistoryComparisonMetrics = BuildHistoryComparisonMetrics(baseline.Metrics, candidate.Metrics);
-            HistoryComparisonStatus = $"基准：{_baselineHistorySession.Name}；对比：{SelectedHistorySession.Name}";
+            ExperimentHistory.SetComparisonResult(
+                baseline.Metrics,
+                candidate.Metrics,
+                baselineHistorySession.Name,
+                SelectedHistorySession.Name);
             Notify("历史记录对比已完成", HistoryComparisonStatus, "Success");
         }
         catch (Exception exception)
@@ -1979,13 +1986,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var reviews = await _recommendationReviewRepository.ListAsync(CancellationToken.None);
-            RecommendationReviews = new ObservableCollection<PidRecommendationReviewViewModel>(
+            ExperimentHistory.SetRecommendationReviews(
                 reviews
                     .OrderByDescending(review => review.CreatedAt)
                     .Select(review => new PidRecommendationReviewViewModel(review)));
-            RecommendationReviewStatus = RecommendationReviews.Count == 0
-                ? "尚无建议审查记录。"
-                : $"已加载 {RecommendationReviews.Count} 条建议审查记录。";
         }
         catch (Exception exception)
         {
@@ -2026,11 +2030,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 items.Add(new TestSessionListItemViewModel(session, samples.Count));
             }
 
-            _allHistorySessions = items;
-            ApplyHistoryFilter();
-            HistoryStatus = HistorySessions.Count == 0
-                ? "尚无已保存试验记录。"
-                : $"已加载 {HistorySessions.Count} 条试验记录。";
+            ExperimentHistory.SetHistorySessions(items);
 
             if (showNotification)
             {
@@ -2039,7 +2039,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            HistoryStatus = "历史记录加载失败。";
+            ExperimentHistory.MarkHistoryLoadFailed();
             Notify("历史记录加载失败", exception.Message, "Error");
         }
     }
@@ -2104,7 +2104,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 DateTimeOffset.Now);
 
             await _recommendationReviewRepository.SaveAsync(review, CancellationToken.None);
-            RecommendationReviewNote = string.Empty;
+            ExperimentHistory.ClearRecommendationReviewNote();
             await LoadRecommendationReviewsAsync();
             var decisionText = decision == PidRecommendationReviewDecision.Accepted ? "采用" : "暂缓";
             Notify("建议审查已记录", $"{decisionText}：{review.Parameter} {review.Adjustment}", "Success");
@@ -2153,59 +2153,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return (samples, OfflineAnalysis.AnalyzeSamples(samples, window));
     }
 
-    private static ObservableCollection<HistoryComparisonMetricViewModel> BuildHistoryComparisonMetrics(
-        PidResponseMetrics baseline,
-        PidResponseMetrics candidate)
-    {
-        return new ObservableCollection<HistoryComparisonMetricViewModel>
-        {
-            Compare("超调量", baseline.OvershootPercent, candidate.OvershootPercent, "0.###"),
-            Compare("上升时间", baseline.RiseTime?.TotalSeconds, candidate.RiseTime?.TotalSeconds, "0.### s"),
-            Compare("调节时间", baseline.SettlingTime?.TotalSeconds, candidate.SettlingTime?.TotalSeconds, "0.### s"),
-            Compare("稳态误差", baseline.SteadyStateError, candidate.SteadyStateError, "0.###"),
-            Compare("峰值", baseline.PeakProcessValue, candidate.PeakProcessValue, "0.###"),
-            Compare("平均绝对误差", baseline.MeanAbsoluteError, candidate.MeanAbsoluteError, "0.###"),
-            Compare("误差积分", baseline.IntegralAbsoluteError, candidate.IntegralAbsoluteError, "0.###"),
-            Compare("输出标准差", baseline.OutputStandardDeviation, candidate.OutputStandardDeviation, "0.###")
-        };
-    }
-
-    private static HistoryComparisonMetricViewModel Compare(
-        string metric,
-        double? baseline,
-        double? candidate,
-        string format)
-    {
-        double? delta = baseline.HasValue && candidate.HasValue
-            ? candidate.Value - baseline.Value
-            : null;
-
-        return new HistoryComparisonMetricViewModel(
-            metric,
-            FormatComparisonValue(baseline, format),
-            FormatComparisonValue(candidate, format),
-            FormatDelta(delta, format));
-    }
-
-    private static string FormatComparisonValue(double? value, string format)
-    {
-        return value.HasValue ? value.Value.ToString(format, CultureInfo.InvariantCulture) : "-";
-    }
-
     private static string FormatParameterValue(double? value)
     {
         return value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-";
-    }
-
-    private static string FormatDelta(double? value, string format)
-    {
-        if (!value.HasValue)
-        {
-            return "-";
-        }
-
-        var sign = value.Value > 0 ? "+" : string.Empty;
-        return sign + value.Value.ToString(format, CultureInfo.InvariantCulture);
     }
 
     private static string EscapeCsv(string value)
@@ -2219,38 +2169,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         return $"\"{value.Replace("\"", "\"\"")}\"";
-    }
-
-    private void ApplyHistoryFilter()
-    {
-        var searchText = HistorySearchText.Trim();
-        var filtered = string.IsNullOrWhiteSpace(searchText)
-            ? _allHistorySessions
-            : _allHistorySessions.Where(item =>
-                item.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)
-                || item.Device.Contains(searchText, StringComparison.OrdinalIgnoreCase)
-                || item.OperatingCondition.Contains(searchText, StringComparison.OrdinalIgnoreCase)
-                || item.Notes.Contains(searchText, StringComparison.OrdinalIgnoreCase));
-
-        HistorySessions = new ObservableCollection<TestSessionListItemViewModel>(filtered);
-        if (SelectedHistorySession is not null && !HistorySessions.Any(item => item.Id == SelectedHistorySession.Id))
-        {
-            SelectedHistorySession = null;
-        }
-    }
-
-    private void UpdateSelectedHistoryDetails()
-    {
-        SelectedHistoryDetails = SelectedHistorySession is null
-            ? "请选择一条历史记录。"
-            : string.Join(
-                Environment.NewLine,
-                $"名称：{SelectedHistorySession.Name}",
-                $"时间：{SelectedHistorySession.StartedAt} - {SelectedHistorySession.EndedAt}",
-                $"持续：{SelectedHistorySession.Duration}",
-                $"样本：{SelectedHistorySession.SampleCount}",
-                $"工况：{SelectedHistorySession.OperatingCondition}",
-                $"备注：{SelectedHistorySession.Notes}");
     }
 
     private async Task ExportAnalysisResultAsync()
