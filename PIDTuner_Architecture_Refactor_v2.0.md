@@ -471,3 +471,15 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `OfflineAnalysisViewModel` 已接管离线分析指标展示、当前分析结果状态、调参建议列表、离线趋势预览点集、CSV 分析执行和分析窗口解析。
 
 这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。
+
+## 9. 本次绑定收口记录
+
+本次重构完成了实验历史、建议审查和参数方案库的旧绑定包装迁移：
+
+- 历史记录页的筛选文本、历史列表、选中记录、记录详情、对比状态和对比指标直接绑定 `ExperimentHistory.*`。
+- 参数调整页的建议审查备注、审查状态和审查记录列表直接绑定 `ExperimentHistory.*`。
+- 参数方案状态和参数方案列表直接绑定 `ParameterSetLibrary.*`。
+- `MainWindowViewModel` 不再公开 `HistoryStatus`、`HistorySearchText`、`HistorySessions`、`SelectedHistorySession`、`SelectedHistoryDetails`、`HistoryComparisonStatus`、`HistoryComparisonMetrics`、`RecommendationReviewNote`、`RecommendationReviewStatus`、`RecommendationReviews`、`ParameterSetStatus`、`ParameterSets` 这类细项包装属性。
+- `MainWindowViewModel` 仍保留加载历史、打开历史、导出历史、设置基准、对比记录、保存/刷新参数方案、记录建议审查等命令，因为这些命令需要协调文件对话框、仓储编排、离线分析状态和全局通知。
+
+该收口保持用户可见功能不变，但把 View 和测试的状态入口进一步下沉到子 ViewModel，避免后续历史趋势迁移时继续扩大根 ViewModel。

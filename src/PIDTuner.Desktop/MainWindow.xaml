@@ -959,7 +959,7 @@
               <TextBlock Text="工程师备注"
                          VerticalAlignment="Center"
                          Foreground="#6B7280" />
-              <TextBox Text="{Binding RecommendationReviewNote, UpdateSourceTrigger=PropertyChanged}"
+              <TextBox Text="{Binding ExperimentHistory.RecommendationReviewNote, UpdateSourceTrigger=PropertyChanged}"
                        Width="360"
                        Height="28"
                        Margin="8,0,12,0" />
@@ -987,7 +987,7 @@
                       Width="96"
                       Height="32"
                       Margin="10,0,0,0" />
-              <TextBlock Text="{Binding RecommendationReviewStatus}"
+              <TextBlock Text="{Binding ExperimentHistory.RecommendationReviewStatus}"
                          VerticalAlignment="Center"
                          Margin="16,0,0,0"
                          Foreground="#374151" />
@@ -1000,7 +1000,7 @@
                 <ColumnDefinition Width="2*" />
               </Grid.ColumnDefinitions>
 
-              <DataGrid ItemsSource="{Binding RecommendationReviews}"
+              <DataGrid ItemsSource="{Binding ExperimentHistory.RecommendationReviews}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
                       CanUserAddRows="False"
@@ -1032,10 +1032,10 @@
 
               <StackPanel Grid.Column="1"
                           Margin="16,0,0,0">
-                <TextBlock Text="{Binding ParameterSetStatus}"
+                <TextBlock Text="{Binding ParameterSetLibrary.Status}"
                            Foreground="#374151"
                            TextWrapping="Wrap" />
-                <DataGrid ItemsSource="{Binding ParameterSets}"
+                <DataGrid ItemsSource="{Binding ParameterSetLibrary.ParameterSets}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           Margin="0,8,0,0"
@@ -1099,11 +1099,11 @@
                          VerticalAlignment="Center"
                          Margin="20,0,0,0"
                          Foreground="#6B7280" />
-              <TextBox Text="{Binding HistorySearchText, UpdateSourceTrigger=PropertyChanged}"
+              <TextBox Text="{Binding ExperimentHistory.HistorySearchText, UpdateSourceTrigger=PropertyChanged}"
                        Width="180"
                        Height="28"
                        Margin="8,0,0,0" />
-              <TextBlock Text="{Binding HistoryStatus}"
+              <TextBlock Text="{Binding ExperimentHistory.HistoryStatus}"
                          VerticalAlignment="Center"
                          Margin="16,0,0,0"
                          Foreground="#374151" />
@@ -1116,8 +1116,8 @@
                 <ColumnDefinition Width="360" />
               </Grid.ColumnDefinitions>
 
-              <DataGrid ItemsSource="{Binding HistorySessions}"
-                        SelectedItem="{Binding SelectedHistorySession}"
+              <DataGrid ItemsSource="{Binding ExperimentHistory.HistorySessions}"
+                        SelectedItem="{Binding ExperimentHistory.SelectedHistorySession}"
                         AutoGenerateColumns="False"
                         IsReadOnly="True"
                         CanUserAddRows="False"
@@ -1160,7 +1160,7 @@
                   <TextBlock Text="记录详情"
                              FontWeight="SemiBold"
                              Foreground="#1F2937" />
-                  <TextBlock Text="{Binding SelectedHistoryDetails}"
+                  <TextBlock Text="{Binding ExperimentHistory.SelectedHistoryDetails}"
                              Margin="0,10,0,0"
                              TextWrapping="Wrap"
                              Foreground="#374151" />
@@ -1168,11 +1168,11 @@
                              Margin="0,18,0,0"
                              FontWeight="SemiBold"
                              Foreground="#1F2937" />
-                  <TextBlock Text="{Binding HistoryComparisonStatus}"
+                  <TextBlock Text="{Binding ExperimentHistory.HistoryComparisonStatus}"
                              Margin="0,8,0,0"
                              TextWrapping="Wrap"
                              Foreground="#374151" />
-                  <DataGrid ItemsSource="{Binding HistoryComparisonMetrics}"
+                  <DataGrid ItemsSource="{Binding ExperimentHistory.HistoryComparisonMetrics}"
                             AutoGenerateColumns="False"
                             IsReadOnly="True"
                             CanUserAddRows="False"

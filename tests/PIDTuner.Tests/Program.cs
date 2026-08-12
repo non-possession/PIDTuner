@@ -1512,14 +1512,14 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertContains("保守调整建议", viewModel.OfflineAnalysis.RecommendationSummary);
     await viewModel.SaveParameterSetAsync();
     AssertEqual("参数方案已保存", viewModel.NotificationTitle, "parameter set notification title");
-    AssertEqual(1, viewModel.ParameterSets.Count, "parameter set count after save");
-    AssertEqual("1.2", viewModel.ParameterSets[0].Kp, "parameter set Kp display");
+    AssertEqual(1, viewModel.ParameterSetLibrary.ParameterSets.Count, "parameter set count after save");
+    AssertEqual("1.2", viewModel.ParameterSetLibrary.ParameterSets[0].Kp, "parameter set Kp display");
     viewModel.SelectedTuningRecommendation = viewModel.OfflineAnalysis.TuningRecommendations.First(item => item.Parameter == "Kp");
-    viewModel.RecommendationReviewNote = "现场确认先小步调整";
+    viewModel.ExperimentHistory.RecommendationReviewNote = "现场确认先小步调整";
     await viewModel.AcceptRecommendationAsync();
     AssertEqual("建议审查已记录", viewModel.NotificationTitle, "review notification title");
-    AssertEqual(1, viewModel.RecommendationReviews.Count, "recommendation review count");
-    AssertContains("现场确认", viewModel.RecommendationReviews[0].EngineerNote);
+    AssertEqual(1, viewModel.ExperimentHistory.RecommendationReviews.Count, "recommendation review count");
+    AssertContains("现场确认", viewModel.ExperimentHistory.RecommendationReviews[0].EngineerNote);
 
     await viewModel.SaveTestSessionAsync();
 
@@ -1528,9 +1528,9 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertContains(Path.GetFullPath(directory), viewModel.NotificationMessage);
     AssertContains(Path.Combine(Path.GetFullPath(directory), "test-sessions.json"), viewModel.NotificationMessage);
     AssertContains(".samples.json", viewModel.NotificationMessage);
-    AssertEqual(1, viewModel.HistorySessions.Count, "history count after save");
-    AssertEqual("7", viewModel.HistorySessions[0].SampleCount, "history sample count after save");
-    AssertEqual("00:00:06", viewModel.HistorySessions[0].Duration, "history duration after save");
+    AssertEqual(1, viewModel.ExperimentHistory.HistorySessions.Count, "history count after save");
+    AssertEqual("7", viewModel.ExperimentHistory.HistorySessions[0].SampleCount, "history sample count after save");
+    AssertEqual("00:00:06", viewModel.ExperimentHistory.HistorySessions[0].Duration, "history duration after save");
 
     var improvedSessionId = Guid.Parse("55555555-5555-5555-5555-555555555555");
     var improvedStart = DateTimeOffset.Parse("2026-07-29T10:20:00.0000000+00:00", CultureInfo.InvariantCulture);
@@ -1554,24 +1554,24 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
         Sample(improvedStart.AddSeconds(6), 100, 100.1, 42, improvedSessionId)
     }, CancellationToken.None);
     await viewModel.LoadHistoryAsync();
-    AssertEqual(2, viewModel.HistorySessions.Count, "history count after adding improved session");
+    AssertEqual(2, viewModel.ExperimentHistory.HistorySessions.Count, "history count after adding improved session");
 
-    viewModel.HistorySearchText = "offline";
-    AssertEqual(1, viewModel.HistorySessions.Count, "filtered history count");
-    viewModel.HistorySearchText = "not-found";
-    AssertEqual(0, viewModel.HistorySessions.Count, "filtered empty history count");
-    viewModel.HistorySearchText = string.Empty;
+    viewModel.ExperimentHistory.HistorySearchText = "offline";
+    AssertEqual(1, viewModel.ExperimentHistory.HistorySessions.Count, "filtered history count");
+    viewModel.ExperimentHistory.HistorySearchText = "not-found";
+    AssertEqual(0, viewModel.ExperimentHistory.HistorySessions.Count, "filtered empty history count");
+    viewModel.ExperimentHistory.HistorySearchText = string.Empty;
 
-    viewModel.SelectedHistorySession = viewModel.HistorySessions.First(item =>
+    viewModel.ExperimentHistory.SelectedHistorySession = viewModel.ExperimentHistory.HistorySessions.First(item =>
         item.Name.Contains("offline", StringComparison.OrdinalIgnoreCase));
-    AssertContains("样本：7", viewModel.SelectedHistoryDetails);
+    AssertContains("样本：7", viewModel.ExperimentHistory.SelectedHistoryDetails);
     await viewModel.SetHistoryBaselineAsync();
-    viewModel.SelectedHistorySession = viewModel.HistorySessions.First(item => item.Name == "improved-step");
+    viewModel.ExperimentHistory.SelectedHistorySession = viewModel.ExperimentHistory.HistorySessions.First(item => item.Name == "improved-step");
     await viewModel.CompareHistorySessionAsync();
-    AssertEqual(true, viewModel.HistoryComparisonMetrics.Count >= 4, "history comparison metric count");
-    AssertEqual(true, viewModel.HistoryComparisonMetrics.Any(item =>
+    AssertEqual(true, viewModel.ExperimentHistory.HistoryComparisonMetrics.Count >= 4, "history comparison metric count");
+    AssertEqual(true, viewModel.ExperimentHistory.HistoryComparisonMetrics.Any(item =>
         item.Metric == "超调量" && item.Delta.StartsWith("-", StringComparison.Ordinal)), "history comparison overshoot improvement");
-    AssertContains("improved-step", viewModel.HistoryComparisonStatus);
+    AssertContains("improved-step", viewModel.ExperimentHistory.HistoryComparisonStatus);
 
     await viewModel.OpenHistorySessionAsync();
 

@@ -40,7 +40,7 @@ var thread = new Thread(() =>
         PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
         Thread.Sleep(500);
         PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
-        viewModel.RecommendationReviewNote = "现场确认先小步验证";
+        viewModel.ExperimentHistory.RecommendationReviewNote = "现场确认先小步验证";
         viewModel.DismissNotificationCommand.Execute(null);
         var tabControl = FindVisualChild<TabControl>(window);
         if (tabControl is not null)
