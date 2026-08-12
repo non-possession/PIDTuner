@@ -344,11 +344,10 @@
             <Grid.RowDefinitions>
               <RowDefinition Height="*" />
               <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="270" />
+              <ColumnDefinition Width="300" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Row="0"
@@ -358,156 +357,235 @@
                     BorderThickness="1"
                     Background="#F8FAFC">
               <Grid Margin="10">
-                <scottPlot:WpfPlot x:Name="PlcTrendPlot"
-                                   MouseMove="PlcTrendPlot_MouseMove"
-                                   MouseLeave="PlcTrendPlot_MouseLeave" />
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="150" />
+                  <ColumnDefinition Width="36" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="36" />
+                  <ColumnDefinition Width="150" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Column="0"
+                        Grid.RowSpan="2"
+                        Margin="0,0,8,0"
+                        Padding="8"
+                        BorderBrush="#CBD5E1"
+                        BorderThickness="1"
+                        Background="#F1F5F9"
+                        Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                  <StackPanel>
+                    <TextBlock Text="Y1 轴面板"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               TextAlignment="Center"
+                               Foreground="#111827" />
+                    <TextBlock Text="参考变量"
+                               Margin="0,14,0,4"
+                               Foreground="#6B7280" />
+                    <ComboBox ItemsSource="{Binding LiveMonitor.Tags}"
+                              SelectedValue="{Binding HistoricalTrendWorkbench.SelectedLeftAxisSeriesId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="TagId"
+                              DisplayMemberPath="Name" />
+                    <Border Margin="0,14,0,0"
+                            Padding="8"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            Background="#FFFFFF">
+                      <StackPanel>
+                        <TextBlock Text="当前量程"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827" />
+                        <TextBlock Text="{Binding HistoricalTrendWorkbench.YMinimumText, StringFormat=Y1 下界 {0}}"
+                                   Margin="0,6,0,0"
+                                   Foreground="#0F766E" />
+                        <TextBlock Text="{Binding HistoricalTrendWorkbench.YMaximumText, StringFormat=Y1 上界 {0}}"
+                                   Foreground="#0F766E" />
+                      </StackPanel>
+                    </Border>
+                    <Button Command="{Binding ResetPlcTrendYRangeCommand}"
+                            Content="复位"
+                            Height="28"
+                            Margin="0,12,0,0" />
+                  </StackPanel>
+                </Border>
+
+                <controls:AxisRangeBrush Grid.Column="1"
+                                         Grid.Row="0"
+                                         Orientation="Vertical"
+                                         MinHeight="240"
+                                         Margin="0,58,8,58"
+                                         Minimum="{Binding HistoricalTrendWorkbench.YSliderMinimum}"
+                                         Maximum="{Binding HistoricalTrendWorkbench.YSliderMaximum}"
+                                         LowerValue="{Binding HistoricalTrendWorkbench.YLower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         UpperValue="{Binding HistoricalTrendWorkbench.YUpper, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         IsEnabled="{Binding HistoricalTrendWorkbench.IsYSliderEnabled}"
+                                         Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                <Grid Grid.Column="2"
+                      Grid.Row="0">
+                  <scottPlot:WpfPlot x:Name="PlcTrendPlot"
+                                     MouseMove="PlcTrendPlot_MouseMove"
+                                     MouseLeave="PlcTrendPlot_MouseLeave" />
+                </Grid>
+
+                <Grid Grid.Column="2"
+                      Grid.Row="1"
+                      Margin="0,8,0,0"
+                      Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="{Binding HistoricalTrendWorkbench.ViewportStartLabel}"
+                             VerticalAlignment="Center"
+                             FontWeight="SemiBold"
+                             Foreground="#1D4ED8" />
+                  <controls:AxisRangeBrush Grid.Column="1"
+                                           Width="420"
+                                           Orientation="Horizontal"
+                                           Minimum="{Binding HistoricalTrendWorkbench.ViewportMinimum}"
+                                           Maximum="{Binding HistoricalTrendWorkbench.ViewportMaximum}"
+                                           LowerValue="{Binding HistoricalTrendWorkbench.ViewportStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                           UpperValue="{Binding HistoricalTrendWorkbench.ViewportEnd, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                           IsEnabled="{Binding HistoricalTrendWorkbench.IsViewportEnabled}" />
+                  <TextBlock Grid.Column="2"
+                             Text="{Binding HistoricalTrendWorkbench.ViewportEndLabel}"
+                             VerticalAlignment="Center"
+                             TextAlignment="Right"
+                             FontWeight="SemiBold"
+                             Foreground="#1D4ED8" />
+                </Grid>
+
+                <controls:AxisRangeBrush Grid.Column="3"
+                                         Grid.Row="0"
+                                         Orientation="Vertical"
+                                         MinHeight="240"
+                                         Margin="8,58,0,58"
+                                         Minimum="{Binding HistoricalTrendWorkbench.YSliderMinimum}"
+                                         Maximum="{Binding HistoricalTrendWorkbench.YSliderMaximum}"
+                                         LowerValue="{Binding HistoricalTrendWorkbench.RightYLower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         UpperValue="{Binding HistoricalTrendWorkbench.RightYUpper, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         IsEnabled="{Binding HistoricalTrendWorkbench.IsYSliderEnabled}"
+                                         Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                <Border Grid.Column="4"
+                        Grid.RowSpan="2"
+                        Margin="8,0,0,0"
+                        Padding="8"
+                        BorderBrush="#CBD5E1"
+                        BorderThickness="1"
+                        Background="#F1F5F9"
+                        Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                  <StackPanel>
+                    <TextBlock Text="Y2 轴面板"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               TextAlignment="Center"
+                               Foreground="#111827" />
+                    <TextBlock Text="参考变量"
+                               Margin="0,14,0,4"
+                               Foreground="#6B7280" />
+                    <ComboBox ItemsSource="{Binding LiveMonitor.Tags}"
+                              SelectedValue="{Binding HistoricalTrendWorkbench.SelectedRightAxisSeriesId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="TagId"
+                              DisplayMemberPath="Name" />
+                    <Border Margin="0,14,0,0"
+                            Padding="8"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            Background="#FFFFFF">
+                      <StackPanel>
+                        <TextBlock Text="当前量程"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827" />
+                        <TextBlock Text="{Binding HistoricalTrendWorkbench.RightYMinimumText, StringFormat=Y2 下界 {0}}"
+                                   Margin="0,6,0,0"
+                                   Foreground="#D97706" />
+                        <TextBlock Text="{Binding HistoricalTrendWorkbench.RightYMaximumText, StringFormat=Y2 上界 {0}}"
+                                   Foreground="#D97706" />
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+                </Border>
               </Grid>
             </Border>
 
             <Border Grid.Row="0"
                     Grid.Column="1"
-                    Grid.RowSpan="2"
                     BorderBrush="#CBD5E1"
                     BorderThickness="1"
                     Background="#F8FAFC">
-              <TabControl ItemsSource="{Binding LiveMonitor.Tags}"
-                          SelectedItem="{Binding LiveMonitor.SelectedTag}"
-                          Margin="8">
-                <TabControl.ItemTemplate>
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding LiveMonitor.Tags}"
+                              Margin="8">
+                  <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding Name}" />
+                    <Border Margin="0,0,0,8"
+                            Padding="8"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            Background="#FFFFFF">
+                      <Grid>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827"
+                                   TextWrapping="Wrap" />
+                        <CheckBox Grid.Column="1"
+                                  Content="显示"
+                                  IsChecked="{Binding IsTrendVisible, UpdateSourceTrigger=PropertyChanged}"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="1"
+                                   Grid.ColumnSpan="2"
+                                   Text="{Binding Address}"
+                                   Margin="0,6,0,0"
+                                   Foreground="#6B7280"
+                                   TextWrapping="Wrap" />
+                        <Grid Grid.Row="2"
+                              Grid.ColumnSpan="2"
+                              Margin="0,8,0,0">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="88" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding ValueText}"
+                                     FontSize="18"
+                                     FontWeight="SemiBold"
+                                     Foreground="#0F766E" />
+                          <ComboBox Grid.Column="1"
+                                    ItemsSource="{Binding DataContext.LiveMonitor.AxisGroups, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    SelectedItem="{Binding AxisGroup, UpdateSourceTrigger=PropertyChanged}" />
+                        </Grid>
+                      </Grid>
+                    </Border>
                   </DataTemplate>
-                </TabControl.ItemTemplate>
-                <TabControl.ContentTemplate>
-                  <DataTemplate>
-                    <StackPanel Margin="10">
-                      <TextBlock Text="名称"
-                                 Foreground="#6B7280" />
-                      <TextBlock Text="{Binding Name}"
-                                 FontSize="18"
-                                 FontWeight="SemiBold"
-                                 Foreground="#111827"
-                                 TextWrapping="Wrap" />
-                      <TextBlock Text="地址"
-                                 Margin="0,14,0,0"
-                                 Foreground="#6B7280" />
-                      <TextBlock Text="{Binding Address}"
-                                 FontSize="16"
-                                 FontWeight="SemiBold"
-                                 Foreground="#111827"
-                                 TextWrapping="Wrap" />
-                      <TextBlock Text="当前值"
-                                 Margin="0,14,0,0"
-                                 Foreground="#6B7280" />
-                      <TextBlock Text="{Binding ValueText}"
-                                 FontSize="24"
-                                 FontWeight="SemiBold"
-                                 Foreground="#0F766E"
-                                 TextWrapping="Wrap" />
-                    </StackPanel>
-                  </DataTemplate>
-                </TabControl.ContentTemplate>
-              </TabControl>
-            </Border>
-
-            <Border Grid.Row="1"
-                    Grid.Column="0"
-                    Margin="0,10,14,0"
-                    Padding="12"
-                    BorderBrush="#CBD5E1"
-                    BorderThickness="1"
-                    Background="#F8FAFC"
-                    Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="220" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0"
-                            Margin="0,0,18,0">
-                  <DockPanel Margin="0,0,0,4"
-                             LastChildFill="False">
-                    <TextBlock Text="历史窗口"
-                               FontSize="14"
-                               FontWeight="SemiBold"
-                               Foreground="#111827" />
-                    <Button Command="{Binding ResetPlcHistoricalRangeCommand}"
-                            Content="全范围"
-                            Width="64"
-                            Height="26"
-                            DockPanel.Dock="Right" />
-                  </DockPanel>
-                  <Grid>
-                    <Grid.RowDefinitions>
-                      <RowDefinition Height="Auto" />
-                      <RowDefinition Height="42" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding HistoricalTrendWorkbench.ViewportStartLabel}"
-                               Foreground="#374151" />
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding HistoricalTrendWorkbench.ViewportEndLabel}"
-                               TextAlignment="Right"
-                               Foreground="#374151" />
-                    <controls:AxisRangeBrush Grid.Row="1"
-                                             Grid.ColumnSpan="2"
-                                             Orientation="Horizontal"
-                                             Minimum="{Binding HistoricalTrendWorkbench.ViewportMinimum}"
-                                             Maximum="{Binding HistoricalTrendWorkbench.ViewportMaximum}"
-                                             LowerValue="{Binding HistoricalTrendWorkbench.ViewportStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             UpperValue="{Binding HistoricalTrendWorkbench.ViewportEnd, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             IsEnabled="{Binding HistoricalTrendWorkbench.IsViewportEnabled}" />
-                  </Grid>
-                </StackPanel>
-
-                <Grid Grid.Column="1">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="46" />
-                  </Grid.ColumnDefinitions>
-                  <StackPanel Grid.Column="0"
-                              Margin="0,0,8,0">
-                    <DockPanel Margin="0,0,0,4"
-                               LastChildFill="False">
-                      <TextBlock Text="Y 范围"
-                                 FontSize="14"
-                                 FontWeight="SemiBold"
-                                 Foreground="#111827" />
-                      <Button Command="{Binding ResetPlcTrendYRangeCommand}"
-                              Content="重置"
-                              Width="56"
-                              Height="26"
-                              DockPanel.Dock="Right" />
-                    </DockPanel>
-                    <TextBlock Text="{Binding HistoricalTrendWorkbench.YMaximumText, StringFormat=上界 {0}}"
-                               Foreground="#374151"
-                               Margin="0,6,0,48" />
-                    <TextBlock Text="{Binding HistoricalTrendWorkbench.YMinimumText, StringFormat=下界 {0}}"
-                               Foreground="#374151" />
-                  </StackPanel>
-                  <controls:AxisRangeBrush Grid.Column="1"
-                                           Orientation="Vertical"
-                                           MinHeight="120"
-                                           Minimum="{Binding HistoricalTrendWorkbench.YSliderMinimum}"
-                                           Maximum="{Binding HistoricalTrendWorkbench.YSliderMaximum}"
-                                           LowerValue="{Binding HistoricalTrendWorkbench.YLower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                           UpperValue="{Binding HistoricalTrendWorkbench.YUpper, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                           IsEnabled="{Binding HistoricalTrendWorkbench.IsYSliderEnabled}" />
-                </Grid>
-              </Grid>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
             </Border>
 
             <TextBlock x:Name="PlcTrendStatusTextBlock"
-                       Grid.Row="2"
+                       Grid.Row="1"
                        Grid.Column="0"
                        Margin="0,10,14,0"
                        VerticalAlignment="Center"
                        Foreground="#374151" />
 
-            <WrapPanel Grid.Row="2"
+            <WrapPanel Grid.Row="1"
                        Grid.Column="1"
                        Margin="0,10,0,0"
                        HorizontalAlignment="Right">

@@ -132,6 +132,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
+        HistoricalTrendWorkbench.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
         HistoricalTrendWorkbench.StatusRequested += (message, replayPhase) =>
         {
             PlcMonitorStatus = message;
@@ -200,6 +201,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event Action<DateTimeOffset?, DateTimeOffset?>? PlcHistoricalViewportRequested;
 
     public event Action<double?, double?>? PlcTrendYRangeRequested;
+
+    public event Action<double?, double?>? PlcTrendRightYRangeRequested;
 
     public string Title { get; } = "PIDTuner";
 

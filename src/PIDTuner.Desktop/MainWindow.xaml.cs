@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         _viewModel.PlcTrendResetRequested += ResetPlcTrendChart;
         _viewModel.PlcHistoricalViewportRequested += ApplyPlcHistoricalViewport;
         _viewModel.PlcTrendYRangeRequested += ApplyPlcTrendYRange;
+        _viewModel.PlcTrendRightYRangeRequested += ApplyPlcTrendRightYRange;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.LiveMonitor.Tags.CollectionChanged += PlcMonitorTags_CollectionChanged;
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
@@ -134,6 +135,21 @@ public partial class MainWindow : Window
         else
         {
             _plcTrendChartAdapter.ClearManualYRange();
+        }
+
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
+    private void ApplyPlcTrendRightYRange(double? min, double? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            _plcTrendChartAdapter.SetManualRightYRange(min.Value, max.Value);
+        }
+        else
+        {
+            _plcTrendChartAdapter.ClearManualRightYRange();
         }
 
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);

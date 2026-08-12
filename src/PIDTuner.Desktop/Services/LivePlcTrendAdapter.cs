@@ -26,6 +26,7 @@ public sealed class LivePlcTrendAdapter
     private DateTimeOffset? _historicalVisibleStart;
     private DateTimeOffset? _historicalVisibleEnd;
     private (double Min, double Max)? _manualYRange;
+    private (double Min, double Max)? _manualRightYRange;
 
     public LivePlcTrendAdapter(WpfPlot plot)
     {
@@ -85,6 +86,16 @@ public sealed class LivePlcTrendAdapter
         _manualYRange = null;
     }
 
+    public void SetManualRightYRange(double min, double max)
+    {
+        _manualRightYRange = (min, max);
+    }
+
+    public void ClearManualRightYRange()
+    {
+        _manualRightYRange = null;
+    }
+
     public void Clear()
     {
         _pointsByTag.Clear();
@@ -142,6 +153,7 @@ public sealed class LivePlcTrendAdapter
             windowStart,
             windowEnd,
             _manualYRange,
+            _manualRightYRange,
             ShowFullHistory);
     }
 
@@ -262,6 +274,7 @@ public sealed class LivePlcTrendAdapter
                 tag.TagId,
                 tag.Name,
                 tag.Unit,
+                tag.AxisGroup,
                 _pointsByTag[tag.TagId]))
             .ToArray();
     }

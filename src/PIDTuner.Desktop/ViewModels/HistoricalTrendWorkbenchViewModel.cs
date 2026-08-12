@@ -21,6 +21,8 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     private string _rangeEndText = string.Empty;
     private string _yMinimumText = string.Empty;
     private string _yMaximumText = string.Empty;
+    private string _rightYMinimumText = string.Empty;
+    private string _rightYMaximumText = string.Empty;
     private string _viewportStartLabel = string.Empty;
     private string _viewportEndLabel = string.Empty;
     private double _viewportMinimum;
@@ -31,12 +33,18 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     private double _ySliderMaximum = 1d;
     private double _yLower;
     private double _yUpper = 1d;
+    private double _rightYLower;
+    private double _rightYUpper = 1d;
     private DateTimeOffset? _totalStart;
     private DateTimeOffset? _totalEnd;
     private double _totalYMinimum;
     private double _totalYMaximum = 1d;
+    private double _totalRightYMinimum;
+    private double _totalRightYMaximum = 1d;
     private bool _isViewportEnabled;
     private bool _isYSliderEnabled;
+    private Guid? _selectedLeftAxisSeriesId;
+    private Guid? _selectedRightAxisSeriesId;
     private bool _isUpdatingSliderState;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -44,6 +52,8 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     public event Action<DateTimeOffset, DateTimeOffset>? ViewportRequested;
 
     public event Action<double, double>? YRangeRequested;
+
+    public event Action<double, double>? RightYRangeRequested;
 
     public event Action<string, string?>? StatusRequested;
 
@@ -96,6 +106,18 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     {
         get => _yMaximumText;
         set => SetProperty(ref _yMaximumText, value);
+    }
+
+    public string RightYMinimumText
+    {
+        get => _rightYMinimumText;
+        private set => SetProperty(ref _rightYMinimumText, value);
+    }
+
+    public string RightYMaximumText
+    {
+        get => _rightYMaximumText;
+        private set => SetProperty(ref _rightYMaximumText, value);
     }
 
     public string ViewportStartLabel
@@ -186,6 +208,56 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         }
     }
 
+    public double RightYLower
+    {
+        get => _rightYLower;
+        set
+        {
+            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            if (SetProperty(ref _rightYLower, clamped))
+            {
+                ApplyRightYSliderChange();
+            }
+        }
+    }
+
+    public double RightYUpper
+    {
+        get => _rightYUpper;
+        set
+        {
+            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            if (SetProperty(ref _rightYUpper, clamped))
+            {
+                ApplyRightYSliderChange();
+            }
+        }
+    }
+
+    public Guid? SelectedLeftAxisSeriesId
+    {
+        get => _selectedLeftAxisSeriesId;
+        set
+        {
+            if (SetProperty(ref _selectedLeftAxisSeriesId, value))
+            {
+                ResetLeftAxisRangeFromSelectedSeries();
+            }
+        }
+    }
+
+    public Guid? SelectedRightAxisSeriesId
+    {
+        get => _selectedRightAxisSeriesId;
+        set
+        {
+            if (SetProperty(ref _selectedRightAxisSeriesId, value))
+            {
+                ResetRightAxisRangeFromSelectedSeries();
+            }
+        }
+    }
+
     public bool IsViewportEnabled
     {
         get => _isViewportEnabled;
@@ -212,8 +284,12 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         RangeEndText = string.Empty;
         YMinimumText = string.Empty;
         YMaximumText = string.Empty;
+        RightYMinimumText = string.Empty;
+        RightYMaximumText = string.Empty;
         ViewportStartLabel = string.Empty;
         ViewportEndLabel = string.Empty;
+        SelectedLeftAxisSeriesId = null;
+        SelectedRightAxisSeriesId = null;
     }
 
     public void LoadFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
@@ -242,6 +318,7 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
                 })
                 .ToArray()));
         SetSliderStateFromFrames(frames);
+        SelectDefaultAxisSeries();
     }
 
     public void SetRangeTextFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
@@ -334,25 +411,24 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
 
     public void ResetYRangeToFull()
     {
-        YMinimumText = string.Empty;
-        YMaximumText = string.Empty;
-        ResetVisibleYRange();
+        ResetLeftAxisRangeFromSelectedSeries();
         if (!IsYSliderEnabled)
         {
             return;
         }
 
-        _isUpdatingSliderState = true;
-        try
+        YRangeRequested?.Invoke(_totalYMinimum, _totalYMaximum);
+    }
+
+    public void ResetRightYRangeToFull()
+    {
+        ResetRightAxisRangeFromSelectedSeries();
+        if (!IsYSliderEnabled)
         {
-            SetYSliderValues(YSliderMinimum, YSliderMaximum);
-        }
-        finally
-        {
-            _isUpdatingSliderState = false;
+            return;
         }
 
-        YRangeRequested?.Invoke(_totalYMinimum, _totalYMaximum);
+        RightYRangeRequested?.Invoke(_totalRightYMinimum, _totalRightYMaximum);
     }
 
     public void SetVisibleTimeRange(DateTimeOffset start, DateTimeOffset end)
@@ -425,10 +501,14 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
                 var padding = Math.Max((maximum - minimum) * 0.05d, 1d);
                 _totalYMinimum = minimum - padding;
                 _totalYMaximum = maximum + padding;
+                _totalRightYMinimum = _totalYMinimum;
+                _totalRightYMaximum = _totalYMaximum;
                 YSliderMinimum = AxisSliderMinimum;
                 YSliderMaximum = AxisSliderMaximum;
                 SetYSliderValues(AxisSliderMinimum, AxisSliderMaximum);
+                SetRightYSliderValues(AxisSliderMinimum, AxisSliderMaximum);
                 UpdateYRangeText(_totalYMinimum, _totalYMaximum);
+                UpdateRightYRangeText(_totalRightYMinimum, _totalRightYMaximum);
             }
         }
         finally
@@ -490,6 +570,27 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
             null);
     }
 
+    private void ApplyRightYSliderChange()
+    {
+        if (_isUpdatingSliderState || !IsYSliderEnabled)
+        {
+            return;
+        }
+
+        var min = InterpolateAxisValue(_totalRightYMinimum, _totalRightYMaximum, RightYLower);
+        var max = InterpolateAxisValue(_totalRightYMinimum, _totalRightYMaximum, RightYUpper);
+        if (min > max)
+        {
+            (min, max) = (max, min);
+        }
+
+        UpdateRightYRangeText(min, max);
+        RightYRangeRequested?.Invoke(min, max);
+        StatusRequested?.Invoke(
+            $"趋势 Y2 轴范围已调整：{min.ToString("0.###", CultureInfo.InvariantCulture)} - {max.ToString("0.###", CultureInfo.InvariantCulture)}。",
+            null);
+    }
+
     private void ApplyYRange(double min, double max, bool updateSliderValues)
     {
         if (min > max)
@@ -529,6 +630,12 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         YMaximumText = max.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
+    private void UpdateRightYRangeText(double min, double max)
+    {
+        RightYMinimumText = min.ToString("0.###", CultureInfo.InvariantCulture);
+        RightYMaximumText = max.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
     private void SetViewportSliderValues(double start, double end)
     {
         SetProperty(ref _viewportStart, start, nameof(ViewportStart));
@@ -539,6 +646,97 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     {
         SetProperty(ref _yLower, lower, nameof(YLower));
         SetProperty(ref _yUpper, upper, nameof(YUpper));
+    }
+
+    private void SetRightYSliderValues(double lower, double upper)
+    {
+        SetProperty(ref _rightYLower, lower, nameof(RightYLower));
+        SetProperty(ref _rightYUpper, upper, nameof(RightYUpper));
+    }
+
+    private void SelectDefaultAxisSeries()
+    {
+        _isUpdatingSliderState = true;
+        try
+        {
+            SelectedLeftAxisSeriesId = State.Dataset.Series.FirstOrDefault()?.SeriesId;
+            SelectedRightAxisSeriesId = State.Dataset.Series.Skip(1).FirstOrDefault()?.SeriesId ?? SelectedLeftAxisSeriesId;
+            ResetLeftAxisRangeFromSelectedSeries();
+            ResetRightAxisRangeFromSelectedSeries();
+        }
+        finally
+        {
+            _isUpdatingSliderState = false;
+        }
+    }
+
+    private void ResetLeftAxisRangeFromSelectedSeries()
+    {
+        var range = GetSeriesValueRange(SelectedLeftAxisSeriesId) ?? GetDatasetValueRange();
+        if (range is null)
+        {
+            YMinimumText = string.Empty;
+            YMaximumText = string.Empty;
+            return;
+        }
+
+        (_totalYMinimum, _totalYMaximum) = ExpandRange(range.Value.Min, range.Value.Max);
+        UpdateYRangeText(_totalYMinimum, _totalYMaximum);
+        SetYSliderValues(YSliderMinimum, YSliderMaximum);
+        ResetVisibleYRange();
+    }
+
+    private void ResetRightAxisRangeFromSelectedSeries()
+    {
+        var range = GetSeriesValueRange(SelectedRightAxisSeriesId) ?? GetDatasetValueRange();
+        if (range is null)
+        {
+            RightYMinimumText = string.Empty;
+            RightYMaximumText = string.Empty;
+            return;
+        }
+
+        (_totalRightYMinimum, _totalRightYMaximum) = ExpandRange(range.Value.Min, range.Value.Max);
+        UpdateRightYRangeText(_totalRightYMinimum, _totalRightYMaximum);
+        SetRightYSliderValues(YSliderMinimum, YSliderMaximum);
+    }
+
+    private (double Min, double Max)? GetSeriesValueRange(Guid? seriesId)
+    {
+        if (!seriesId.HasValue)
+        {
+            return null;
+        }
+
+        var values = State.Dataset.Series
+            .Where(series => series.SeriesId == seriesId.Value)
+            .SelectMany(series => series.Points)
+            .Select(point => point.Value)
+            .Where(value => !double.IsNaN(value) && !double.IsInfinity(value))
+            .ToArray();
+        return values.Length == 0 ? null : (values.Min(), values.Max());
+    }
+
+    private (double Min, double Max)? GetDatasetValueRange()
+    {
+        var values = State.Dataset.Series
+            .SelectMany(series => series.Points)
+            .Select(point => point.Value)
+            .Where(value => !double.IsNaN(value) && !double.IsInfinity(value))
+            .ToArray();
+        return values.Length == 0 ? null : (values.Min(), values.Max());
+    }
+
+    private static (double Min, double Max) ExpandRange(double minimum, double maximum)
+    {
+        if (minimum >= maximum)
+        {
+            minimum -= 1d;
+            maximum += 1d;
+        }
+
+        var padding = Math.Max((maximum - minimum) * 0.05d, 1d);
+        return (minimum - padding, maximum + padding);
     }
 
     private double TimestampToSliderValue(DateTimeOffset timestamp)

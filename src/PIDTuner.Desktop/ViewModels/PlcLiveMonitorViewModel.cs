@@ -28,6 +28,8 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
 
     public ObservableCollection<PlcTagMonitorViewModel> Tags { get; } = [];
 
+    public IReadOnlyList<string> AxisGroups { get; } = ["Y1", "Y2"];
+
     public PlcTagMonitorViewModel? SelectedTag
     {
         get => _selectedTag;

@@ -40,6 +40,7 @@ internal sealed class SharedScottPlotTrendRenderer
         DateTimeOffset windowStart,
         DateTimeOffset windowEnd,
         (double Min, double Max)? manualYRange,
+        (double Min, double Max)? manualRightYRange,
         bool isHistoricalMode)
     {
         plot.Plot.Clear();
@@ -59,6 +60,15 @@ internal sealed class SharedScottPlotTrendRenderer
             var xs = visiblePoints.Select(point => point.Timestamp.LocalDateTime.ToOADate()).ToArray();
             var ys = visiblePoints.Select(point => point.Value).ToArray();
             Scatter scatter = plot.Plot.Add.Scatter(xs, ys);
+            if (string.Equals(item.AxisGroup, "Y2", StringComparison.OrdinalIgnoreCase))
+            {
+                scatter.Axes = new Axes
+                {
+                    XAxis = plot.Plot.Axes.Bottom,
+                    YAxis = plot.Plot.Axes.Right,
+                };
+            }
+
             scatter.LegendText = string.IsNullOrWhiteSpace(item.Unit) ? item.Name : $"{item.Name} ({item.Unit})";
             scatter.LineWidth = 2;
             scatter.MarkerSize = visiblePoints.Length > 200 ? 0 : 4;
@@ -80,11 +90,20 @@ internal sealed class SharedScottPlotTrendRenderer
         {
             if (manualYRange is { } yRange)
             {
-                plot.Plot.Axes.SetLimitsY(yRange.Min, yRange.Max);
+                plot.Plot.Axes.SetLimitsY(yRange.Min, yRange.Max, plot.Plot.Axes.Left);
             }
             else
             {
-                plot.Plot.Axes.AutoScaleY();
+                plot.Plot.Axes.AutoScaleY(plot.Plot.Axes.Left);
+            }
+
+            if (manualRightYRange is { } rightYRange)
+            {
+                plot.Plot.Axes.SetLimitsY(rightYRange.Min, rightYRange.Max, plot.Plot.Axes.Right);
+            }
+            else if (series.Any(item => string.Equals(item.AxisGroup, "Y2", StringComparison.OrdinalIgnoreCase)))
+            {
+                plot.Plot.Axes.AutoScaleY(plot.Plot.Axes.Right);
             }
         }
 

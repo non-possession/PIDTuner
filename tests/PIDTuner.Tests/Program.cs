@@ -1376,8 +1376,11 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     DateTimeOffset? requestedViewportStart = null;
     DateTimeOffset? requestedViewportEnd = null;
     var yRangeRequestCount = 0;
+    var rightYRangeRequestCount = 0;
     double? requestedYMin = null;
     double? requestedYMax = null;
+    double? requestedRightYMin = null;
+    double? requestedRightYMax = null;
     loader.PlcTrendResetRequested += () => resetCount++;
     loader.PlcSnapshotsApplied += (_, _) => appliedCount++;
     loader.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
@@ -1392,6 +1395,12 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         yRangeRequestCount++;
         requestedYMin = min;
         requestedYMax = max;
+    };
+    loader.PlcTrendRightYRangeRequested += (min, max) =>
+    {
+        rightYRangeRequestCount++;
+        requestedRightYMin = min;
+        requestedRightYMax = max;
     };
 
     await loader.LoadPlcRecordingAsync();
@@ -1422,6 +1431,11 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsViewportEnabled, "historical viewport slider enabled");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsYSliderEnabled, "historical y slider enabled");
+    AssertEqual("Y1", loader.LiveMonitor.Tags[0].AxisGroup, "historical tag defaults to y1 axis");
+    loader.LiveMonitor.Tags[0].AxisGroup = "Y2";
+    AssertEqual("Y2", loader.LiveMonitor.Tags[0].AxisGroup, "historical tag can move to y2 axis");
+    AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId.HasValue, "historical y1 selected series");
+    AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedRightAxisSeriesId.HasValue, "historical y2 selected series");
 
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
@@ -1475,6 +1489,11 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, yRangeRequestCount, "historical y lower slider requests y range update");
     AssertClose(yMinimum + ((yMaximum - yMinimum) * 0.25d), requestedYMin, 0.0001d, "historical y lower slider value");
     AssertClose(yMaximum, requestedYMax, 0.0001d, "historical y upper slider value");
+    loader.HistoricalTrendWorkbench.RightYUpper = loader.HistoricalTrendWorkbench.YSliderMinimum +
+        (loader.HistoricalTrendWorkbench.YSliderMaximum - loader.HistoricalTrendWorkbench.YSliderMinimum) / 2d;
+    AssertEqual(1, rightYRangeRequestCount, "historical y2 upper slider requests right y range update");
+    AssertClose(yMinimum, requestedRightYMin, 0.0001d, "historical y2 lower slider value");
+    AssertClose(yMinimum + ((yMaximum - yMinimum) * 0.5d), requestedRightYMax, 0.0001d, "historical y2 upper slider value");
 
     loader.UsePlcLiveTrendMode();
     AssertEqual(false, loader.PlcTrendMode.IsHistoricalMode, "live plc trend mode");

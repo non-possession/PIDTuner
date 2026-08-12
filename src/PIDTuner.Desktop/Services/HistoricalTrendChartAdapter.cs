@@ -35,6 +35,7 @@ public sealed class HistoricalTrendChartAdapter
                 item.SeriesId,
                 item.Name,
                 item.Unit,
+                "Y1",
                 item.Points
                     .Select(point => new PlcTrendPoint(point.Timestamp, point.Value))
                     .ToArray()))
@@ -46,6 +47,7 @@ public sealed class HistoricalTrendChartAdapter
             state.VisibleTimeRange.Start,
             state.VisibleTimeRange.End,
             state.VisibleYRange is null ? null : (state.VisibleYRange.Minimum, state.VisibleYRange.Maximum),
+            null,
             isHistoricalMode: true);
     }
 }

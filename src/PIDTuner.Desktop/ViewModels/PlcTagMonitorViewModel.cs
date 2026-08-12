@@ -47,6 +47,7 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
     private string _quality = string.Empty;
     private string _source = string.Empty;
     private bool _isTrendVisible = true;
+    private string _axisGroup = "Y1";
     private PointCollection _trendPoints = new();
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -79,6 +80,16 @@ public sealed class PlcTagMonitorViewModel : INotifyPropertyChanged
     {
         get => _isTrendVisible;
         set => SetProperty(ref _isTrendVisible, value);
+    }
+
+    public string AxisGroup
+    {
+        get => _axisGroup;
+        set
+        {
+            var normalized = string.Equals(value, "Y2", StringComparison.OrdinalIgnoreCase) ? "Y2" : "Y1";
+            SetProperty(ref _axisGroup, normalized);
+        }
     }
 
     public PointCollection TrendPoints
