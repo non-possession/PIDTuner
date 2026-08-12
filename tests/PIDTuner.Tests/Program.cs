@@ -1453,6 +1453,16 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId.HasValue, "historical y1 selected series");
     AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedRightAxisSeriesId.HasValue, "historical y2 selected series");
+    var preservedSeriesId = loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId!.Value;
+    var alternateSeriesId = loader.HistoricalTrendWorkbench.State.Dataset.Series
+        .First(series => series.SeriesId != preservedSeriesId)
+        .SeriesId;
+    loader.HistoricalTrendWorkbench.YLower = loader.HistoricalTrendWorkbench.YSliderMinimum +
+        (loader.HistoricalTrendWorkbench.YSliderMaximum - loader.HistoricalTrendWorkbench.YSliderMinimum) * 0.3d;
+    var preservedLower = loader.HistoricalTrendWorkbench.YLower;
+    loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId = alternateSeriesId;
+    loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId = preservedSeriesId;
+    AssertClose(preservedLower, loader.HistoricalTrendWorkbench.YLower, 0.0001d, "historical selected series keeps y brush");
 
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
@@ -1509,13 +1519,15 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1000d, loader.HistoricalTrendWorkbench.YSliderMaximum, "historical y slider normalized maximum");
     var sliderYLower = loader.HistoricalTrendWorkbench.YSliderMinimum +
         (loader.HistoricalTrendWorkbench.YSliderMaximum - loader.HistoricalTrendWorkbench.YSliderMinimum) / 4d;
+    var yRangeRequestsBeforeLowerSlider = yRangeRequestCount;
     loader.HistoricalTrendWorkbench.YLower = sliderYLower;
-    AssertEqual(1, yRangeRequestCount, "historical y lower slider requests y range update");
+    AssertEqual(yRangeRequestsBeforeLowerSlider + 1, yRangeRequestCount, "historical y lower slider requests y range update");
     AssertClose(yMinimum + ((yMaximum - yMinimum) * 0.25d), requestedYMin, 0.0001d, "historical y lower slider value");
     AssertClose(yMaximum, requestedYMax, 0.0001d, "historical y upper slider value");
+    var rightYRangeRequestsBeforeUpperSlider = rightYRangeRequestCount;
     loader.HistoricalTrendWorkbench.RightYUpper = loader.HistoricalTrendWorkbench.YSliderMinimum +
         (loader.HistoricalTrendWorkbench.YSliderMaximum - loader.HistoricalTrendWorkbench.YSliderMinimum) / 2d;
-    AssertEqual(1, rightYRangeRequestCount, "historical y2 upper slider requests right y range update");
+    AssertEqual(rightYRangeRequestsBeforeUpperSlider + 1, rightYRangeRequestCount, "historical y2 upper slider requests right y range update");
     AssertClose(yMinimum, requestedRightYMin, 0.0001d, "historical y2 lower slider value");
     AssertClose(yMinimum + ((yMaximum - yMinimum) * 0.5d), requestedRightYMax, 0.0001d, "historical y2 upper slider value");
 

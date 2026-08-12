@@ -165,6 +165,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ResetPlcHistoricalRangeCommand = new AsyncCommand(ResetPlcHistoricalRangeAsync);
         ApplyPlcTrendYRangeCommand = new AsyncCommand(ApplyPlcTrendYRangeAsync);
         ResetPlcTrendYRangeCommand = new AsyncCommand(ResetPlcTrendYRangeAsync);
+        ResetPlcTrendRightYRangeCommand = new AsyncCommand(ResetPlcTrendRightYRangeAsync);
         TogglePlcReplayCommand = new AsyncCommand(TogglePlcReplayAsync);
         StepPlcReplayBackwardCommand = new AsyncCommand(StepPlcReplayBackwardAsync);
         StepPlcReplayForwardCommand = new AsyncCommand(StepPlcReplayForwardAsync);
@@ -394,6 +395,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand ApplyPlcTrendYRangeCommand { get; }
 
     public ICommand ResetPlcTrendYRangeCommand { get; }
+
+    public ICommand ResetPlcTrendRightYRangeCommand { get; }
 
     public ICommand TogglePlcReplayCommand { get; }
 
@@ -997,8 +1000,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public Task ResetPlcTrendYRangeAsync()
     {
         HistoricalTrendWorkbench.ResetYRangeToFull();
-        PlcTrendYRangeRequested?.Invoke(null, null);
         PlcMonitorStatus = "趋势 Y 轴已恢复自动适配。";
+        return Task.CompletedTask;
+    }
+
+    public Task ResetPlcTrendRightYRangeAsync()
+    {
+        HistoricalTrendWorkbench.ResetRightYRangeToFull();
+        PlcMonitorStatus = "趋势 Y2 轴已恢复当前变量量程。";
         return Task.CompletedTask;
     }
 

@@ -552,6 +552,10 @@
                                    Foreground="#D97706" />
                       </StackPanel>
                     </Border>
+                    <Button Command="{Binding ResetPlcTrendRightYRangeCommand}"
+                            Content="复位"
+                            Height="28"
+                            Margin="0,12,0,0" />
                   </StackPanel>
                 </Border>
               </Grid>
