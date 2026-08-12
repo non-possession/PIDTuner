@@ -50,7 +50,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
-    private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
@@ -399,12 +398,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _selectedFieldDefinition;
         set => SetProperty(ref _selectedFieldDefinition, value);
-    }
-
-    public PidTuningRecommendationViewModel? SelectedTuningRecommendation
-    {
-        get => _selectedTuningRecommendation;
-        set => SetProperty(ref _selectedTuningRecommendation, value);
     }
 
     public PlcTagMonitorViewModel? SelectedPlcMonitorTag
@@ -1529,7 +1522,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ReviewRecommendationAsync(PidRecommendationReviewDecision decision)
     {
-        if (SelectedTuningRecommendation is null)
+        var selectedTuningRecommendation = OfflineAnalysis.SelectedTuningRecommendation;
+        if (selectedTuningRecommendation is null)
         {
             Notify("无法记录建议审查", "请先选择一条参数调整建议。", "Warning");
             return;
@@ -1538,7 +1532,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var review = await _experimentSessionCoordinator.SaveRecommendationReviewAsync(
-                SelectedTuningRecommendation,
+                selectedTuningRecommendation,
                 OfflineAnalysis.LastTestSessionId,
                 OfflineAnalysis.LastSourceFileName,
                 decision,

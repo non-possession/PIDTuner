@@ -922,7 +922,7 @@
 
             <DataGrid Grid.Row="1"
                       ItemsSource="{Binding OfflineAnalysis.TuningRecommendations}"
-                      SelectedItem="{Binding SelectedTuningRecommendation}"
+                      SelectedItem="{Binding OfflineAnalysis.SelectedTuningRecommendation}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
                       Margin="0,16,0,0"

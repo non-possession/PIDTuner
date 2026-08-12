@@ -1514,7 +1514,7 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
     AssertEqual("参数方案已保存", viewModel.NotificationTitle, "parameter set notification title");
     AssertEqual(1, viewModel.ParameterSetLibrary.ParameterSets.Count, "parameter set count after save");
     AssertEqual("1.2", viewModel.ParameterSetLibrary.ParameterSets[0].Kp, "parameter set Kp display");
-    viewModel.SelectedTuningRecommendation = viewModel.OfflineAnalysis.TuningRecommendations.First(item => item.Parameter == "Kp");
+    viewModel.OfflineAnalysis.SelectedTuningRecommendation = viewModel.OfflineAnalysis.TuningRecommendations.First(item => item.Parameter == "Kp");
     viewModel.ExperimentHistory.RecommendationReviewNote = "现场确认先小步调整";
     await viewModel.AcceptRecommendationAsync();
     AssertEqual("建议审查已记录", viewModel.NotificationTitle, "review notification title");

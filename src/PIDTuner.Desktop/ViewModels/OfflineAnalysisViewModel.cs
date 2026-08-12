@@ -41,6 +41,7 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     private string _analysisStartText = string.Empty;
     private string _analysisEndText = string.Empty;
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
+    private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
@@ -153,6 +154,12 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     {
         get => _tuningRecommendations;
         private set => SetProperty(ref _tuningRecommendations, value);
+    }
+
+    public PidTuningRecommendationViewModel? SelectedTuningRecommendation
+    {
+        get => _selectedTuningRecommendation;
+        set => SetProperty(ref _selectedTuningRecommendation, value);
     }
 
     public string RecommendationSummary
