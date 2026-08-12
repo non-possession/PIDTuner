@@ -32,7 +32,7 @@ public partial class MainWindow : Window
 
     private void ResetPlcTrendChart()
     {
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
         _plcTrendChartAdapter.Clear();
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
@@ -42,8 +42,8 @@ public partial class MainWindow : Window
         DateTimeOffset? trendTimestamp)
     {
         ConfigurePlcTrendRetention();
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
         _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.LiveMonitor.Tags, trendTimestamp);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
@@ -51,23 +51,22 @@ public partial class MainWindow : Window
     private void ApplyPlcTrendSnapshotFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
     {
         ConfigurePlcTrendRetention();
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
         _plcTrendChartAdapter.AppendSnapshotFrames(frames, _viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainWindowViewModel.IsPlcLiveTrendPaused) &&
-            e.PropertyName != nameof(MainWindowViewModel.IsPlcHistoricalTrendMode))
+        if (e.PropertyName != nameof(MainWindowViewModel.PlcTrendMode))
         {
             return;
         }
 
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
-        if (!_viewModel.IsPlcLiveTrendPaused)
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
+        if (!_viewModel.PlcTrendMode.IsLiveScrollingPaused)
         {
             _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
@@ -93,7 +92,7 @@ public partial class MainWindow : Window
             }
         }
 
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
     }
 
@@ -101,7 +100,7 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible))
         {
-            _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
+            _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
             _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
     }
@@ -149,7 +148,7 @@ public partial class MainWindow : Window
 
     private async Task SetPlcTrendWindowAsync(TimeSpan window)
     {
-        var wasHistoricalTrendMode = _viewModel.IsPlcHistoricalTrendMode;
+        var wasHistoricalTrendMode = _viewModel.PlcTrendMode.IsHistoricalMode;
         _viewModel.UsePlcLiveTrendMode();
         ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.VisibleWindow = window;
@@ -184,9 +183,9 @@ public partial class MainWindow : Window
 
     private string BuildTrendStatusText()
     {
-        return _viewModel.IsPlcHistoricalTrendMode
+        return _viewModel.PlcTrendMode.IsHistoricalMode
             ? "历史趋势：静态查看"
-            : _viewModel.IsPlcLiveTrendPaused
+            : _viewModel.PlcTrendMode.IsLiveScrollingPaused
                 ? $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}（滚动已暂停，采集继续）"
             : $"趋势窗口：{FormatTrendWindow(_plcTrendChartAdapter.VisibleWindow)}";
     }

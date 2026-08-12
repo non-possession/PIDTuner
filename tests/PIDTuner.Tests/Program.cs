@@ -1270,24 +1270,24 @@ static async Task MainViewModelTogglesLiveTrendScrollingPause()
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: recordingDirectory);
 
-    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "initial live trend pause state");
-    AssertEqual("暂停滚动", viewModel.PlcLiveTrendPauseButtonText, "initial live trend pause button text");
+    AssertEqual(false, viewModel.PlcTrendMode.IsLiveScrollingPaused, "initial live trend pause state");
+    AssertEqual("暂停滚动", viewModel.PlcTrendMode.PauseButtonText, "initial live trend pause button text");
 
     await viewModel.TogglePlcLiveTrendPauseAsync();
-    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "paused live trend state");
-    AssertEqual("恢复滚动", viewModel.PlcLiveTrendPauseButtonText, "paused live trend pause button text");
-    AssertContains("暂停", viewModel.PlcTrendModeStatus);
+    AssertEqual(true, viewModel.PlcTrendMode.IsLiveScrollingPaused, "paused live trend state");
+    AssertEqual("恢复滚动", viewModel.PlcTrendMode.PauseButtonText, "paused live trend pause button text");
+    AssertContains("暂停", viewModel.PlcTrendMode.Status);
 
     await viewModel.TogglePlcLiveTrendPauseAsync();
-    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "resumed live trend state");
-    AssertEqual("暂停滚动", viewModel.PlcLiveTrendPauseButtonText, "resumed live trend pause button text");
+    AssertEqual(false, viewModel.PlcTrendMode.IsLiveScrollingPaused, "resumed live trend state");
+    AssertEqual("暂停滚动", viewModel.PlcTrendMode.PauseButtonText, "resumed live trend pause button text");
 
     await viewModel.ShowPlcHistoricalTrendAsync();
-    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "historical trend pauses live scrolling");
+    AssertEqual(true, viewModel.PlcTrendMode.IsLiveScrollingPaused, "historical trend pauses live scrolling");
     await viewModel.TogglePlcLiveTrendPauseAsync();
-    AssertEqual(true, viewModel.IsPlcLiveTrendPaused, "historical trend ignores manual pause toggle");
+    AssertEqual(true, viewModel.PlcTrendMode.IsLiveScrollingPaused, "historical trend ignores manual pause toggle");
     viewModel.UsePlcLiveTrendMode();
-    AssertEqual(false, viewModel.IsPlcLiveTrendPaused, "live trend mode resumes scrolling");
+    AssertEqual(false, viewModel.PlcTrendMode.IsLiveScrollingPaused, "live trend mode resumes scrolling");
 }
 
 static Task PlcMonitorRowDisplaysMilliseconds()
@@ -1415,8 +1415,8 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     var appliedCountBeforeHistory = appliedCount;
     await loader.ShowPlcHistoricalTrendAsync();
-    AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical plc trend mode");
-    AssertContains("历史", loader.PlcTrendModeStatus);
+    AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical plc trend mode");
+    AssertContains("历史", loader.PlcTrendMode.Status);
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
     AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
@@ -1431,7 +1431,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, viewportRequestCount, "historical range requests viewport update");
     AssertEqual(selectedHistoricalTimestamp, requestedViewportStart, "historical viewport start");
     AssertEqual(selectedHistoricalTimestamp, requestedViewportEnd, "historical viewport end");
-    AssertEqual(true, loader.IsPlcHistoricalTrendMode, "historical range keeps trend mode");
+    AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical range keeps trend mode");
 
     await loader.ResetPlcHistoricalRangeAsync();
     AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
@@ -1477,9 +1477,9 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertClose(yMaximum, requestedYMax, 0.0001d, "historical y upper slider value");
 
     loader.UsePlcLiveTrendMode();
-    AssertEqual(false, loader.IsPlcHistoricalTrendMode, "live plc trend mode");
+    AssertEqual(false, loader.PlcTrendMode.IsHistoricalMode, "live plc trend mode");
     AssertEqual(false, loader.HistoricalTrendWorkbench.IsViewportEnabled, "live plc trend disables historical slider");
-    AssertContains("实时", loader.PlcTrendModeStatus);
+    AssertContains("实时", loader.PlcTrendMode.Status);
 }
 
 static async Task MainViewModelShowsNotificationsAndRefreshesHistory()

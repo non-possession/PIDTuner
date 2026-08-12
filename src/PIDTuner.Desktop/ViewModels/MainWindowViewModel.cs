@@ -49,9 +49,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
-    private string _plcTrendModeStatus = "当前趋势：实时";
-    private bool _isPlcHistoricalTrendMode;
-    private bool _isPlcLiveTrendPaused;
     private const int MaxPlcDiagnosticsDurationMinutes = 30;
 
     private int _plcDiagnosticsDurationMinutes = 10;
@@ -134,6 +131,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             resolvedParameterSetRepository,
             new PidParameterSetExtractor());
         ParameterSetLibrary.PropertyChanged += ParameterSetLibrary_PropertyChanged;
+        PlcTrendMode.PropertyChanged += PlcTrendMode_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -224,6 +222,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public FieldProfileEditorViewModel FieldProfileEditor { get; } = new();
 
+    public PlcTrendModeViewModel PlcTrendMode { get; } = new();
+
     public IReadOnlyList<string> AvailablePlcDataTypes { get; } =
         Enum.GetNames<PlcDataType>();
 
@@ -278,38 +278,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string PlcTrendModeStatus
     {
-        get => _plcTrendModeStatus;
-        private set => SetProperty(ref _plcTrendModeStatus, value);
+        get => PlcTrendMode.Status;
+        private set => _ = value;
     }
 
     public bool IsPlcHistoricalTrendMode
     {
-        get => _isPlcHistoricalTrendMode;
-        private set
-        {
-            if (SetProperty(ref _isPlcHistoricalTrendMode, value))
-            {
-                OnPropertyChanged(nameof(IsPlcLiveTrendMode));
-            }
-        }
+        get => PlcTrendMode.IsHistoricalMode;
+        private set => _ = value;
     }
 
-    public bool IsPlcLiveTrendMode => !IsPlcHistoricalTrendMode;
+    public bool IsPlcLiveTrendMode => PlcTrendMode.IsLiveMode;
 
     public bool IsPlcLiveTrendPaused
     {
-        get => _isPlcLiveTrendPaused;
-        private set
-        {
-            if (SetProperty(ref _isPlcLiveTrendPaused, value))
-            {
-                LiveMonitor.IsLiveTrendPaused = value;
-                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
-            }
-        }
+        get => PlcTrendMode.IsLiveScrollingPaused;
+        private set => _ = value;
     }
 
-    public string PlcLiveTrendPauseButtonText => IsPlcLiveTrendPaused ? "恢复滚动" : "暂停滚动";
+    public string PlcLiveTrendPauseButtonText => PlcTrendMode.PauseButtonText;
 
     public int CurrentPlcAcquisitionIntervalMilliseconds
     {
@@ -501,6 +488,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void PlcTrendMode_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        LiveMonitor.IsLiveTrendPaused = PlcTrendMode.IsLiveScrollingPaused;
+        OnPropertyChanged(nameof(PlcTrendMode));
+        switch (e.PropertyName)
+        {
+            case nameof(PlcTrendModeViewModel.IsHistoricalMode):
+                OnPropertyChanged(nameof(IsPlcHistoricalTrendMode));
+                break;
+            case nameof(PlcTrendModeViewModel.IsLiveMode):
+                OnPropertyChanged(nameof(IsPlcLiveTrendMode));
+                break;
+            case nameof(PlcTrendModeViewModel.IsLiveScrollingPaused):
+                OnPropertyChanged(nameof(IsPlcLiveTrendPaused));
+                break;
+            case nameof(PlcTrendModeViewModel.PauseButtonText):
+                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
+                break;
+            case nameof(PlcTrendModeViewModel.Status):
+                OnPropertyChanged(nameof(PlcTrendModeStatus));
+                break;
+        }
+    }
+
     private void PlcConfigurationEditor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         OnPropertyChanged(nameof(PlcConfigurationEditor));
@@ -591,9 +602,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (IsPlcHistoricalTrendMode)
             {
-                IsPlcHistoricalTrendMode = false;
-                IsPlcLiveTrendPaused = false;
-                PlcTrendModeStatus = "当前趋势：实时";
+                PlcTrendMode.UseLiveMode();
                 LiveMonitor.ClearTags();
                 PlcTrendResetRequested?.Invoke();
             }
@@ -808,9 +817,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
             else
             {
-                IsPlcHistoricalTrendMode = false;
-                IsPlcLiveTrendPaused = false;
-                PlcTrendModeStatus = "当前趋势：实时";
+                PlcTrendMode.UseLiveMode();
                 ApplyPlcReplayOperation(Debug.ApplyReplayFrame(0, advance: true, "已定位"));
             }
 
@@ -840,10 +847,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public void UsePlcLiveTrendMode()
     {
-        IsPlcHistoricalTrendMode = false;
-        IsPlcLiveTrendPaused = false;
+        PlcTrendMode.UseLiveMode();
         HistoricalTrendWorkbench.Clear();
-        PlcTrendModeStatus = "当前趋势：实时";
     }
 
     public Task TogglePlcLiveTrendPauseAsync()
@@ -853,10 +858,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        IsPlcLiveTrendPaused = !IsPlcLiveTrendPaused;
-        PlcTrendModeStatus = IsPlcLiveTrendPaused
-            ? "当前趋势：实时（滚动已暂停）"
-            : "当前趋势：实时";
+        PlcTrendMode.ToggleLiveScrollingPause();
         return Task.CompletedTask;
     }
 
@@ -866,9 +868,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         StopPlcReplay();
         if (!Debug.HasReplayFrames)
         {
-            IsPlcHistoricalTrendMode = true;
-            IsPlcLiveTrendPaused = true;
-            PlcTrendModeStatus = "当前趋势：历史";
+            PlcTrendMode.UseHistoricalMode();
             PlcMonitorStatus = "历史趋势模式：尚未加载历史记录。";
             Debug.UpdateReplayStatus("历史趋势");
             return;
@@ -898,7 +898,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        IsPlcHistoricalTrendMode = true;
+        PlcTrendMode.UseHistoricalMode();
         PlcMonitorStatus =
             $"历史趋势视图已调整：{HistoricalTrendWorkbench.RangeStartText} - {HistoricalTrendWorkbench.RangeEndText}。";
         Debug.UpdateReplayStatus("历史趋势视图");
@@ -913,7 +913,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         HistoricalTrendWorkbench.SetRangeTextFromFrames(Debug.LoadedReplayFrames);
-        IsPlcHistoricalTrendMode = true;
+        PlcTrendMode.UseHistoricalMode();
         var dataRange = GetPlcReplayTimestampRange(Debug.LoadedReplayFrames);
         if (dataRange is not null)
         {
@@ -1058,9 +1058,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        IsPlcHistoricalTrendMode = true;
-        IsPlcLiveTrendPaused = false;
-        PlcTrendModeStatus = "当前趋势：历史";
+        PlcTrendMode.MarkHistoricalModeDisplayed();
         HistoricalTrendWorkbench.LoadFrames(frames);
         for (var index = 0; index < frames.Count; index++)
         {

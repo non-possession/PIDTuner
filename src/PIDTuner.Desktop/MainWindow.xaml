@@ -46,7 +46,7 @@
            TargetType="{x:Type Button}"
            BasedOn="{StaticResource TrendModeButtonStyle}">
       <Style.Triggers>
-        <DataTrigger Binding="{Binding IsPlcLiveTrendMode}"
+        <DataTrigger Binding="{Binding PlcTrendMode.IsLiveMode}"
                      Value="True">
           <Setter Property="Background"
                   Value="#DCFCE7" />
@@ -61,7 +61,7 @@
            TargetType="{x:Type Button}"
            BasedOn="{StaticResource TrendModeButtonStyle}">
       <Style.Triggers>
-        <DataTrigger Binding="{Binding IsPlcHistoricalTrendMode}"
+        <DataTrigger Binding="{Binding PlcTrendMode.IsHistoricalMode}"
                      Value="True">
           <Setter Property="Background"
                   Value="#DBEAFE" />
