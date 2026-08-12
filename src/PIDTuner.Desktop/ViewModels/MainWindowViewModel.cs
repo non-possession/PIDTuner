@@ -30,17 +30,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
-    private readonly IPlcProjectConfigurationStore _plcProjectConfigurationStore;
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
-    private readonly ITestSessionRepository _testSessionRepository;
-    private readonly IPidSampleRepository _pidSampleRepository;
-    private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
-    private readonly IPidParameterSetRepository _parameterSetRepository;
-    private readonly IPlcConnectivityProbe _plcConnectivityProbe;
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
-    private readonly PidParameterSetExtractor _parameterSetExtractor = new();
-    private readonly string _testSessionStorageDirectory;
+    private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
+    private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
+    private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
     private readonly DispatcherTimer _monitorTimer = new();
     private readonly DispatcherTimer _plcReplayTimer = new();
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
@@ -54,7 +49,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isNotificationVisible;
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
-    private ObservableCollection<PidParameterSetViewModel> _parameterSets = [];
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private PidTuningRecommendationViewModel? _selectedTuningRecommendation;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
@@ -68,8 +62,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private const int MaxPlcDiagnosticsDurationMinutes = 30;
 
     private int _plcDiagnosticsDurationMinutes = 10;
-
-    private string _parameterSetStatus = "尚未保存参数方案。";
 
     public MainWindowViewModel()
         : this(
@@ -101,22 +93,34 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _openFileDialogService = openFileDialogService;
         _fieldProfileStore = fieldProfileStore;
-        _plcProjectConfigurationStore = plcProjectConfigurationStore;
-        _plcConnectivityProbe = plcConnectivityProbe
+        var resolvedPlcConnectivityProbe = plcConnectivityProbe
             ?? new ConfiguredPlcConnectivityProbe(new SiemensS7ConnectivityProbe(), new PingPlcConnectivityProbe());
         _plcTagSnapshotReader = plcTagSnapshotReader
             ?? new ConfiguredPlcTagSnapshotReader(new SiemensS7PlcTagSnapshotReader(), new PreviewPlcTagSnapshotReader());
-        _testSessionStorageDirectory = Path.GetFullPath(
+        var resolvedTestSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
         var resolvedPlcRecordingStorageDirectory = Path.GetFullPath(
             plcRecordingStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "plc-recordings"));
         _plcOneSecondRecorder = new PlcOneSecondRecorder(OpenPlcSnapshotSessionAsync, resolvedPlcRecordingStorageDirectory);
-        _testSessionRepository = testSessionRepository ?? new JsonTestSessionRepository(_testSessionStorageDirectory);
-        _pidSampleRepository = pidSampleRepository ?? new JsonPidSampleRepository(_testSessionStorageDirectory);
-        _recommendationReviewRepository = recommendationReviewRepository
+        var resolvedTestSessionRepository = testSessionRepository
+            ?? new JsonTestSessionRepository(resolvedTestSessionStorageDirectory);
+        var resolvedPidSampleRepository = pidSampleRepository
+            ?? new JsonPidSampleRepository(resolvedTestSessionStorageDirectory);
+        var resolvedRecommendationReviewRepository = recommendationReviewRepository
             ?? new JsonPidRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
-        _parameterSetRepository = parameterSetRepository
+        var resolvedParameterSetRepository = parameterSetRepository
             ?? new JsonPidParameterSetRepository(Path.Combine(FindRepositoryRoot(), "local", "parameter-sets"));
+        _experimentSessionCoordinator = new ExperimentSessionCoordinator(
+            resolvedTestSessionRepository,
+            resolvedPidSampleRepository,
+            resolvedRecommendationReviewRepository,
+            resolvedTestSessionStorageDirectory);
+        _plcConfigurationWorkflow = new PlcConfigurationWorkflow(
+            plcProjectConfigurationStore,
+            resolvedPlcConnectivityProbe);
+        _plcMonitorSnapshotPresenter = new PlcMonitorSnapshotPresenter(PlcMonitorTags);
+        _plcMonitorSnapshotPresenter.SnapshotsApplied += (snapshots, trendTimestamp) =>
+            PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
         var liveDiagnosticsStore = plcLiveDiagnosticsStore
             ?? new SqlitePlcLiveDiagnosticsStore(Path.Combine(
                 FindRepositoryRoot(),
@@ -134,6 +138,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OfflineAnalysis = new OfflineAnalysisViewModel();
         OfflineAnalysis.PropertyChanged += OfflineAnalysis_PropertyChanged;
         ExperimentHistory.PropertyChanged += ExperimentHistory_PropertyChanged;
+        ParameterSetLibrary = new ParameterSetLibraryViewModel(
+            resolvedParameterSetRepository,
+            new PidParameterSetExtractor());
+        ParameterSetLibrary.PropertyChanged += ParameterSetLibrary_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -218,6 +226,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public OfflineAnalysisViewModel OfflineAnalysis { get; }
 
     public ExperimentHistoryViewModel ExperimentHistory { get; } = new();
+
+    public ParameterSetLibraryViewModel ParameterSetLibrary { get; }
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
@@ -715,8 +725,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<PidParameterSetViewModel> ParameterSets
     {
-        get => _parameterSets;
-        private set => SetProperty(ref _parameterSets, value);
+        get => ParameterSetLibrary.ParameterSets;
+        private set => _ = value;
     }
 
     public string RecommendationSummary
@@ -739,8 +749,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string ParameterSetStatus
     {
-        get => _parameterSetStatus;
-        private set => SetProperty(ref _parameterSetStatus, value);
+        get => ParameterSetLibrary.Status;
+        private set => _ = value;
     }
 
     public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
@@ -971,6 +981,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void ParameterSetLibrary_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ParameterSetLibraryViewModel.ParameterSets):
+                OnPropertyChanged(nameof(ParameterSets));
+                break;
+            case nameof(ParameterSetLibraryViewModel.Status):
+                OnPropertyChanged(nameof(ParameterSetStatus));
+                break;
+        }
+    }
+
     private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1081,10 +1104,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var configuration = BuildPlcConfigurationFromForm();
-            await using var stream = File.Create(fileName);
-            await _plcProjectConfigurationStore.SaveAsync(configuration, stream, CancellationToken.None);
+            var savedPath = await _plcConfigurationWorkflow.SaveAsync(configuration, fileName, CancellationToken.None);
             PlcConfigurationEditor.MarkSaved();
-            Notify("PLC 配置已保存", Path.GetFullPath(fileName), "Success");
+            Notify("PLC 配置已保存", savedPath, "Success");
         }
         catch (Exception exception)
         {
@@ -1097,13 +1119,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var configuration = BuildPlcConfigurationFromForm();
-            PlcCommunicationStatus = $"正在 Ping {configuration.IpAddress} ...";
-            var result = await _plcConnectivityProbe.CheckAsync(configuration, CancellationToken.None);
-            PlcCommunicationStatus = $"{result.CheckedAt:HH:mm:ss} {result.Host}: {result.Message}";
-            Notify(
-                result.IsReachable ? "PLC 通信检查通过" : "PLC 通信检查未通过",
-                PlcCommunicationStatus,
-                result.IsReachable ? "Success" : "Warning");
+            var result = await _plcConfigurationWorkflow.CheckCommunicationAsync(configuration, CancellationToken.None);
+            PlcCommunicationStatus = result.PendingStatus;
+            PlcCommunicationStatus = result.Status;
+            Notify(result.Title, PlcCommunicationStatus, result.Kind);
         }
         catch (Exception exception)
         {
@@ -1149,32 +1168,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         DateTimeOffset? trendTimestamp = null,
         bool applyTrend = true)
     {
-        foreach (var snapshot in snapshots)
-        {
-            var existing = PlcMonitorTags.FirstOrDefault(item => item.TagId == snapshot.TagId);
-            if (existing is null)
-            {
-                PlcMonitorTags.Add(new PlcTagMonitorViewModel(snapshot));
-                continue;
-            }
-
-            existing.Update(snapshot);
-        }
-
-        var activeIds = snapshots.Select(snapshot => snapshot.TagId).ToHashSet();
-        for (var index = PlcMonitorTags.Count - 1; index >= 0; index--)
-        {
-            if (!activeIds.Contains(PlcMonitorTags[index].TagId))
-            {
-                PlcMonitorTags.RemoveAt(index);
-            }
-        }
-
-        SelectedPlcMonitorTag ??= PlcMonitorTags.FirstOrDefault();
-        if (applyTrend)
-        {
-            PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
-        }
+        _plcMonitorSnapshotPresenter.SelectedTag = SelectedPlcMonitorTag;
+        _plcMonitorSnapshotPresenter.Apply(snapshots, trendTimestamp, applyTrend);
+        SelectedPlcMonitorTag = _plcMonitorSnapshotPresenter.SelectedTag;
     }
 
     private void ApplyBufferedLiveMonitorFrames()
@@ -1701,8 +1697,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using var stream = File.OpenRead(fileName);
-            var configuration = await _plcProjectConfigurationStore.LoadAsync(stream, CancellationToken.None);
+            var configuration = await _plcConfigurationWorkflow.LoadAsync(fileName, CancellationToken.None);
             ApplyPlcConfiguration(configuration);
             Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
             await CheckPlcCommunicationAsync();
@@ -1734,52 +1729,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task SaveTestSessionAsync()
     {
-        if (OfflineAnalysis.LastAnalysisWindow is null || OfflineAnalysis.LastSamples.Count == 0)
-        {
-            Notify("无法保存试验记录", "请先导入 CSV 并完成一次分析。", "Warning");
-            return;
-        }
-
         try
         {
-            var sessionId = OfflineAnalysis.LastSamples
-                .Select(sample => sample.TestSessionId)
-                .FirstOrDefault(id => id != Guid.Empty);
-
-            if (sessionId == Guid.Empty)
+            var result = await _experimentSessionCoordinator.SaveOfflineSessionAsync(
+                OfflineAnalysis.LastAnalysisWindow,
+                OfflineAnalysis.LastSamples,
+                OfflineAnalysis.LastSourceFileName,
+                _fieldProfile.ProfileName,
+                CancellationToken.None);
+            if (result.SessionId.HasValue)
             {
-                sessionId = Guid.NewGuid();
+                OfflineAnalysis.MarkSavedSession(result.SessionId.Value);
+                await LoadHistoryAsync(showNotification: false);
             }
 
-            var samples = OfflineAnalysis.LastSamples
-                .Select(sample => sample with { TestSessionId = sessionId })
-                .ToArray();
-
-            var session = new TestSession(
-                sessionId,
-                Guid.Empty,
-                string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
-                    ? $"offline-session-{sessionId:N}"
-                    : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName),
-                OfflineAnalysis.LastAnalysisWindow.Start,
-                OfflineAnalysis.LastAnalysisWindow.End,
-                null,
-                "Offline CSV analysis",
-                $"Profile: {_fieldProfile.ProfileName}");
-
-            await _testSessionRepository.SaveAsync(session, CancellationToken.None);
-            await _pidSampleRepository.SaveBatchAsync(samples, CancellationToken.None);
-            OfflineAnalysis.MarkSavedSession(sessionId);
-            await LoadHistoryAsync(showNotification: false);
-            Notify(
-                "试验记录已保存",
-                string.Join(
-                    Environment.NewLine,
-                    $"{session.Name}，样本 {samples.Length} 条。",
-                    $"目录：{_testSessionStorageDirectory}",
-                    $"索引：{Path.Combine(_testSessionStorageDirectory, "test-sessions.json")}",
-                    $"样本：{Path.Combine(_testSessionStorageDirectory, $"{sessionId:D}.samples.json")}"),
-                "Success");
+            Notify(result.Title, result.Message, result.Kind);
         }
         catch (Exception exception)
         {
@@ -1802,7 +1766,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var samples = await _pidSampleRepository.GetBySessionAsync(SelectedHistorySession.Id, CancellationToken.None);
+            var samples = await _experimentSessionCoordinator.LoadSessionSamplesAsync(
+                SelectedHistorySession,
+                CancellationToken.None);
             if (samples.Count == 0)
             {
                 Notify("历史记录无样本", "该试验记录没有可加载的采样数据。", "Warning");
@@ -1839,17 +1805,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var samples = await _pidSampleRepository.GetBySessionAsync(SelectedHistorySession.Id, CancellationToken.None);
-            if (samples.Count == 0)
-            {
-                Notify("历史采样导出失败", "该试验记录没有可导出的采样数据。", "Warning");
-                return;
-            }
-
-            await using var stream = File.Create(fileName);
-            var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
-            await exchange.ExportAsync(samples, stream, CancellationToken.None);
-            Notify("历史采样已导出", Path.GetFullPath(fileName), "Success");
+            var result = await _experimentSessionCoordinator.ExportHistorySamplesAsync(
+                SelectedHistorySession,
+                _fieldProfile,
+                fileName,
+                CancellationToken.None);
+            Notify(result.Title, result.Message, result.Kind);
         }
         catch (Exception exception)
         {
@@ -1985,11 +1946,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            var reviews = await _recommendationReviewRepository.ListAsync(CancellationToken.None);
-            ExperimentHistory.SetRecommendationReviews(
-                reviews
-                    .OrderByDescending(review => review.CreatedAt)
-                    .Select(review => new PidRecommendationReviewViewModel(review)));
+            var reviews = await _experimentSessionCoordinator.LoadRecommendationReviewsAsync(CancellationToken.None);
+            ExperimentHistory.SetRecommendationReviews(reviews);
         }
         catch (Exception exception)
         {
@@ -2021,15 +1979,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            var sessions = await _testSessionRepository.ListAsync(CancellationToken.None);
-            var items = new List<TestSessionListItemViewModel>();
-
-            foreach (var session in sessions.OrderByDescending(session => session.StartedAt))
-            {
-                var samples = await _pidSampleRepository.GetBySessionAsync(session.Id, CancellationToken.None);
-                items.Add(new TestSessionListItemViewModel(session, samples.Count));
-            }
-
+            var items = await _experimentSessionCoordinator.LoadHistoryAsync(CancellationToken.None);
             ExperimentHistory.SetHistorySessions(items);
 
             if (showNotification)
@@ -2046,33 +1996,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task SaveParameterSetAsync()
     {
-        if (OfflineAnalysis.LastSamples.Count == 0)
+        try
         {
-            Notify("无法保存参数方案", "请先导入 CSV、载入示例或打开历史记录。", "Warning");
-            return;
+            var result = await ParameterSetLibrary.SaveAsync(
+                OfflineAnalysis.LastSamples,
+                OfflineAnalysis.LastTestSessionId == Guid.Empty ? null : OfflineAnalysis.LastTestSessionId,
+                OfflineAnalysis.LastSourceFileName,
+                CancellationToken.None);
+            Notify(result.Title, result.Message, result.Kind);
         }
-
-        var sourceName = string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
-            ? "current-analysis"
-            : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName);
-        var parameterSet = _parameterSetExtractor.Extract(
-            OfflineAnalysis.LastSamples,
-            OfflineAnalysis.LastTestSessionId == Guid.Empty ? null : OfflineAnalysis.LastTestSessionId,
-            sourceName,
-            $"Captured from {sourceName}");
-
-        if (parameterSet is null)
+        catch (Exception exception)
         {
-            Notify("无法保存参数方案", "当前样本没有 Kp、Ki/Ti 或 Kd/Td 参数值。", "Warning");
-            return;
+            Notify("参数方案保存失败", exception.Message, "Error");
         }
-
-        await _parameterSetRepository.SaveAsync(parameterSet, CancellationToken.None);
-        await LoadParameterSetsAsync(showNotification: false);
-        Notify(
-            "参数方案已保存",
-            $"{parameterSet.Name}: Kp={FormatParameterValue(parameterSet.Kp)}, Ki/Ti={FormatParameterValue(parameterSet.KiOrTi)}, Kd/Td={FormatParameterValue(parameterSet.KdOrTd)}",
-            "Success");
     }
 
     public async Task LoadParameterSetsAsync()
@@ -2090,20 +2026,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var review = new PidRecommendationReview(
-                Guid.NewGuid(),
+            var review = await _experimentSessionCoordinator.SaveRecommendationReviewAsync(
+                SelectedTuningRecommendation,
                 OfflineAnalysis.LastTestSessionId,
-                string.IsNullOrWhiteSpace(OfflineAnalysis.LastSourceFileName)
-                    ? "current-analysis"
-                    : Path.GetFileNameWithoutExtension(OfflineAnalysis.LastSourceFileName),
-                SelectedTuningRecommendation.Recommendation.Parameter,
-                SelectedTuningRecommendation.Recommendation.Direction,
-                SelectedTuningRecommendation.Recommendation.Adjustment,
+                OfflineAnalysis.LastSourceFileName,
                 decision,
                 RecommendationReviewNote.Trim(),
-                DateTimeOffset.Now);
-
-            await _recommendationReviewRepository.SaveAsync(review, CancellationToken.None);
+                CancellationToken.None);
             ExperimentHistory.ClearRecommendationReviewNote();
             await LoadRecommendationReviewsAsync();
             var decisionText = decision == PidRecommendationReviewDecision.Accepted ? "采用" : "暂缓";
@@ -2119,14 +2048,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            var parameterSets = await _parameterSetRepository.ListAsync(CancellationToken.None);
-            ParameterSets = new ObservableCollection<PidParameterSetViewModel>(
-                parameterSets
-                    .OrderByDescending(item => item.CapturedAt)
-                    .Select(item => new PidParameterSetViewModel(item)));
-            ParameterSetStatus = ParameterSets.Count == 0
-                ? "尚无参数方案记录。"
-                : $"已加载 {ParameterSets.Count} 条参数方案。";
+            await ParameterSetLibrary.LoadAsync(CancellationToken.None);
 
             if (showNotification)
             {
@@ -2135,7 +2057,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            ParameterSetStatus = "参数方案加载失败。";
+            ParameterSetLibrary.MarkLoadFailed();
             Notify("参数方案加载失败", exception.Message, "Error");
         }
     }
@@ -2143,7 +2065,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task<(IReadOnlyList<PidSample> Samples, PidResponseMetrics Metrics)> AnalyzeHistorySessionAsync(
         TestSessionListItemViewModel session)
     {
-        var samples = await _pidSampleRepository.GetBySessionAsync(session.Id, CancellationToken.None);
+        var samples = await _experimentSessionCoordinator.LoadSessionSamplesAsync(session, CancellationToken.None);
         if (samples.Count == 0)
         {
             throw new InvalidOperationException($"{session.Name} 没有可对比的采样数据。");
@@ -2151,11 +2073,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
         return (samples, OfflineAnalysis.AnalyzeSamples(samples, window));
-    }
-
-    private static string FormatParameterValue(double? value)
-    {
-        return value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-";
     }
 
     private static string EscapeCsv(string value)
