@@ -49,6 +49,11 @@ public sealed class AxisRangeBrush : FrameworkElement
     private bool _isDraggingUpperHandle;
     private bool _isDragging;
 
+    public AxisRangeBrush()
+    {
+        Focusable = true;
+    }
+
     public double Minimum
     {
         get => (double)GetValue(MinimumProperty);
@@ -84,6 +89,19 @@ public sealed class AxisRangeBrush : FrameworkElement
         return Orientation == Orientation.Horizontal
             ? new Size(Math.Min(240d, availableSize.Width), 34d)
             : new Size(38d, Math.Min(180d, availableSize.Height));
+    }
+
+    protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters)
+    {
+        var point = hitTestParameters.HitPoint;
+        return ContainsPoint(point, ActualWidth, ActualHeight)
+            ? new PointHitTestResult(this, point)
+            : null;
+    }
+
+    private static bool ContainsPoint(Point point, double width, double height)
+    {
+        return point.X >= 0 && point.X <= width && point.Y >= 0 && point.Y <= height;
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)

@@ -917,6 +917,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
+        PlcMonitorStatus = $"历史趋势窗口已调整为 {FormatTrendWindow(window)}。";
         Debug.UpdateReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
@@ -1753,6 +1754,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PlcProjectConfiguration BuildPlcConfigurationFromForm()
     {
         return PlcConfigurationEditor.BuildConfiguration();
+    }
+
+    private static string FormatTrendWindow(TimeSpan window)
+    {
+        return window.TotalHours >= 1
+            ? $"{window.TotalHours:0.#}h"
+            : window.TotalMinutes >= 1
+                ? $"{window.TotalMinutes:0.#}min"
+                : $"{window.TotalSeconds:0.#}s";
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
