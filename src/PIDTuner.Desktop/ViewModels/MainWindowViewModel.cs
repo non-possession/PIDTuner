@@ -10,7 +10,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.Services;
-using PIDTuner.Application.UseCases;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Analysis;
@@ -32,9 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly IPidSampleFieldProfileStore _fieldProfileStore;
     private readonly IPlcProjectConfigurationStore _plcProjectConfigurationStore;
-    private readonly BasicPidAnalysisService _pidAnalysisService = new();
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
-    private readonly AnalysisWindowParser _analysisWindowParser = new();
     private readonly ITestSessionRepository _testSessionRepository;
     private readonly IPidSampleRepository _pidSampleRepository;
     private readonly IPidRecommendationReviewRepository _recommendationReviewRepository;
@@ -51,8 +48,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
     private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
-    private string _analysisStartText = string.Empty;
-    private string _analysisEndText = string.Empty;
     private string _notificationTitle = string.Empty;
     private string _notificationMessage = string.Empty;
     private string _notificationKind = "Info";
@@ -597,14 +592,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string AnalysisStartText
     {
-        get => _analysisStartText;
-        set => SetProperty(ref _analysisStartText, value);
+        get => OfflineAnalysis.AnalysisStartText;
+        set => OfflineAnalysis.AnalysisStartText = value;
     }
 
     public string AnalysisEndText
     {
-        get => _analysisEndText;
-        set => SetProperty(ref _analysisEndText, value);
+        get => OfflineAnalysis.AnalysisEndText;
+        set => OfflineAnalysis.AnalysisEndText = value;
     }
 
     public string ActiveAnalysisWindow
@@ -1064,6 +1059,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             nameof(OfflineAnalysisViewModel.SetPointPoints) => [nameof(SetPointPoints)],
             nameof(OfflineAnalysisViewModel.ProcessValuePoints) => [nameof(ProcessValuePoints)],
             nameof(OfflineAnalysisViewModel.ManipulatedValuePoints) => [nameof(ManipulatedValuePoints)],
+            nameof(OfflineAnalysisViewModel.AnalysisStartText) => [nameof(AnalysisStartText)],
+            nameof(OfflineAnalysisViewModel.AnalysisEndText) => [nameof(AnalysisEndText)],
             _ => Array.Empty<string>()
         };
     }
@@ -1812,7 +1809,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 SelectedHistorySession.Name,
                 samples,
                 window,
-                _pidAnalysisService.Analyze(samples, window));
+                OfflineAnalysis.AnalyzeSamples(samples, window));
             Notify("历史记录已打开", $"{SelectedHistorySession.Name}，样本 {samples.Count} 条。", "Success");
         }
         catch (Exception exception)
@@ -2153,7 +2150,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
-        return (samples, _pidAnalysisService.Analyze(samples, window));
+        return (samples, OfflineAnalysis.AnalyzeSamples(samples, window));
     }
 
     private static ObservableCollection<HistoryComparisonMetricViewModel> BuildHistoryComparisonMetrics(
@@ -2382,21 +2379,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task AnalyzeCsvFileAsync(string fileName)
     {
-        await using var stream = File.OpenRead(fileName);
-        var exchange = new ConfigurablePidSampleCsvExchange(_fieldProfile);
-        var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
-        var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
-        var result = await useCase.AnalyzeAsync(stream, window, CancellationToken.None);
-
-        ApplyAnalysisResult(fileName, result.Samples, result.Window, result.Metrics);
-
-        if (window is null)
-        {
-            AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
-            AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
-        }
-
-        Notify("离线分析已完成", $"{Path.GetFileName(fileName)}，样本 {result.Samples.Count} 条。", "Success");
+        var result = await OfflineAnalysis.AnalyzeCsvFileAsync(fileName, _fieldProfile, CancellationToken.None);
+        Notify("离线分析已完成", $"{result.SourceFileName}，样本 {result.SampleCount} 条。", "Success");
     }
 
     private void ApplyAnalysisResult(

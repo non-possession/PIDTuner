@@ -2,7 +2,7 @@
 
 本文档记录 PIDTuner 在 V2.0 阶段进行历史趋势工作台迁移前的架构重构依据。它不是功能需求清单，而是后续代码变更的模块边界、职责划分和迁移顺序。
 
-当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期、PLC 实时采集运行态、PLC 1s 记录与文件保存、PLC 配置编辑状态、离线分析展示状态已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分离线分析命令编排和旧 XAML 绑定包装。
+当前状态：架构重构基线已落地，历史趋势状态逻辑、PLC 回放状态机、PLC 实时诊断会话生命周期、PLC 实时采集运行态、PLC 1s 记录与文件保存、PLC 配置编辑状态、离线分析展示状态与 CSV 分析执行已经从 `MainWindowViewModel` 实质迁出。根 ViewModel 仍然偏大，不能视为最终组合根；后续还需要继续拆分试验记录/审查仓储编排和旧 XAML 绑定包装。
 
 ## 1. 重构目标
 
@@ -205,12 +205,13 @@ V2.0 的架构目标是：
 目标职责：
 
 - 保存当前离线分析窗口、指标、评估、样本和来源文件名。
+- 执行离线 CSV 分析和分析窗口解析。
 - 格式化分析指标展示文本。
 - 生成保守 PID 调参建议展示列表。
 - 生成离线趋势预览点集。
 - 为分析结果导出、参数方案保存、建议审查提供当前分析状态。
 
-当前 `MainWindowViewModel` 仍保留 CSV 文件选择、字段配置、导入命令、试验记录保存和建议审查仓储编排。后续可以继续拆出离线分析命令协调器，但指标展示状态和当前结果不应再回到根 ViewModel。
+当前 `MainWindowViewModel` 仍保留 CSV 文件选择、字段配置、试验记录保存和建议审查仓储编排。后续可以继续拆出试验记录/审查协调器，但指标展示状态、当前结果和 CSV 分析执行不应再回到根 ViewModel。
 
 ## 4. 关键接口原则
 
@@ -317,7 +318,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - PLC 实时采集运行态已经迁入 `PlcLiveMonitorViewModel`，根 ViewModel 不再直接持有 `PlcAcquisitionEngine` 和 `PlcSampleBuffer`。
 - PLC 1s 记录已经迁入 `PlcOneSecondRecorder`，根 ViewModel 不再直接实现一次性采样循环、采集帧诊断构造和记录 JSON 保存。
 - PLC 配置编辑状态已经迁入 `PlcConfigurationEditorViewModel`，根 ViewModel 不再直接保存连接表单字段、点位表集合和点位选中状态。
-- 离线分析展示状态已经迁入 `OfflineAnalysisViewModel`，根 ViewModel 不再直接保存当前指标文本、当前分析结果、调参建议列表和离线趋势预览点集。
+- 离线分析展示状态与 CSV 分析执行已经迁入 `OfflineAnalysisViewModel`，根 ViewModel 不再直接保存当前指标文本、当前分析结果、调参建议列表、离线趋势预览点集，也不再创建离线 CSV 分析用例。
 - 不应把“文件行数下降”视为最终目标；最终目标是根 ViewModel 只组合子 ViewModel 和转发全局通知。
 
 ## 6. 禁止事项
@@ -349,7 +350,7 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - PLC 实时采集运行态从 `MainWindowViewModel` 迁出：已完成。
 - PLC 1s 记录与文件保存从 `MainWindowViewModel` 迁出：已完成。
 - PLC 配置编辑状态从 `MainWindowViewModel` 迁出：已完成。
-- 离线分析展示状态从 `MainWindowViewModel` 迁出：已完成。
+- 离线分析展示状态与 CSV 分析执行从 `MainWindowViewModel` 迁出：已完成。
 
 因此，下一阶段可以开始讨论历史趋势功能迁移的具体交互方案，但如果要严格完成架构重构，还应继续拆出 PLC 调试/回放、实时采集控制、配置和离线分析等功能簇。
 
@@ -371,6 +372,6 @@ ViewModel 可以暴露状态和命令，但不应直接处理：
 - `PlcLiveMonitorViewModel` 已接管 PLC 实时采集的启动、停止、采集周期解析、采集 buffer、呈现帧 drain 和采集诊断摘要文本。
 - 新增 `PlcOneSecondRecorder`，接管 1s 记录的启用点位校验、最快点位周期解析、单会话采样、诊断帧构造和记录 JSON 保存。
 - 新增 `PlcConfigurationEditorViewModel`，接管 PLC 连接表单字段、点位表、选中点位、新增/删除点位、配置构建和重复点位名称校验。
-- 新增 `OfflineAnalysisViewModel`，接管离线分析指标展示、当前分析结果状态、调参建议列表和离线趋势预览点集。
+- `OfflineAnalysisViewModel` 已接管离线分析指标展示、当前分析结果状态、调参建议列表、离线趋势预览点集、CSV 分析执行和分析窗口解析。
 
 这一步不改变用户可见功能，目的是在历史趋势功能迁移前完成可维护的架构底座。当前底座已经可用，但根 ViewModel 仍需继续瘦身。

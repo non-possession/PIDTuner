@@ -1,12 +1,17 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using PIDTuner.Application.Services;
+using PIDTuner.Application.UseCases;
 using PIDTuner.Domain.Analysis;
+using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Models;
 using PIDTuner.Domain.Trends;
+using PIDTuner.Infrastructure.Analysis;
+using PIDTuner.Infrastructure.Csv;
 
 namespace PIDTuner.Desktop.ViewModels;
 
@@ -15,6 +20,8 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     private readonly PidResponseAssessmentService _assessmentService = new();
     private readonly PidTuningRecommendationService _recommendationService = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
+    private readonly BasicPidAnalysisService _pidAnalysisService = new();
+    private readonly AnalysisWindowParser _analysisWindowParser = new();
     private string _sampleCount = "-";
     private string _overshootPercent = "-";
     private string _riseTime = "-";
@@ -31,6 +38,8 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     private string _activeAnalysisWindow = "-";
     private string _assessmentSummary = "-";
     private string _recommendationSummary = "完成一次分析后生成参数调整建议。";
+    private string _analysisStartText = string.Empty;
+    private string _analysisEndText = string.Empty;
     private ObservableCollection<PidTuningRecommendationViewModel> _tuningRecommendations = [];
     private PointCollection _setPointPoints = new();
     private PointCollection _processValuePoints = new();
@@ -152,6 +161,18 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _recommendationSummary, value);
     }
 
+    public string AnalysisStartText
+    {
+        get => _analysisStartText;
+        set => SetProperty(ref _analysisStartText, value);
+    }
+
+    public string AnalysisEndText
+    {
+        get => _analysisEndText;
+        set => SetProperty(ref _analysisEndText, value);
+    }
+
     public PointCollection SetPointPoints
     {
         get => _setPointPoints;
@@ -168,6 +189,35 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     {
         get => _manipulatedValuePoints;
         private set => SetProperty(ref _manipulatedValuePoints, value);
+    }
+
+    public async Task<OfflineCsvAnalysisResult> AnalyzeCsvFileAsync(
+        string fileName,
+        PidSampleFieldProfile fieldProfile,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(fileName);
+        var exchange = new ConfigurablePidSampleCsvExchange(fieldProfile);
+        var useCase = new AnalyzeOfflineCsvUseCase(exchange, _pidAnalysisService);
+        var window = _analysisWindowParser.Parse(AnalysisStartText, AnalysisEndText);
+        var result = await useCase.AnalyzeAsync(stream, window, cancellationToken);
+
+        ApplyResult(fileName, result.Samples, result.Window, result.Metrics);
+
+        if (window is null)
+        {
+            AnalysisStartText = result.Window.Start.ToString("O", CultureInfo.InvariantCulture);
+            AnalysisEndText = result.Window.End.ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        return new OfflineCsvAnalysisResult(Path.GetFileName(fileName), result.Samples.Count);
+    }
+
+    public PidResponseMetrics AnalyzeSamples(
+        IReadOnlyList<PidSample> samples,
+        AnalysisWindow window)
+    {
+        return _pidAnalysisService.Analyze(samples, window);
     }
 
     public void ApplyResult(
@@ -282,3 +332,7 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
+
+public sealed record OfflineCsvAnalysisResult(
+    string SourceFileName,
+    int SampleCount);
