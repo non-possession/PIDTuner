@@ -45,9 +45,12 @@ public sealed class AxisRangeBrush : FrameworkElement
 
     private const double HorizontalTrackPadding = 10d;
     private const double VerticalTrackPadding = 10d;
+    private const double HandleHitTolerance = 14d;
 
-    private bool _isDraggingUpperHandle;
-    private bool _isDragging;
+    private DragMode _dragMode = DragMode.None;
+    private double _dragStartPointerValue;
+    private double _dragStartLowerValue;
+    private double _dragStartUpperValue;
 
     public AxisRangeBrush()
     {
@@ -113,15 +116,30 @@ public sealed class AxisRangeBrush : FrameworkElement
 
         Focus();
         CaptureMouse();
-        _isDragging = true;
-        _isDraggingUpperHandle = IsPointerCloserToUpperHandle(e.GetPosition(this));
-        SetDraggedValue(e.GetPosition(this));
+        var pointer = e.GetPosition(this);
+        _dragMode = ResolveDragMode(pointer);
+        _dragStartPointerValue = PointerToValue(pointer);
+        _dragStartLowerValue = LowerValue;
+        _dragStartUpperValue = UpperValue;
+        SetDraggedValue(pointer);
         e.Handled = true;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (!_isDragging || !IsMouseCaptured)
+        if (!IsEnabled)
+        {
+            Cursor = Cursors.Arrow;
+            return;
+        }
+
+        if (!IsMouseCaptured)
+        {
+            Cursor = ResolveDragMode(e.GetPosition(this)) == DragMode.None ? Cursors.Arrow : Cursors.Hand;
+            return;
+        }
+
+        if (_dragMode == DragMode.None)
         {
             return;
         }
@@ -137,14 +155,14 @@ public sealed class AxisRangeBrush : FrameworkElement
             return;
         }
 
-        _isDragging = false;
+        _dragMode = DragMode.None;
         ReleaseMouseCapture();
         e.Handled = true;
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
-        _isDragging = false;
+        _dragMode = DragMode.None;
         base.OnLostMouseCapture(e);
     }
 
@@ -212,7 +230,7 @@ public sealed class AxisRangeBrush : FrameworkElement
         context.DrawEllipse(handleBrush, handlePen, new Point(x, lowerY), 10d, 6d);
     }
 
-    private bool IsPointerCloserToUpperHandle(Point pointer)
+    private DragMode ResolveDragMode(Point pointer)
     {
         var lowerPosition = Orientation == Orientation.Horizontal
             ? ValueToHorizontalPosition(LowerValue)
@@ -222,23 +240,73 @@ public sealed class AxisRangeBrush : FrameworkElement
             : ValueToVerticalPosition(UpperValue);
         var pointerPosition = Orientation == Orientation.Horizontal ? pointer.X : pointer.Y;
 
-        return Math.Abs(pointerPosition - upperPosition) <= Math.Abs(pointerPosition - lowerPosition);
+        var lowerDistance = Math.Abs(pointerPosition - lowerPosition);
+        var upperDistance = Math.Abs(pointerPosition - upperPosition);
+        if (lowerDistance <= HandleHitTolerance || upperDistance <= HandleHitTolerance)
+        {
+            return upperDistance <= lowerDistance ? DragMode.UpperHandle : DragMode.LowerHandle;
+        }
+
+        if (IsPointerInsideSelectedRange(pointerPosition, lowerPosition, upperPosition))
+        {
+            return DragMode.Range;
+        }
+
+        return upperDistance <= lowerDistance ? DragMode.UpperHandle : DragMode.LowerHandle;
     }
 
     private void SetDraggedValue(Point pointer)
     {
-        var value = Orientation == Orientation.Horizontal
+        var value = PointerToValue(pointer);
+        switch (_dragMode)
+        {
+            case DragMode.UpperHandle:
+                UpperValue = value;
+                break;
+            case DragMode.LowerHandle:
+                LowerValue = value;
+                break;
+            case DragMode.Range:
+                MoveSelectedRange(value - _dragStartPointerValue);
+                break;
+        }
+    }
+
+    private void MoveSelectedRange(double delta)
+    {
+        var lower = Math.Min(_dragStartLowerValue, _dragStartUpperValue);
+        var upper = Math.Max(_dragStartLowerValue, _dragStartUpperValue);
+        var span = upper - lower;
+        var requestedLower = lower + delta;
+        var requestedUpper = upper + delta;
+        if (requestedLower < Minimum)
+        {
+            requestedLower = Minimum;
+            requestedUpper = requestedLower + span;
+        }
+
+        if (requestedUpper > Maximum)
+        {
+            requestedUpper = Maximum;
+            requestedLower = requestedUpper - span;
+        }
+
+        LowerValue = Clamp(requestedLower, Minimum, Maximum);
+        UpperValue = Clamp(requestedUpper, Minimum, Maximum);
+    }
+
+    private double PointerToValue(Point pointer)
+    {
+        return Orientation == Orientation.Horizontal
             ? HorizontalPositionToValue(pointer.X)
             : VerticalPositionToValue(pointer.Y);
+    }
 
-        if (_isDraggingUpperHandle)
-        {
-            UpperValue = value;
-        }
-        else
-        {
-            LowerValue = value;
-        }
+    private static bool IsPointerInsideSelectedRange(double pointerPosition, double lowerPosition, double upperPosition)
+    {
+        var start = Math.Min(lowerPosition, upperPosition);
+        var end = Math.Max(lowerPosition, upperPosition);
+        return pointerPosition >= start && pointerPosition <= end;
     }
 
     private double ValueToHorizontalPosition(double value)
@@ -284,4 +352,12 @@ public sealed class AxisRangeBrush : FrameworkElement
 
     private static double Clamp(double value, double minimum, double maximum) =>
         Math.Min(Math.Max(value, minimum), maximum);
+
+    private enum DragMode
+    {
+        None,
+        LowerHandle,
+        UpperHandle,
+        Range,
+    }
 }

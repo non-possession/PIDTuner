@@ -56,6 +56,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("main view model checks plc communication after loading configuration", MainViewModelChecksPlcCommunicationAfterLoadingConfiguration),
     ("main view model checks plc communication through injected probe", MainViewModelChecksPlcCommunicationThroughInjectedProbe),
     ("main view model refreshes plc monitor snapshots and trends", MainViewModelRefreshesPlcMonitorSnapshotsAndTrends),
+    ("main view model shows live snapshots as historical trend", MainViewModelShowsLiveSnapshotsAsHistoricalTrend),
     ("main view model reuses a plc session while live monitoring", MainViewModelReusesPlcSessionWhileLiveMonitoring),
     ("main view model toggles live diagnostics while monitoring", MainViewModelTogglesLiveDiagnosticsWhileMonitoring),
     ("main view model filters diagnostics frames before session start", MainViewModelFiltersDiagnosticsFramesBeforeSessionStart),
@@ -1160,6 +1161,55 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     await viewModel.RefreshPlcMonitorAsync();
     AssertEqual(editedAddress, viewModel.LiveMonitor.Tags[0].Address, "monitor address after configuration edit");
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
+}
+
+static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
+{
+    var directory = CreateTestStorageDirectory();
+    var reader = new SequencePlcTagSnapshotReader();
+    var viewModel = new MainWindowViewModel(
+        new NoFileDialogService(),
+        new JsonPidSampleFieldProfileStore(),
+        new JsonPlcProjectConfigurationStore(),
+        plcTagSnapshotReader: reader,
+        testSessionStorageDirectory: directory,
+        plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
+
+    var viewportRequestCount = 0;
+    DateTimeOffset? requestedViewportStart = null;
+    DateTimeOffset? requestedViewportEnd = null;
+    var batchAppliedCount = 0;
+    viewModel.PlcHistoricalViewportRequested += (start, end) =>
+    {
+        viewportRequestCount++;
+        requestedViewportStart = start;
+        requestedViewportEnd = end;
+    };
+    viewModel.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
+
+    await viewModel.RefreshPlcMonitorAsync();
+    await viewModel.RefreshPlcMonitorAsync();
+    await viewModel.RefreshPlcMonitorAsync();
+    await viewModel.ShowPlcHistoricalTrendAsync();
+
+    AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live snapshots switch to historical trend mode");
+    AssertEqual(true, viewModel.HistoricalTrendWorkbench.HasDataset, "live snapshots create historical dataset");
+    AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsViewportEnabled, "live snapshots enable x viewport slider");
+    AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsYSliderEnabled, "live snapshots enable y slider");
+    AssertEqual(1, batchAppliedCount, "live snapshots publish one historical frame batch");
+    AssertEqual(3, viewModel.LastPlcRecordingFrames.Count, "live snapshots are retained as historical frames");
+
+    viewModel.HistoricalTrendWorkbench.ViewportStart =
+        viewModel.HistoricalTrendWorkbench.ViewportMinimum +
+        (viewModel.HistoricalTrendWorkbench.ViewportMaximum - viewModel.HistoricalTrendWorkbench.ViewportMinimum) / 2d;
+    AssertEqual(1, viewportRequestCount, "live historical x slider requests viewport update");
+    AssertEqual(true, requestedViewportStart.HasValue, "live historical x slider start timestamp");
+    AssertEqual(true, requestedViewportEnd.HasValue, "live historical x slider end timestamp");
+
+    await viewModel.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
+    AssertEqual(2, viewportRequestCount, "live historical preset requests viewport update");
+    AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live historical preset keeps trend mode");
+    AssertContains("历史趋势窗口", viewModel.PlcMonitorStatus);
 }
 
 static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
