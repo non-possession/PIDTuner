@@ -43,6 +43,7 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     private double _totalRightYMaximum = 1d;
     private bool _isViewportEnabled;
     private bool _isYSliderEnabled;
+    private bool _isDualAxisLayout = true;
     private Guid? _selectedLeftAxisSeriesId;
     private Guid? _selectedRightAxisSeriesId;
     private bool _isUpdatingSliderState;
@@ -270,6 +271,20 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _isYSliderEnabled, value);
     }
 
+    public bool IsSingleAxisLayout => !IsDualAxisLayout;
+
+    public bool IsDualAxisLayout
+    {
+        get => _isDualAxisLayout;
+        private set
+        {
+            if (SetProperty(ref _isDualAxisLayout, value))
+            {
+                OnPropertyChanged(nameof(IsSingleAxisLayout));
+            }
+        }
+    }
+
     public void LoadDataset(HistoricalTrendDataset dataset)
     {
         State = _coordinator.LoadDataset(dataset);
@@ -290,6 +305,28 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         ViewportEndLabel = string.Empty;
         SelectedLeftAxisSeriesId = null;
         SelectedRightAxisSeriesId = null;
+    }
+
+    public void UseSingleAxisLayout()
+    {
+        if (!IsDualAxisLayout)
+        {
+            return;
+        }
+
+        IsDualAxisLayout = false;
+        StatusRequested?.Invoke("历史趋势已切换为单轴布局。", null);
+    }
+
+    public void UseDualAxisLayout()
+    {
+        if (IsDualAxisLayout)
+        {
+            return;
+        }
+
+        IsDualAxisLayout = true;
+        StatusRequested?.Invoke("历史趋势已切换为双轴布局。", null);
     }
 
     public void LoadFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
@@ -450,6 +487,47 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         }
 
         ApplyViewport(range.Start, range.End, updateSliderValues: true);
+    }
+
+    public bool TrySetVisibleDuration(TimeSpan duration, out string? error)
+    {
+        error = null;
+        if (!_totalStart.HasValue || !_totalEnd.HasValue)
+        {
+            error = "当前没有可用的历史趋势时间范围。";
+            return false;
+        }
+
+        var requested = duration < TimeSpan.FromSeconds(10)
+            ? TimeSpan.FromSeconds(10)
+            : duration;
+        var fullRange = _totalEnd.Value - _totalStart.Value;
+        if (requested >= fullRange)
+        {
+            ApplyViewport(_totalStart.Value, _totalEnd.Value, updateSliderValues: true);
+            return true;
+        }
+
+        var end = VisibleTimeRange?.End ?? _totalEnd.Value;
+        if (end > _totalEnd.Value || end <= _totalStart.Value)
+        {
+            end = _totalEnd.Value;
+        }
+
+        var start = end - requested;
+        if (start < _totalStart.Value)
+        {
+            start = _totalStart.Value;
+            end = start + requested;
+            if (end > _totalEnd.Value)
+            {
+                end = _totalEnd.Value;
+            }
+        }
+
+        ApplyViewport(start, end, updateSliderValues: true);
+        StatusRequested?.Invoke($"历史趋势窗口已调整为 {FormatDuration(requested)}。", "历史趋势视图");
+        return true;
     }
 
     public void SetVisibleYRange(double minimum, double maximum)
@@ -825,6 +903,15 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     private static string FormatTimestamp(DateTimeOffset timestamp)
     {
         return timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 1
+            ? $"{duration.TotalHours:0.#}h"
+            : duration.TotalMinutes >= 1
+                ? $"{duration.TotalMinutes:0.#}min"
+                : $"{duration.TotalSeconds:0.#}s";
     }
 
     private static double ClampAxisSliderValue(double value, double minimum, double maximum)

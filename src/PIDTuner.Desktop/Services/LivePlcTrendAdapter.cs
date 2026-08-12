@@ -70,6 +70,8 @@ public sealed class LivePlcTrendAdapter
         set => _isLiveScrollingPaused = value;
     }
 
+    public bool IsDualAxisLayout { get; set; } = true;
+
     public void SetHistoricalVisibleRange(DateTimeOffset? start, DateTimeOffset? end)
     {
         _historicalVisibleStart = start;
@@ -274,7 +276,7 @@ public sealed class LivePlcTrendAdapter
                 tag.TagId,
                 tag.Name,
                 tag.Unit,
-                tag.AxisGroup,
+                IsDualAxisLayout ? tag.AxisGroup : "Y1",
                 _pointsByTag[tag.TagId]))
             .ToArray();
     }

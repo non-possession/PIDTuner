@@ -33,7 +33,7 @@ public partial class MainWindow : Window
 
     private void ResetPlcTrendChart()
     {
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        ApplyPlcTrendChartState();
         _plcTrendChartAdapter.Clear();
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
@@ -43,8 +43,7 @@ public partial class MainWindow : Window
         DateTimeOffset? trendTimestamp)
     {
         ConfigurePlcTrendRetention();
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
+        ApplyPlcTrendChartState();
         _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.LiveMonitor.Tags, trendTimestamp);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
@@ -52,21 +51,20 @@ public partial class MainWindow : Window
     private void ApplyPlcTrendSnapshotFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
     {
         ConfigurePlcTrendRetention();
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
+        ApplyPlcTrendChartState();
         _plcTrendChartAdapter.AppendSnapshotFrames(frames, _viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainWindowViewModel.PlcTrendMode))
+        if (e.PropertyName != nameof(MainWindowViewModel.PlcTrendMode) &&
+            e.PropertyName != nameof(MainWindowViewModel.HistoricalTrendWorkbench))
         {
             return;
         }
 
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
+        ApplyPlcTrendChartState();
         if (!_viewModel.PlcTrendMode.IsLiveScrollingPaused)
         {
             _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
@@ -93,15 +91,21 @@ public partial class MainWindow : Window
             }
         }
 
-        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        ApplyPlcTrendChartState();
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
     }
 
     private void PlcMonitorTag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible))
+        if (e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible) ||
+            e.PropertyName == nameof(PlcTagMonitorViewModel.AxisGroup))
         {
-            _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+            if (_viewModel.HistoricalTrendWorkbench.IsDualAxisLayout)
+            {
+                _viewModel.LiveMonitor.EnsureVisibleAxisGroups();
+            }
+
+            ApplyPlcTrendChartState();
             _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
     }
@@ -118,9 +122,18 @@ public partial class MainWindow : Window
     private async void PlcTrendWindow5Minutes_Click(object sender, RoutedEventArgs e) =>
         await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(5));
 
+    private async void PlcTrendWindow10Minutes_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(10));
+
+    private async void PlcTrendWindow30Minutes_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromMinutes(30));
+
+    private async void PlcTrendWindow1Hour_Click(object sender, RoutedEventArgs e) =>
+        await SetPlcTrendWindowAsync(TimeSpan.FromHours(1));
+
     private void ApplyPlcHistoricalViewport(DateTimeOffset? start, DateTimeOffset? end)
     {
-        _plcTrendChartAdapter.ShowFullHistory = true;
+        ApplyPlcTrendChartState();
         _plcTrendChartAdapter.SetHistoricalVisibleRange(start, end);
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
@@ -164,12 +177,17 @@ public partial class MainWindow : Window
 
     private async Task SetPlcTrendWindowAsync(TimeSpan window)
     {
+        if (_viewModel.PlcTrendMode.IsHistoricalMode)
+        {
+            await _viewModel.SetPlcHistoricalTrendWindowAsync(window);
+            return;
+        }
+
         var wasHistoricalTrendMode = _viewModel.PlcTrendMode.IsHistoricalMode;
         _viewModel.UsePlcLiveTrendMode();
         ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.VisibleWindow = window;
-        _plcTrendChartAdapter.ShowFullHistory = false;
-        _plcTrendChartAdapter.IsLiveScrollingPaused = false;
+        ApplyPlcTrendChartState();
         if (wasHistoricalTrendMode)
         {
             await _viewModel.ShowPlcLiveTrendAsync();
@@ -220,5 +238,12 @@ public partial class MainWindow : Window
             TimeSpan.FromMilliseconds(MainWindowViewModel.LiveMonitorUiRefreshMilliseconds);
         _plcTrendChartAdapter.LiveSamplingInterval =
             TimeSpan.FromMilliseconds(_viewModel.CurrentPlcAcquisitionIntervalMilliseconds);
+    }
+
+    private void ApplyPlcTrendChartState()
+    {
+        _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
+        _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
+        _plcTrendChartAdapter.IsDualAxisLayout = _viewModel.HistoricalTrendWorkbench.IsDualAxisLayout;
     }
 }

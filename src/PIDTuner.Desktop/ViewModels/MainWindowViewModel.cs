@@ -158,6 +158,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadPlcRecordingCommand = new AsyncCommand(LoadPlcRecordingAsync);
         ShowPlcLiveTrendCommand = new AsyncCommand(ShowPlcLiveTrendAsync);
         ShowPlcHistoricalTrendCommand = new AsyncCommand(ShowPlcHistoricalTrendAsync);
+        SetPlcSingleAxisLayoutCommand = new AsyncCommand(SetPlcSingleAxisLayoutAsync);
+        SetPlcDualAxisLayoutCommand = new AsyncCommand(SetPlcDualAxisLayoutAsync);
         TogglePlcLiveTrendPauseCommand = new AsyncCommand(TogglePlcLiveTrendPauseAsync);
         ApplyPlcHistoricalRangeCommand = new AsyncCommand(ApplyPlcHistoricalRangeAsync);
         ResetPlcHistoricalRangeCommand = new AsyncCommand(ResetPlcHistoricalRangeAsync);
@@ -378,6 +380,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand ShowPlcLiveTrendCommand { get; }
 
     public ICommand ShowPlcHistoricalTrendCommand { get; }
+
+    public ICommand SetPlcSingleAxisLayoutCommand { get; }
+
+    public ICommand SetPlcDualAxisLayoutCommand { get; }
 
     public ICommand TogglePlcLiveTrendPauseCommand { get; }
 
@@ -878,6 +884,37 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         PlcTrendMode.ToggleLiveScrollingPause();
+        return Task.CompletedTask;
+    }
+
+    public Task SetPlcSingleAxisLayoutAsync()
+    {
+        HistoricalTrendWorkbench.UseSingleAxisLayout();
+        return Task.CompletedTask;
+    }
+
+    public Task SetPlcDualAxisLayoutAsync()
+    {
+        HistoricalTrendWorkbench.UseDualAxisLayout();
+        LiveMonitor.EnsureVisibleAxisGroups();
+        return Task.CompletedTask;
+    }
+
+    public Task SetPlcHistoricalTrendWindowAsync(TimeSpan window)
+    {
+        if (!EnsurePlcReplayLoaded())
+        {
+            return Task.CompletedTask;
+        }
+
+        PlcTrendMode.UseHistoricalMode();
+        if (!HistoricalTrendWorkbench.TrySetVisibleDuration(window, out var error))
+        {
+            Notify("历史趋势窗口无效", error ?? "当前没有可用的历史趋势数据。", "Warning");
+            return Task.CompletedTask;
+        }
+
+        Debug.UpdateReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
 

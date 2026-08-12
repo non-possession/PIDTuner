@@ -1431,9 +1431,26 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsViewportEnabled, "historical viewport slider enabled");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsYSliderEnabled, "historical y slider enabled");
+    AssertEqual(true, loader.HistoricalTrendWorkbench.IsDualAxisLayout, "historical workbench defaults dual axis");
     AssertEqual("Y1", loader.LiveMonitor.Tags[0].AxisGroup, "historical tag defaults to y1 axis");
     loader.LiveMonitor.Tags[0].AxisGroup = "Y2";
     AssertEqual("Y2", loader.LiveMonitor.Tags[0].AxisGroup, "historical tag can move to y2 axis");
+    await loader.SetPlcSingleAxisLayoutAsync();
+    AssertEqual(true, loader.HistoricalTrendWorkbench.IsSingleAxisLayout, "historical workbench switches single axis");
+    await loader.SetPlcDualAxisLayoutAsync();
+    AssertEqual(true, loader.HistoricalTrendWorkbench.IsDualAxisLayout, "historical workbench switches dual axis");
+    if (loader.LiveMonitor.Tags.Count > 1)
+    {
+        foreach (var tag in loader.LiveMonitor.Tags)
+        {
+            tag.AxisGroup = "Y2";
+        }
+
+        loader.LiveMonitor.EnsureVisibleAxisGroups();
+        AssertEqual(true, loader.LiveMonitor.Tags.Any(tag => tag.AxisGroup == "Y1"), "dual axis keeps a y1 series");
+        AssertEqual(true, loader.LiveMonitor.Tags.Any(tag => tag.AxisGroup == "Y2"), "dual axis keeps a y2 series");
+    }
+
     AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId.HasValue, "historical y1 selected series");
     AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedRightAxisSeriesId.HasValue, "historical y2 selected series");
 
@@ -1450,6 +1467,13 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.ResetPlcHistoricalRangeAsync();
     AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+    await loader.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
+    AssertEqual(3, viewportRequestCount, "historical preset requests viewport update");
+    AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical preset keeps trend mode");
+    AssertEqual(
+        true,
+        requestedViewportEnd - requestedViewportStart <= TimeSpan.FromSeconds(10),
+        "historical preset clamps visible duration");
 
     var historicalTimestamps = loader.LastPlcRecordingFrames
         .Where(frame => frame.Count > 0)
@@ -1461,7 +1485,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     var sliderStart = loader.HistoricalTrendWorkbench.ViewportMinimum +
         (loader.HistoricalTrendWorkbench.ViewportMaximum - loader.HistoricalTrendWorkbench.ViewportMinimum) / 2d;
     loader.HistoricalTrendWorkbench.ViewportStart = sliderStart;
-    AssertEqual(3, viewportRequestCount, "historical start slider requests viewport update");
+    AssertEqual(4, viewportRequestCount, "historical start slider requests viewport update");
     var expectedMiddleTimestamp = new DateTimeOffset(
         historicalTimestamps[0].Ticks + (long)Math.Round((historicalTimestamps[^1].Ticks - historicalTimestamps[0].Ticks) / 2d),
         historicalTimestamps[0].Offset);

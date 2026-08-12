@@ -86,6 +86,25 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
         SelectedTag = null;
     }
 
+    public void EnsureVisibleAxisGroups()
+    {
+        var visibleTags = Tags.Where(tag => tag.IsTrendVisible).ToArray();
+        if (visibleTags.Length < 2)
+        {
+            return;
+        }
+
+        if (!visibleTags.Any(tag => tag.AxisGroup == "Y1"))
+        {
+            visibleTags[0].AxisGroup = "Y1";
+        }
+
+        if (!visibleTags.Any(tag => tag.AxisGroup == "Y2"))
+        {
+            visibleTags[^1].AxisGroup = "Y2";
+        }
+    }
+
     public PlcLiveMonitorDrainResult DrainPresentedFrames()
     {
         var frames = _sampleBuffer.Drain();

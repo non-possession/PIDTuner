@@ -11,6 +11,7 @@
         MinHeight="640">
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    <controls:AllTrueToVisibilityConverter x:Key="AllTrueToVisibilityConverter" />
     <Style TargetType="{x:Type TabItem}">
       <Setter Property="FontSize"
               Value="15" />
@@ -70,6 +71,36 @@
                   Value="#3B82F6" />
           <Setter Property="Foreground"
                   Value="#1D4ED8" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="SingleAxisLayoutButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource TrendModeButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding HistoricalTrendWorkbench.IsSingleAxisLayout}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="#E0F2FE" />
+          <Setter Property="BorderBrush"
+                  Value="#0284C7" />
+          <Setter Property="Foreground"
+                  Value="#075985" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="DualAxisLayoutButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource TrendModeButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding HistoricalTrendWorkbench.IsDualAxisLayout}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="#FEF3C7" />
+          <Setter Property="BorderBrush"
+                  Value="#F59E0B" />
+          <Setter Property="Foreground"
+                  Value="#92400E" />
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -470,8 +501,14 @@
                                          Maximum="{Binding HistoricalTrendWorkbench.YSliderMaximum}"
                                          LowerValue="{Binding HistoricalTrendWorkbench.RightYLower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          UpperValue="{Binding HistoricalTrendWorkbench.RightYUpper, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         IsEnabled="{Binding HistoricalTrendWorkbench.IsYSliderEnabled}"
-                                         Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                         IsEnabled="{Binding HistoricalTrendWorkbench.IsYSliderEnabled}">
+                  <controls:AxisRangeBrush.Visibility>
+                    <MultiBinding Converter="{StaticResource AllTrueToVisibilityConverter}">
+                      <Binding Path="PlcTrendMode.IsHistoricalMode" />
+                      <Binding Path="HistoricalTrendWorkbench.IsDualAxisLayout" />
+                    </MultiBinding>
+                  </controls:AxisRangeBrush.Visibility>
+                </controls:AxisRangeBrush>
 
                 <Border Grid.Column="4"
                         Grid.RowSpan="2"
@@ -479,8 +516,13 @@
                         Padding="8"
                         BorderBrush="#CBD5E1"
                         BorderThickness="1"
-                        Background="#F1F5F9"
-                        Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        Background="#F1F5F9">
+                  <Border.Visibility>
+                    <MultiBinding Converter="{StaticResource AllTrueToVisibilityConverter}">
+                      <Binding Path="PlcTrendMode.IsHistoricalMode" />
+                      <Binding Path="HistoricalTrendWorkbench.IsDualAxisLayout" />
+                    </MultiBinding>
+                  </Border.Visibility>
                   <StackPanel>
                     <TextBlock Text="Y2 轴面板"
                                FontSize="15"
@@ -609,6 +651,21 @@
                       Height="28"
                       Margin="0,0,8,8"
                       Click="PlcTrendWindow5Minutes_Click" />
+              <Button Content="10min"
+                      Width="62"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow10Minutes_Click" />
+              <Button Content="30min"
+                      Width="62"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow30Minutes_Click" />
+              <Button Content="1h"
+                      Width="48"
+                      Height="28"
+                      Margin="0,0,8,8"
+                      Click="PlcTrendWindow1Hour_Click" />
               <Button Command="{Binding RefreshPlcMonitorCommand}"
                       Content="刷新点位"
                       Width="82"
@@ -624,6 +681,18 @@
                       Height="28"
                       Margin="0,0,8,8"
                       Click="PlcTrendExportVisible_Click" />
+              <Button Command="{Binding SetPlcSingleAxisLayoutCommand}"
+                      Content="单轴布局"
+                      Height="28"
+                      Width="82"
+                      Margin="0,0,8,8"
+                      Style="{StaticResource SingleAxisLayoutButtonStyle}" />
+              <Button Command="{Binding SetPlcDualAxisLayoutCommand}"
+                      Content="双轴布局"
+                      Height="28"
+                      Width="82"
+                      Margin="0,0,8,8"
+                      Style="{StaticResource DualAxisLayoutButtonStyle}" />
               <Button Command="{Binding ShowPlcLiveTrendCommand}"
                       Content="实时趋势"
                       Height="28"
