@@ -289,6 +289,14 @@ V2.0 的架构目标是：
 
 该模块把“快照如何变成 UI 行状态”的细节从根 ViewModel 移走。根 ViewModel 仍保留诊断入队和图表事件转发，因为它们连接调试模块和 View code-behind。
 
+### 3.14 历史趋势绑定收口
+
+当前约束：
+
+- 历史趋势范围文本、X 轴 viewport 滑块、Y 轴范围滑块和启用状态只能通过 `HistoricalTrendWorkbenchViewModel` 暴露。
+- `MainWindowViewModel` 不再提供 `PlcHistoricalRangeStartText`、`PlcHistoricalViewportStart`、`PlcTrendYLower` 这类历史趋势细节包装属性。
+- 测试和后续 XAML 绑定应直接访问 `HistoricalTrendWorkbench.*`，避免把历史工作台交互状态重新铺回根 ViewModel。
+
 ## 4. 关键接口原则
 
 ### 4.1 两个适配器

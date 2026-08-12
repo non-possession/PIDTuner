@@ -355,106 +355,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _plcTrendModeStatus, value);
     }
 
-    public string PlcHistoricalRangeStartText
-    {
-        get => HistoricalTrendWorkbench.RangeStartText;
-        set
-        {
-            if (HistoricalTrendWorkbench.RangeStartText == value)
-            {
-                return;
-            }
-
-            HistoricalTrendWorkbench.RangeStartText = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string PlcHistoricalRangeEndText
-    {
-        get => HistoricalTrendWorkbench.RangeEndText;
-        set
-        {
-            if (HistoricalTrendWorkbench.RangeEndText == value)
-            {
-                return;
-            }
-
-            HistoricalTrendWorkbench.RangeEndText = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string PlcTrendYMinText
-    {
-        get => HistoricalTrendWorkbench.YMinimumText;
-        set
-        {
-            if (HistoricalTrendWorkbench.YMinimumText == value)
-            {
-                return;
-            }
-
-            HistoricalTrendWorkbench.YMinimumText = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string PlcTrendYMaxText
-    {
-        get => HistoricalTrendWorkbench.YMaximumText;
-        set
-        {
-            if (HistoricalTrendWorkbench.YMaximumText == value)
-            {
-                return;
-            }
-
-            HistoricalTrendWorkbench.YMaximumText = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string PlcHistoricalViewportStartLabel => HistoricalTrendWorkbench.ViewportStartLabel;
-
-    public string PlcHistoricalViewportEndLabel => HistoricalTrendWorkbench.ViewportEndLabel;
-
-    public double PlcHistoricalViewportMinimum => HistoricalTrendWorkbench.ViewportMinimum;
-
-    public double PlcHistoricalViewportMaximum => HistoricalTrendWorkbench.ViewportMaximum;
-
-    public double PlcHistoricalViewportStart
-    {
-        get => HistoricalTrendWorkbench.ViewportStart;
-        set => HistoricalTrendWorkbench.ViewportStart = Math.Min(value, PlcHistoricalViewportEnd);
-    }
-
-    public double PlcHistoricalViewportEnd
-    {
-        get => HistoricalTrendWorkbench.ViewportEnd;
-        set => HistoricalTrendWorkbench.ViewportEnd = Math.Max(value, PlcHistoricalViewportStart);
-    }
-
-    public double PlcTrendYSliderMinimum => HistoricalTrendWorkbench.YSliderMinimum;
-
-    public double PlcTrendYSliderMaximum => HistoricalTrendWorkbench.YSliderMaximum;
-
-    public double PlcTrendYLower
-    {
-        get => HistoricalTrendWorkbench.YLower;
-        set => HistoricalTrendWorkbench.YLower = Math.Min(value, PlcTrendYUpper);
-    }
-
-    public double PlcTrendYUpper
-    {
-        get => HistoricalTrendWorkbench.YUpper;
-        set => HistoricalTrendWorkbench.YUpper = Math.Max(value, PlcTrendYLower);
-    }
-
-    public bool IsPlcHistoricalViewportEnabled => HistoricalTrendWorkbench.IsViewportEnabled;
-
-    public bool IsPlcTrendYSliderEnabled => HistoricalTrendWorkbench.IsYSliderEnabled;
-
     public bool IsPlcHistoricalTrendMode
     {
         get => _isPlcHistoricalTrendMode;
@@ -902,10 +802,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void HistoricalTrendWorkbench_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        foreach (var propertyName in MapHistoricalTrendProperty(e.PropertyName))
-        {
-            OnPropertyChanged(propertyName);
-        }
+        OnPropertyChanged(nameof(HistoricalTrendWorkbench));
     }
 
     private void LiveMonitor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1019,30 +916,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
                 break;
         }
-    }
-
-    private static IReadOnlyList<string> MapHistoricalTrendProperty(string? propertyName)
-    {
-        return propertyName switch
-        {
-            nameof(HistoricalTrendWorkbenchViewModel.RangeStartText) => [nameof(PlcHistoricalRangeStartText)],
-            nameof(HistoricalTrendWorkbenchViewModel.RangeEndText) => [nameof(PlcHistoricalRangeEndText)],
-            nameof(HistoricalTrendWorkbenchViewModel.YMinimumText) => [nameof(PlcTrendYMinText)],
-            nameof(HistoricalTrendWorkbenchViewModel.YMaximumText) => [nameof(PlcTrendYMaxText)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportStartLabel) => [nameof(PlcHistoricalViewportStartLabel)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportEndLabel) => [nameof(PlcHistoricalViewportEndLabel)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportMinimum) => [nameof(PlcHistoricalViewportMinimum)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportMaximum) => [nameof(PlcHistoricalViewportMaximum)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportStart) => [nameof(PlcHistoricalViewportStart)],
-            nameof(HistoricalTrendWorkbenchViewModel.ViewportEnd) => [nameof(PlcHistoricalViewportEnd)],
-            nameof(HistoricalTrendWorkbenchViewModel.YSliderMinimum) => [nameof(PlcTrendYSliderMinimum)],
-            nameof(HistoricalTrendWorkbenchViewModel.YSliderMaximum) => [nameof(PlcTrendYSliderMaximum)],
-            nameof(HistoricalTrendWorkbenchViewModel.YLower) => [nameof(PlcTrendYLower)],
-            nameof(HistoricalTrendWorkbenchViewModel.YUpper) => [nameof(PlcTrendYUpper)],
-            nameof(HistoricalTrendWorkbenchViewModel.IsViewportEnabled) => [nameof(IsPlcHistoricalViewportEnabled)],
-            nameof(HistoricalTrendWorkbenchViewModel.IsYSliderEnabled) => [nameof(IsPlcTrendYSliderEnabled)],
-            _ => Array.Empty<string>()
-        };
     }
 
     private static IReadOnlyList<string> MapOfflineAnalysisProperty(string? propertyName)
@@ -1448,7 +1321,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         IsPlcHistoricalTrendMode = true;
-        PlcMonitorStatus = $"历史趋势视图已调整：{PlcHistoricalRangeStartText} - {PlcHistoricalRangeEndText}。";
+        PlcMonitorStatus =
+            $"历史趋势视图已调整：{HistoricalTrendWorkbench.RangeStartText} - {HistoricalTrendWorkbench.RangeEndText}。";
         Debug.UpdateReplayStatus("历史趋势视图");
         return Task.CompletedTask;
     }
@@ -1481,7 +1355,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
-        PlcMonitorStatus = $"趋势 Y 轴范围已调整：{PlcTrendYMinText} - {PlcTrendYMaxText}。";
+        PlcMonitorStatus =
+            $"趋势 Y 轴范围已调整：{HistoricalTrendWorkbench.YMinimumText} - {HistoricalTrendWorkbench.YMaximumText}。";
         return Task.CompletedTask;
     }
 

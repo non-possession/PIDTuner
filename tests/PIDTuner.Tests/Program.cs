@@ -1420,13 +1420,13 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
     AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
-    AssertEqual(true, loader.IsPlcHistoricalViewportEnabled, "historical viewport slider enabled");
-    AssertEqual(true, loader.IsPlcTrendYSliderEnabled, "historical y slider enabled");
+    AssertEqual(true, loader.HistoricalTrendWorkbench.IsViewportEnabled, "historical viewport slider enabled");
+    AssertEqual(true, loader.HistoricalTrendWorkbench.IsYSliderEnabled, "historical y slider enabled");
 
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
-    loader.PlcHistoricalRangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
-    loader.PlcHistoricalRangeEndText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
+    loader.HistoricalTrendWorkbench.RangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
+    loader.HistoricalTrendWorkbench.RangeEndText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
     await loader.ApplyPlcHistoricalRangeAsync();
     AssertEqual(1, viewportRequestCount, "historical range requests viewport update");
     AssertEqual(selectedHistoricalTimestamp, requestedViewportStart, "historical viewport start");
@@ -1442,11 +1442,11 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         .Select(frame => frame.Min(snapshot => snapshot.Timestamp))
         .Order()
         .ToArray();
-    AssertEqual(0d, loader.PlcHistoricalViewportMinimum, "historical slider normalized minimum");
-    AssertEqual(1000d, loader.PlcHistoricalViewportMaximum, "historical slider normalized maximum");
-    var sliderStart = loader.PlcHistoricalViewportMinimum +
-        (loader.PlcHistoricalViewportMaximum - loader.PlcHistoricalViewportMinimum) / 2d;
-    loader.PlcHistoricalViewportStart = sliderStart;
+    AssertEqual(0d, loader.HistoricalTrendWorkbench.ViewportMinimum, "historical slider normalized minimum");
+    AssertEqual(1000d, loader.HistoricalTrendWorkbench.ViewportMaximum, "historical slider normalized maximum");
+    var sliderStart = loader.HistoricalTrendWorkbench.ViewportMinimum +
+        (loader.HistoricalTrendWorkbench.ViewportMaximum - loader.HistoricalTrendWorkbench.ViewportMinimum) / 2d;
+    loader.HistoricalTrendWorkbench.ViewportStart = sliderStart;
     AssertEqual(3, viewportRequestCount, "historical start slider requests viewport update");
     var expectedMiddleTimestamp = new DateTimeOffset(
         historicalTimestamps[0].Ticks + (long)Math.Round((historicalTimestamps[^1].Ticks - historicalTimestamps[0].Ticks) / 2d),
@@ -1467,18 +1467,18 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     var yPadding = Math.Max((yMaximum - yMinimum) * 0.05d, 1d);
     yMinimum -= yPadding;
     yMaximum += yPadding;
-    AssertEqual(0d, loader.PlcTrendYSliderMinimum, "historical y slider normalized minimum");
-    AssertEqual(1000d, loader.PlcTrendYSliderMaximum, "historical y slider normalized maximum");
-    var sliderYLower = loader.PlcTrendYSliderMinimum +
-        (loader.PlcTrendYSliderMaximum - loader.PlcTrendYSliderMinimum) / 4d;
-    loader.PlcTrendYLower = sliderYLower;
+    AssertEqual(0d, loader.HistoricalTrendWorkbench.YSliderMinimum, "historical y slider normalized minimum");
+    AssertEqual(1000d, loader.HistoricalTrendWorkbench.YSliderMaximum, "historical y slider normalized maximum");
+    var sliderYLower = loader.HistoricalTrendWorkbench.YSliderMinimum +
+        (loader.HistoricalTrendWorkbench.YSliderMaximum - loader.HistoricalTrendWorkbench.YSliderMinimum) / 4d;
+    loader.HistoricalTrendWorkbench.YLower = sliderYLower;
     AssertEqual(1, yRangeRequestCount, "historical y lower slider requests y range update");
     AssertClose(yMinimum + ((yMaximum - yMinimum) * 0.25d), requestedYMin, 0.0001d, "historical y lower slider value");
     AssertClose(yMaximum, requestedYMax, 0.0001d, "historical y upper slider value");
 
     loader.UsePlcLiveTrendMode();
     AssertEqual(false, loader.IsPlcHistoricalTrendMode, "live plc trend mode");
-    AssertEqual(false, loader.IsPlcHistoricalViewportEnabled, "live plc trend disables historical slider");
+    AssertEqual(false, loader.HistoricalTrendWorkbench.IsViewportEnabled, "live plc trend disables historical slider");
     AssertContains("实时", loader.PlcTrendModeStatus);
 }
 
