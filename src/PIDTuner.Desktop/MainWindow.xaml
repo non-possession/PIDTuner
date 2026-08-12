@@ -417,7 +417,7 @@
                     <TextBlock Text="参考变量"
                                Margin="0,14,0,4"
                                Foreground="#6B7280" />
-                    <ComboBox ItemsSource="{Binding LiveMonitor.Tags}"
+                    <ComboBox ItemsSource="{Binding LiveMonitor.LeftAxisTags}"
                               SelectedValue="{Binding HistoricalTrendWorkbench.SelectedLeftAxisSeriesId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="TagId"
                               DisplayMemberPath="Name" />
@@ -532,7 +532,7 @@
                     <TextBlock Text="参考变量"
                                Margin="0,14,0,4"
                                Foreground="#6B7280" />
-                    <ComboBox ItemsSource="{Binding LiveMonitor.Tags}"
+                    <ComboBox ItemsSource="{Binding LiveMonitor.RightAxisTags}"
                               SelectedValue="{Binding HistoricalTrendWorkbench.SelectedRightAxisSeriesId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="TagId"
                               DisplayMemberPath="Name" />

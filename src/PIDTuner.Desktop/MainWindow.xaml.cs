@@ -92,6 +92,7 @@ public partial class MainWindow : Window
         }
 
         ApplyPlcTrendChartState();
+        EnsureSelectedHistoricalAxisSeries();
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
     }
 
@@ -105,6 +106,7 @@ public partial class MainWindow : Window
                 _viewModel.LiveMonitor.EnsureVisibleAxisGroups();
             }
 
+            EnsureSelectedHistoricalAxisSeries();
             ApplyPlcTrendChartState();
             _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
@@ -245,5 +247,12 @@ public partial class MainWindow : Window
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.PlcTrendMode.IsHistoricalMode;
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.PlcTrendMode.IsLiveScrollingPaused;
         _plcTrendChartAdapter.IsDualAxisLayout = _viewModel.HistoricalTrendWorkbench.IsDualAxisLayout;
+    }
+
+    private void EnsureSelectedHistoricalAxisSeries()
+    {
+        _viewModel.HistoricalTrendWorkbench.EnsureSelectedAxisSeries(
+            _viewModel.LiveMonitor.LeftAxisTags.Select(tag => tag.TagId).ToArray(),
+            _viewModel.LiveMonitor.RightAxisTags.Select(tag => tag.TagId).ToArray());
     }
 }

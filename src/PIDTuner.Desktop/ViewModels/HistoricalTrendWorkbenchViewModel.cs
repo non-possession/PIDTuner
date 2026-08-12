@@ -548,6 +548,34 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         State = _coordinator.SetSeriesVisibility(State, seriesId, isVisible);
     }
 
+    public void EnsureSelectedAxisSeries(
+        IReadOnlyList<Guid> leftAxisSeriesIds,
+        IReadOnlyList<Guid> rightAxisSeriesIds)
+    {
+        if (!IsDualAxisLayout)
+        {
+            var allIds = leftAxisSeriesIds.Concat(rightAxisSeriesIds).ToArray();
+            if (allIds.Length > 0 && (!SelectedLeftAxisSeriesId.HasValue || !allIds.Contains(SelectedLeftAxisSeriesId.Value)))
+            {
+                SelectedLeftAxisSeriesId = allIds[0];
+            }
+
+            return;
+        }
+
+        if (leftAxisSeriesIds.Count > 0 &&
+            (!SelectedLeftAxisSeriesId.HasValue || !leftAxisSeriesIds.Contains(SelectedLeftAxisSeriesId.Value)))
+        {
+            SelectedLeftAxisSeriesId = leftAxisSeriesIds[0];
+        }
+
+        if (rightAxisSeriesIds.Count > 0 &&
+            (!SelectedRightAxisSeriesId.HasValue || !rightAxisSeriesIds.Contains(SelectedRightAxisSeriesId.Value)))
+        {
+            SelectedRightAxisSeriesId = rightAxisSeriesIds[0];
+        }
+    }
+
     private void SetSliderStateFromFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
     {
         _isUpdatingSliderState = true;

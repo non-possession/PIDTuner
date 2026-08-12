@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -24,11 +25,18 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
     public PlcLiveMonitorViewModel(PlcAcquisitionEngine acquisitionEngine)
     {
         _acquisitionEngine = acquisitionEngine;
+        Tags.CollectionChanged += Tags_CollectionChanged;
     }
 
     public ObservableCollection<PlcTagMonitorViewModel> Tags { get; } = [];
 
     public IReadOnlyList<string> AxisGroups { get; } = ["Y1", "Y2"];
+
+    public IReadOnlyList<PlcTagMonitorViewModel> LeftAxisTags =>
+        Tags.Where(tag => tag.IsTrendVisible && tag.AxisGroup == "Y1").ToArray();
+
+    public IReadOnlyList<PlcTagMonitorViewModel> RightAxisTags =>
+        Tags.Where(tag => tag.IsTrendVisible && tag.AxisGroup == "Y2").ToArray();
 
     public PlcTagMonitorViewModel? SelectedTag
     {
@@ -103,6 +111,8 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
         {
             visibleTags[^1].AxisGroup = "Y2";
         }
+
+        RefreshAxisCandidateLists();
     }
 
     public PlcLiveMonitorDrainResult DrainPresentedFrames()
@@ -163,6 +173,42 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
             summary.AverageReadDurationMilliseconds,
             summary.P95ReadDurationMilliseconds,
             summary.LateFrameCount);
+    }
+
+    private void Tags_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null)
+        {
+            foreach (PlcTagMonitorViewModel tag in e.OldItems)
+            {
+                tag.PropertyChanged -= Tag_PropertyChanged;
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (PlcTagMonitorViewModel tag in e.NewItems)
+            {
+                tag.PropertyChanged += Tag_PropertyChanged;
+            }
+        }
+
+        RefreshAxisCandidateLists();
+    }
+
+    private void Tag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PlcTagMonitorViewModel.AxisGroup) ||
+            e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible))
+        {
+            RefreshAxisCandidateLists();
+        }
+    }
+
+    private void RefreshAxisCandidateLists()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LeftAxisTags)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RightAxisTags)));
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

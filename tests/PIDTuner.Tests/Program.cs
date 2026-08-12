@@ -1449,6 +1449,22 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         loader.LiveMonitor.EnsureVisibleAxisGroups();
         AssertEqual(true, loader.LiveMonitor.Tags.Any(tag => tag.AxisGroup == "Y1"), "dual axis keeps a y1 series");
         AssertEqual(true, loader.LiveMonitor.Tags.Any(tag => tag.AxisGroup == "Y2"), "dual axis keeps a y2 series");
+        AssertEqual(
+            true,
+            loader.LiveMonitor.LeftAxisTags.All(tag => tag.AxisGroup == "Y1"),
+            "left axis candidates only include y1 tags");
+        AssertEqual(
+            true,
+            loader.LiveMonitor.RightAxisTags.All(tag => tag.AxisGroup == "Y2"),
+            "right axis candidates only include y2 tags");
+        loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId = loader.LiveMonitor.RightAxisTags.First().TagId;
+        loader.HistoricalTrendWorkbench.EnsureSelectedAxisSeries(
+            loader.LiveMonitor.LeftAxisTags.Select(tag => tag.TagId).ToArray(),
+            loader.LiveMonitor.RightAxisTags.Select(tag => tag.TagId).ToArray());
+        AssertEqual(
+            true,
+            loader.LiveMonitor.LeftAxisTags.Any(tag => tag.TagId == loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId),
+            "left selected series is repaired to y1 candidate");
     }
 
     AssertEqual(true, loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId.HasValue, "historical y1 selected series");
