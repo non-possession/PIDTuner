@@ -29,7 +29,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly IPidSampleFieldProfileStore _fieldProfileStore;
+    private readonly FieldProfileWorkflow _fieldProfileWorkflow;
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
@@ -78,7 +78,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string? plcRecordingStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
-        _fieldProfileStore = fieldProfileStore;
+        _fieldProfileWorkflow = new FieldProfileWorkflow(fieldProfileStore);
         var resolvedPlcConnectivityProbe = plcConnectivityProbe
             ?? new ConfiguredPlcConnectivityProbe(new SiemensS7ConnectivityProbe(), new PingPlcConnectivityProbe());
         _plcTagSnapshotReader = plcTagSnapshotReader
@@ -452,10 +452,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using (var profileStream = File.OpenRead(fieldProfilePath))
-            {
-                FieldProfileEditor.LoadProfile(await _fieldProfileStore.LoadAsync(profileStream, CancellationToken.None));
-            }
+            FieldProfileEditor.LoadProfile(await _fieldProfileWorkflow.LoadAsync(fieldProfilePath, CancellationToken.None));
 
             await AnalyzeCsvFileAsync(csvPath);
         }
@@ -1624,8 +1621,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var fieldProfile = FieldProfileEditor.BuildProfileFromGrid();
-            await using var stream = File.Create(fileName);
-            await _fieldProfileStore.SaveAsync(fieldProfile, stream, CancellationToken.None);
+            await _fieldProfileWorkflow.SaveAsync(fieldProfile, fileName, CancellationToken.None);
             Notify("字段配置已保存", Path.GetFullPath(fileName), "Success");
         }
         catch (Exception exception)
@@ -1644,8 +1640,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using var stream = File.OpenRead(fileName);
-            FieldProfileEditor.LoadProfile(await _fieldProfileStore.LoadAsync(stream, CancellationToken.None));
+            FieldProfileEditor.LoadProfile(await _fieldProfileWorkflow.LoadAsync(fileName, CancellationToken.None));
             Notify("字段配置已加载", Path.GetFileName(fileName), "Success");
         }
         catch (Exception exception)
