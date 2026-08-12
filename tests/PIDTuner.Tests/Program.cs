@@ -1152,13 +1152,13 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     await viewModel.RefreshPlcMonitorAsync();
     await viewModel.RefreshPlcMonitorAsync();
 
-    AssertEqual(true, viewModel.PlcMonitorTags.Count > 0, "plc monitor tag count");
-    AssertEqual("2", viewModel.PlcMonitorTags[0].ValueText, "second monitor value");
-    AssertEqual(true, viewModel.PlcMonitorTags[0].TrendPoints.Count >= 2, "monitor trend point count");
+    AssertEqual(true, viewModel.LiveMonitor.Tags.Count > 0, "plc monitor tag count");
+    AssertEqual("2", viewModel.LiveMonitor.Tags[0].ValueText, "second monitor value");
+    AssertEqual(true, viewModel.LiveMonitor.Tags[0].TrendPoints.Count >= 2, "monitor trend point count");
     var editedAddress = "DB1.DBD120";
     viewModel.PlcConfigurationEditor.TagDefinitions[0].Address = editedAddress;
     await viewModel.RefreshPlcMonitorAsync();
-    AssertEqual(editedAddress, viewModel.PlcMonitorTags[0].Address, "monitor address after configuration edit");
+    AssertEqual(editedAddress, viewModel.LiveMonitor.Tags[0].Address, "monitor address after configuration edit");
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
@@ -1397,7 +1397,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.LoadPlcRecordingAsync();
 
     AssertEqual(true, loader.LastPlcRecordingFrames.Count > 0, "loaded plc recording frame count");
-    AssertEqual(true, loader.PlcMonitorTags.Count > 0, "loaded plc monitor tag count");
+    AssertEqual(true, loader.LiveMonitor.Tags.Count > 0, "loaded plc monitor tag count");
     AssertEqual(1, resetCount, "loaded plc trend reset count");
     AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
     AssertContains(Path.GetFullPath(recordingPath), loader.NotificationMessage);

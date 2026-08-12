@@ -45,8 +45,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _notificationMessage = string.Empty;
     private string _notificationKind = "Info";
     private bool _isNotificationVisible;
-    private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
-    private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
@@ -113,9 +111,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcConfigurationWorkflow = new PlcConfigurationWorkflow(
             plcProjectConfigurationStore,
             resolvedPlcConnectivityProbe);
-        _plcMonitorSnapshotPresenter = new PlcMonitorSnapshotPresenter(PlcMonitorTags);
-        _plcMonitorSnapshotPresenter.SnapshotsApplied += (snapshots, trendTimestamp) =>
-            PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
         var liveDiagnosticsStore = plcLiveDiagnosticsStore
             ?? new SqlitePlcLiveDiagnosticsStore(Path.Combine(
                 FindRepositoryRoot(),
@@ -123,10 +118,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "plc-diagnostics",
                 "plc-live-diagnostics.sqlite"));
         LiveMonitor = new PlcLiveMonitorViewModel(
-            PlcMonitorTags,
             new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync));
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
-        Debug = new PlcDebugViewModel(PlcMonitorTags, liveDiagnosticsStore);
+        _plcMonitorSnapshotPresenter = new PlcMonitorSnapshotPresenter(LiveMonitor.Tags);
+        _plcMonitorSnapshotPresenter.SnapshotsApplied += (snapshots, trendTimestamp) =>
+            PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
+        Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
         Debug.PropertyChanged += Debug_PropertyChanged;
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
@@ -367,18 +364,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _isNotificationVisible, value);
     }
 
-    public ObservableCollection<PlcTagMonitorViewModel> PlcMonitorTags
-    {
-        get => _plcMonitorTags;
-        private set => SetProperty(ref _plcMonitorTags, value);
-    }
-
-    public PlcTagMonitorViewModel? SelectedPlcMonitorTag
-    {
-        get => _selectedPlcMonitorTag;
-        set => SetProperty(ref _selectedPlcMonitorTag, value);
-    }
-
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadPlcConfigurationCommand { get; }
@@ -609,8 +594,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 IsPlcHistoricalTrendMode = false;
                 IsPlcLiveTrendPaused = false;
                 PlcTrendModeStatus = "当前趋势：实时";
-                PlcMonitorTags.Clear();
-                SelectedPlcMonitorTag = null;
+                LiveMonitor.ClearTags();
                 PlcTrendResetRequested?.Invoke();
             }
 
@@ -638,9 +622,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         DateTimeOffset? trendTimestamp = null,
         bool applyTrend = true)
     {
-        _plcMonitorSnapshotPresenter.SelectedTag = SelectedPlcMonitorTag;
+        _plcMonitorSnapshotPresenter.SelectedTag = LiveMonitor.SelectedTag;
         _plcMonitorSnapshotPresenter.Apply(snapshots, trendTimestamp, applyTrend);
-        SelectedPlcMonitorTag = _plcMonitorSnapshotPresenter.SelectedTag;
+        LiveMonitor.SelectedTag = _plcMonitorSnapshotPresenter.SelectedTag;
     }
 
     private void ApplyBufferedLiveMonitorFrames()
@@ -816,8 +800,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
             HistoricalTrendWorkbench.SetRangeTextFromFrames(recording.Frames);
 
-            PlcMonitorTags.Clear();
-            SelectedPlcMonitorTag = null;
+            LiveMonitor.ClearTags();
             PlcTrendResetRequested?.Invoke();
             if (showFullHistory)
             {
@@ -850,8 +833,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         await StopLiveMonitoringAsync();
         StopPlcReplay();
         UsePlcLiveTrendMode();
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
+        LiveMonitor.ClearTags();
         PlcTrendResetRequested?.Invoke();
         await RefreshPlcMonitorAsync();
     }
@@ -892,8 +874,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
+        LiveMonitor.ClearTags();
         PlcTrendResetRequested?.Invoke();
         ShowLoadedPlcHistoricalTrend();
     }
@@ -1035,8 +1016,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         if (result.ResetTrend)
         {
-            PlcMonitorTags.Clear();
-            SelectedPlcMonitorTag = null;
+            LiveMonitor.ClearTags();
             PlcTrendResetRequested?.Invoke();
         }
 
@@ -1708,8 +1688,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)
     {
         PlcConfigurationEditor.ApplyConfiguration(configuration);
-        PlcMonitorTags.Clear();
-        SelectedPlcMonitorTag = null;
+        LiveMonitor.ClearTags();
         PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
     }
 

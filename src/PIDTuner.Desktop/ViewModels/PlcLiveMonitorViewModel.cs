@@ -17,18 +17,22 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
     private bool _isMonitoring;
     private bool _isLiveTrendPaused;
     private int _currentAcquisitionIntervalMilliseconds;
+    private PlcTagMonitorViewModel? _selectedTag;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public PlcLiveMonitorViewModel(
-        ObservableCollection<PlcTagMonitorViewModel> tags,
-        PlcAcquisitionEngine acquisitionEngine)
+    public PlcLiveMonitorViewModel(PlcAcquisitionEngine acquisitionEngine)
     {
-        Tags = tags;
         _acquisitionEngine = acquisitionEngine;
     }
 
-    public ObservableCollection<PlcTagMonitorViewModel> Tags { get; }
+    public ObservableCollection<PlcTagMonitorViewModel> Tags { get; } = [];
+
+    public PlcTagMonitorViewModel? SelectedTag
+    {
+        get => _selectedTag;
+        set => SetProperty(ref _selectedTag, value);
+    }
 
     public bool IsMonitoring
     {
@@ -72,6 +76,12 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
         IsMonitoring = false;
         await _acquisitionEngine.StopAsync();
         _sampleBuffer.Clear();
+    }
+
+    public void ClearTags()
+    {
+        Tags.Clear();
+        SelectedTag = null;
     }
 
     public PlcLiveMonitorDrainResult DrainPresentedFrames()

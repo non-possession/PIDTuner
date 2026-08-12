@@ -26,7 +26,7 @@ public partial class MainWindow : Window
         _viewModel.PlcHistoricalViewportRequested += ApplyPlcHistoricalViewport;
         _viewModel.PlcTrendYRangeRequested += ApplyPlcTrendYRange;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
-        _viewModel.PlcMonitorTags.CollectionChanged += PlcMonitorTags_CollectionChanged;
+        _viewModel.LiveMonitor.Tags.CollectionChanged += PlcMonitorTags_CollectionChanged;
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -44,7 +44,7 @@ public partial class MainWindow : Window
         ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
-        _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.PlcMonitorTags, trendTimestamp);
+        _plcTrendChartAdapter.AppendSnapshots(snapshots, _viewModel.LiveMonitor.Tags, trendTimestamp);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         ConfigurePlcTrendRetention();
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
-        _plcTrendChartAdapter.AppendSnapshotFrames(frames, _viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.AppendSnapshotFrames(frames, _viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -69,7 +69,7 @@ public partial class MainWindow : Window
         _plcTrendChartAdapter.IsLiveScrollingPaused = _viewModel.IsPlcLiveTrendPaused;
         if (!_viewModel.IsPlcLiveTrendPaused)
         {
-            _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+            _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
 
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
@@ -94,7 +94,7 @@ public partial class MainWindow : Window
         }
 
         _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
-        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
     }
 
     private void PlcMonitorTag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -102,7 +102,7 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(PlcTagMonitorViewModel.IsTrendVisible))
         {
             _plcTrendChartAdapter.ShowFullHistory = _viewModel.IsPlcHistoricalTrendMode;
-            _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+            _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         }
     }
 
@@ -122,7 +122,7 @@ public partial class MainWindow : Window
     {
         _plcTrendChartAdapter.ShowFullHistory = true;
         _plcTrendChartAdapter.SetHistoricalVisibleRange(start, end);
-        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -137,13 +137,13 @@ public partial class MainWindow : Window
             _plcTrendChartAdapter.ClearManualYRange();
         }
 
-        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
     private async void PlcTrendExportVisible_Click(object sender, RoutedEventArgs e)
     {
-        var export = _plcTrendChartAdapter.CreateVisibleExport(_viewModel.PlcMonitorTags);
+        var export = _plcTrendChartAdapter.CreateVisibleExport(_viewModel.LiveMonitor.Tags);
         await _viewModel.ExportVisiblePlcTrendAsync(export);
     }
 
@@ -161,7 +161,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        _plcTrendChartAdapter.Render(_viewModel.PlcMonitorTags);
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
@@ -170,7 +170,7 @@ public partial class MainWindow : Window
         var summary = _plcTrendChartAdapter.BuildNearestPointSummary(
             e.GetPosition(PlcTrendPlot),
             new Size(PlcTrendPlot.ActualWidth, PlcTrendPlot.ActualHeight),
-            _viewModel.PlcMonitorTags);
+            _viewModel.LiveMonitor.Tags);
         if (!string.IsNullOrWhiteSpace(summary))
         {
             PlcTrendStatusTextBlock.Text = summary;

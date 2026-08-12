@@ -367,8 +367,8 @@
                     BorderBrush="#CBD5E1"
                     BorderThickness="1"
                     Background="#F8FAFC">
-              <TabControl ItemsSource="{Binding PlcMonitorTags}"
-                          SelectedItem="{Binding SelectedPlcMonitorTag}"
+              <TabControl ItemsSource="{Binding LiveMonitor.Tags}"
+                          SelectedItem="{Binding LiveMonitor.SelectedTag}"
                           Margin="8">
                 <TabControl.ItemTemplate>
                   <DataTemplate>
@@ -559,8 +559,8 @@
             </StackPanel>
 
             <DataGrid Grid.Row="2"
-                      ItemsSource="{Binding PlcMonitorTags}"
-                      SelectedItem="{Binding SelectedPlcMonitorTag}"
+                      ItemsSource="{Binding LiveMonitor.Tags}"
+                      SelectedItem="{Binding LiveMonitor.SelectedTag}"
                       AutoGenerateColumns="False"
                       IsReadOnly="False"
                       HeadersVisibility="Column">
