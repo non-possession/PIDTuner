@@ -1070,8 +1070,8 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     await viewModel.SavePlcConfigurationAsync();
 
     AssertEqual(true, File.Exists(plcConfigurationPath), "plc configuration file exists");
-    AssertEqual(true, viewModel.IsNotificationVisible, "plc save notification visibility");
-    AssertContains(Path.GetFullPath(plcConfigurationPath), viewModel.NotificationMessage);
+    AssertEqual(true, viewModel.Notification.IsVisible, "plc save notification visibility");
+    AssertContains(Path.GetFullPath(plcConfigurationPath), viewModel.Notification.Message);
 
     await using var input = File.OpenRead(plcConfigurationPath);
     var saved = await new JsonPlcProjectConfigurationStore().LoadAsync(input, CancellationToken.None);
@@ -1115,7 +1115,7 @@ static async Task MainViewModelChecksPlcCommunicationAfterLoadingConfiguration()
 
     AssertEqual(1, probe.CheckCount, "plc load configuration communication check count");
     AssertEqual("10.10.0.8", probe.LastHost, "plc load configuration communication check host");
-    AssertEqual("PLC 通信检查通过", viewModel.NotificationTitle, "plc load configuration communication notification");
+    AssertEqual("PLC 通信检查通过", viewModel.Notification.Title, "plc load configuration communication notification");
 }
 
 static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
@@ -1132,7 +1132,7 @@ static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
 
     await viewModel.CheckPlcCommunicationAsync();
 
-    AssertEqual("PLC 通信检查通过", viewModel.NotificationTitle, "plc communication notification title");
+    AssertEqual("PLC 通信检查通过", viewModel.Notification.Title, "plc communication notification title");
     AssertContains("127.0.0.1", viewModel.PlcCommunicationStatus);
     AssertContains("Ping 成功", viewModel.PlcCommunicationStatus);
 }
@@ -1336,13 +1336,13 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     AssertEqual(true, viewModel.LastPlcRecordingFrames.All(frame => frame.Count == 2), "recorded frame tag count");
     AssertEqual(1, reader.OpenSessionCount, "plc reader session open count");
     AssertEqual(true, reader.SessionReadCount >= 18, "plc session read count");
-    AssertEqual("PLC 1s 记录完成", viewModel.NotificationTitle, "plc recording notification title");
+    AssertEqual("PLC 1s 记录完成", viewModel.Notification.Title, "plc recording notification title");
     AssertContains("周期 50 ms", viewModel.PlcMonitorStatus);
     AssertContains("2 个点位", viewModel.PlcMonitorStatus);
     AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
     var recordingPath = Directory.GetFiles(Path.Combine(directory, "plc-recordings"), "plc-recording-*.json").Single();
-    AssertContains(Path.GetFullPath(recordingPath), viewModel.NotificationMessage);
-    AssertContains("诊断：调度延迟", viewModel.NotificationMessage);
+    AssertContains(Path.GetFullPath(recordingPath), viewModel.Notification.Message);
+    AssertContains("诊断：调度延迟", viewModel.Notification.Message);
     AssertContains("\"frameCount\"", File.ReadAllText(recordingPath));
     AssertContains("\"diagnostics\"", File.ReadAllText(recordingPath));
 }
@@ -1400,7 +1400,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(true, loader.LiveMonitor.Tags.Count > 0, "loaded plc monitor tag count");
     AssertEqual(1, resetCount, "loaded plc trend reset count");
     AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
-    AssertContains(Path.GetFullPath(recordingPath), loader.NotificationMessage);
+    AssertContains(Path.GetFullPath(recordingPath), loader.Notification.Message);
     AssertContains("第 1/", loader.PlcReplayStatus);
 
     await loader.SetPlcReplaySpeedAsync(2d);
@@ -1505,29 +1505,29 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 
     await viewModel.LoadExampleAsync();
 
-    AssertEqual(true, viewModel.IsNotificationVisible, "analysis notification visibility");
-    AssertEqual("离线分析已完成", viewModel.NotificationTitle, "analysis notification title");
-    AssertEqual("Success", viewModel.NotificationKind, "analysis notification kind");
+    AssertEqual(true, viewModel.Notification.IsVisible, "analysis notification visibility");
+    AssertEqual("离线分析已完成", viewModel.Notification.Title, "analysis notification title");
+    AssertEqual("Success", viewModel.Notification.Kind, "analysis notification kind");
     AssertEqual(true, viewModel.OfflineAnalysis.TuningRecommendations.Any(item => item.Parameter == "Kp"), "view model Kp recommendation");
     AssertContains("保守调整建议", viewModel.OfflineAnalysis.RecommendationSummary);
     await viewModel.SaveParameterSetAsync();
-    AssertEqual("参数方案已保存", viewModel.NotificationTitle, "parameter set notification title");
+    AssertEqual("参数方案已保存", viewModel.Notification.Title, "parameter set notification title");
     AssertEqual(1, viewModel.ParameterSetLibrary.ParameterSets.Count, "parameter set count after save");
     AssertEqual("1.2", viewModel.ParameterSetLibrary.ParameterSets[0].Kp, "parameter set Kp display");
     viewModel.OfflineAnalysis.SelectedTuningRecommendation = viewModel.OfflineAnalysis.TuningRecommendations.First(item => item.Parameter == "Kp");
     viewModel.ExperimentHistory.RecommendationReviewNote = "现场确认先小步调整";
     await viewModel.AcceptRecommendationAsync();
-    AssertEqual("建议审查已记录", viewModel.NotificationTitle, "review notification title");
+    AssertEqual("建议审查已记录", viewModel.Notification.Title, "review notification title");
     AssertEqual(1, viewModel.ExperimentHistory.RecommendationReviews.Count, "recommendation review count");
     AssertContains("现场确认", viewModel.ExperimentHistory.RecommendationReviews[0].EngineerNote);
 
     await viewModel.SaveTestSessionAsync();
 
-    AssertEqual(true, viewModel.IsNotificationVisible, "save session notification visibility");
-    AssertEqual("试验记录已保存", viewModel.NotificationTitle, "save session notification title");
-    AssertContains(Path.GetFullPath(directory), viewModel.NotificationMessage);
-    AssertContains(Path.Combine(Path.GetFullPath(directory), "test-sessions.json"), viewModel.NotificationMessage);
-    AssertContains(".samples.json", viewModel.NotificationMessage);
+    AssertEqual(true, viewModel.Notification.IsVisible, "save session notification visibility");
+    AssertEqual("试验记录已保存", viewModel.Notification.Title, "save session notification title");
+    AssertContains(Path.GetFullPath(directory), viewModel.Notification.Message);
+    AssertContains(Path.Combine(Path.GetFullPath(directory), "test-sessions.json"), viewModel.Notification.Message);
+    AssertContains(".samples.json", viewModel.Notification.Message);
     AssertEqual(1, viewModel.ExperimentHistory.HistorySessions.Count, "history count after save");
     AssertEqual("7", viewModel.ExperimentHistory.HistorySessions[0].SampleCount, "history sample count after save");
     AssertEqual("00:00:06", viewModel.ExperimentHistory.HistorySessions[0].Duration, "history duration after save");
@@ -1575,13 +1575,13 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
 
     await viewModel.OpenHistorySessionAsync();
 
-    AssertEqual("历史记录已打开", viewModel.NotificationTitle, "open history notification title");
+    AssertEqual("历史记录已打开", viewModel.Notification.Title, "open history notification title");
     AssertEqual("7", viewModel.OfflineAnalysis.SampleCount, "history sample count");
 
     await viewModel.ExportHistorySamplesAsync();
 
-    AssertEqual("历史采样已导出", viewModel.NotificationTitle, "export history notification title");
-    AssertContains(Path.GetFullPath(exportedHistorySamplesPath), viewModel.NotificationMessage);
+    AssertEqual("历史采样已导出", viewModel.Notification.Title, "export history notification title");
+    AssertContains(Path.GetFullPath(exportedHistorySamplesPath), viewModel.Notification.Message);
     AssertEqual(true, File.Exists(exportedHistorySamplesPath), "exported history samples file exists");
 
     var visibleStart = DateTimeOffset.Parse("2026-07-29T10:00:01.0000000+00:00", CultureInfo.InvariantCulture);
@@ -1604,8 +1604,8 @@ static async Task MainViewModelShowsNotificationsAndRefreshesHistory()
         });
     await viewModel.ExportVisiblePlcTrendAsync(export);
 
-    AssertEqual("可见趋势已导出", viewModel.NotificationTitle, "visible trend export notification title");
-    AssertContains(Path.GetFullPath(exportedVisibleTrendPath), viewModel.NotificationMessage);
+    AssertEqual("可见趋势已导出", viewModel.Notification.Title, "visible trend export notification title");
+    AssertContains(Path.GetFullPath(exportedVisibleTrendPath), viewModel.Notification.Message);
     AssertEqual(true, File.Exists(exportedVisibleTrendPath), "exported visible trend file exists");
     var visibleBytes = await File.ReadAllBytesAsync(exportedVisibleTrendPath);
     AssertEqual(true, visibleBytes.Length > 3, "visible trend export has content");
@@ -2002,4 +2002,5 @@ file sealed class FakePlcLiveDiagnosticsSession(TimeSpan duration, DateTimeOffse
         return ValueTask.CompletedTask;
     }
 }
+
 

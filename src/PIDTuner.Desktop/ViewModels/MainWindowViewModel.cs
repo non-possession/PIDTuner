@@ -41,10 +41,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
-    private string _notificationTitle = string.Empty;
-    private string _notificationMessage = string.Empty;
-    private string _notificationKind = "Info";
-    private bool _isNotificationVisible;
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
@@ -132,6 +128,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new PidParameterSetExtractor());
         ParameterSetLibrary.PropertyChanged += ParameterSetLibrary_PropertyChanged;
         PlcTrendMode.PropertyChanged += PlcTrendMode_PropertyChanged;
+        Notification.PropertyChanged += Notification_PropertyChanged;
         HistoricalTrendWorkbench.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -223,6 +220,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public FieldProfileEditorViewModel FieldProfileEditor { get; } = new();
 
     public PlcTrendModeViewModel PlcTrendMode { get; } = new();
+
+    public NotificationViewModel Notification { get; } = new();
 
     public IReadOnlyList<string> AvailablePlcDataTypes { get; } =
         Enum.GetNames<PlcDataType>();
@@ -329,26 +328,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string NotificationTitle
     {
-        get => _notificationTitle;
-        private set => SetProperty(ref _notificationTitle, value);
+        get => Notification.Title;
+        private set => _ = value;
     }
 
     public string NotificationMessage
     {
-        get => _notificationMessage;
-        private set => SetProperty(ref _notificationMessage, value);
+        get => Notification.Message;
+        private set => _ = value;
     }
 
     public string NotificationKind
     {
-        get => _notificationKind;
-        private set => SetProperty(ref _notificationKind, value);
+        get => Notification.Kind;
+        private set => _ = value;
     }
 
     public bool IsNotificationVisible
     {
-        get => _isNotificationVisible;
-        private set => SetProperty(ref _isNotificationVisible, value);
+        get => Notification.IsVisible;
+        private set => _ = value;
     }
 
     public ICommand ImportCsvCommand { get; }
@@ -508,6 +507,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 break;
             case nameof(PlcTrendModeViewModel.Status):
                 OnPropertyChanged(nameof(PlcTrendModeStatus));
+                break;
+        }
+    }
+
+    private void Notification_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(Notification));
+        switch (e.PropertyName)
+        {
+            case nameof(NotificationViewModel.Title):
+                OnPropertyChanged(nameof(NotificationTitle));
+                break;
+            case nameof(NotificationViewModel.Message):
+                OnPropertyChanged(nameof(NotificationMessage));
+                break;
+            case nameof(NotificationViewModel.Kind):
+                OnPropertyChanged(nameof(NotificationKind));
+                break;
+            case nameof(NotificationViewModel.IsVisible):
+                OnPropertyChanged(nameof(IsNotificationVisible));
                 break;
         }
     }
@@ -1670,17 +1689,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private Task DismissNotificationAsync()
     {
-        IsNotificationVisible = false;
+        Notification.Dismiss();
         return Task.CompletedTask;
     }
 
     private void Notify(string title, string message, string kind)
     {
         StatusMessage = $"{title}：{message}";
-        NotificationTitle = title;
-        NotificationMessage = message;
-        NotificationKind = kind;
-        IsNotificationVisible = true;
+        Notification.Show(title, message, kind);
     }
 
     private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)

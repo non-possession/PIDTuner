@@ -129,10 +129,10 @@
                   Height="28"
                   Margin="12,0,0,0" />
           <StackPanel>
-            <TextBlock Text="{Binding NotificationTitle}"
+            <TextBlock Text="{Binding Notification.Title}"
                        FontWeight="SemiBold"
                        Foreground="#1F2937" />
-            <TextBlock Text="{Binding NotificationMessage}"
+            <TextBlock Text="{Binding Notification.Message}"
                        Margin="0,4,0,0"
                        TextWrapping="Wrap"
                        Foreground="#374151" />
