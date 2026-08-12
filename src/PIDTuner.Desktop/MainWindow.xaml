@@ -641,7 +641,7 @@
                       Width="120"
                       Height="36"
                       Margin="0,0,12,8" />
-              <TextBlock Text="{Binding CurrentFieldProfile}"
+              <TextBlock Text="{Binding FieldProfileEditor.CurrentProfile}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"
                          Foreground="#374151" />
@@ -838,8 +838,8 @@
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <DataGrid ItemsSource="{Binding FieldDefinitions}"
-                          SelectedItem="{Binding SelectedFieldDefinition}"
+                <DataGrid ItemsSource="{Binding FieldProfileEditor.FieldDefinitions}"
+                          SelectedItem="{Binding FieldProfileEditor.SelectedFieldDefinition}"
                           AutoGenerateColumns="False"
                           IsReadOnly="False"
                           Height="150"
@@ -861,7 +861,7 @@
                       </DataGridTemplateColumn.CellTemplate>
                       <DataGridTemplateColumn.CellEditingTemplate>
                         <DataTemplate>
-                          <ComboBox ItemsSource="{Binding DataContext.AvailableFieldDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                          <ComboBox ItemsSource="{Binding DataContext.FieldProfileEditor.AvailableDataTypes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                     SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" />
                         </DataTemplate>
                       </DataGridTemplateColumn.CellEditingTemplate>
@@ -881,7 +881,7 @@
                       </DataGridTemplateColumn.CellTemplate>
                       <DataGridTemplateColumn.CellEditingTemplate>
                         <DataTemplate>
-                          <ComboBox ItemsSource="{Binding DataContext.AvailableFieldRoles, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                          <ComboBox ItemsSource="{Binding DataContext.FieldProfileEditor.AvailableRoles, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                     SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}" />
                         </DataTemplate>
                       </DataGridTemplateColumn.CellEditingTemplate>

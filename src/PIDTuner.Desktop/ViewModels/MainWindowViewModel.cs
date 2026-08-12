@@ -40,16 +40,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcReplayTimer = new();
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
-    private PidSampleFieldProfile _fieldProfile = PidSampleFieldProfile.CreateDefault();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
-    private string _currentFieldProfile = "default-pid-sample-fields (10 字段)";
     private string _notificationTitle = string.Empty;
     private string _notificationMessage = string.Empty;
     private string _notificationKind = "Info";
     private bool _isNotificationVisible;
-    private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private ObservableCollection<PlcTagMonitorViewModel> _plcMonitorTags = [];
-    private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
     private PlcTagMonitorViewModel? _selectedPlcMonitorTag;
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
@@ -156,7 +152,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
         _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
         _plcLiveDiagnosticsTimer.Tick += async (_, _) => await StopExpiredPlcLiveDiagnosticsAsync();
-        RefreshFieldDefinitions();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -230,11 +225,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench { get; } = new();
 
-    public IReadOnlyList<string> AvailableFieldDataTypes { get; } =
-        Enum.GetNames<PidSampleFieldDataType>();
-
-    public IReadOnlyList<string> AvailableFieldRoles { get; } =
-        Enum.GetNames<PidSampleFieldRole>();
+    public FieldProfileEditorViewModel FieldProfileEditor { get; } = new();
 
     public IReadOnlyList<string> AvailablePlcDataTypes { get; } =
         Enum.GetNames<PlcDataType>();
@@ -246,12 +237,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
-    }
-
-    public string CurrentFieldProfile
-    {
-        get => _currentFieldProfile;
-        private set => SetProperty(ref _currentFieldProfile, value);
     }
 
     public string PlcCommunicationStatus
@@ -382,22 +367,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _isNotificationVisible, value);
     }
 
-    public ObservableCollection<PidSampleFieldDefinitionViewModel> FieldDefinitions
-    {
-        get => _fieldDefinitions;
-        private set => SetProperty(ref _fieldDefinitions, value);
-    }
-
     public ObservableCollection<PlcTagMonitorViewModel> PlcMonitorTags
     {
         get => _plcMonitorTags;
         private set => SetProperty(ref _plcMonitorTags, value);
-    }
-
-    public PidSampleFieldDefinitionViewModel? SelectedFieldDefinition
-    {
-        get => _selectedFieldDefinition;
-        set => SetProperty(ref _selectedFieldDefinition, value);
     }
 
     public PlcTagMonitorViewModel? SelectedPlcMonitorTag
@@ -510,11 +483,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             await using (var profileStream = File.OpenRead(fieldProfilePath))
             {
-                _fieldProfile = await _fieldProfileStore.LoadAsync(profileStream, CancellationToken.None);
+                FieldProfileEditor.LoadProfile(await _fieldProfileStore.LoadAsync(profileStream, CancellationToken.None));
             }
 
-            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
-            RefreshFieldDefinitions();
             await AnalyzeCsvFileAsync(csvPath);
         }
         catch (Exception exception)
@@ -1236,7 +1207,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OfflineAnalysis.LastAnalysisWindow,
                 OfflineAnalysis.LastSamples,
                 OfflineAnalysis.LastSourceFileName,
-                _fieldProfile.ProfileName,
+                FieldProfileEditor.Profile.ProfileName,
                 CancellationToken.None);
             if (result.SessionId.HasValue)
             {
@@ -1310,7 +1281,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var result = await _experimentSessionCoordinator.ExportHistorySamplesAsync(
                 selectedHistorySession,
-                _fieldProfile,
+                FieldProfileEditor.Profile,
                 fileName,
                 CancellationToken.None);
             Notify(result.Title, result.Message, result.Kind);
@@ -1628,29 +1599,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private Task AddFieldAsync()
     {
-        var index = FieldDefinitions.Count + 1;
-        while (FieldDefinitions.Any(field => string.Equals(field.Key, $"metadata_{index}", StringComparison.OrdinalIgnoreCase)))
-        {
-            index++;
-        }
-
-        var field = PidSampleFieldDefinitionViewModel.CreateNew(index);
-        FieldDefinitions.Add(field);
-        SelectedFieldDefinition = field;
+        FieldProfileEditor.AddField();
         Notify("字段已新增", "请编辑字段信息后保存字段配置。", "Info");
         return Task.CompletedTask;
     }
 
     private Task RemoveFieldAsync()
     {
-        if (SelectedFieldDefinition is null)
+        if (!FieldProfileEditor.RemoveSelectedField())
         {
             Notify("无法删除字段", "请先选择要删除的字段。", "Warning");
             return Task.CompletedTask;
         }
 
-        FieldDefinitions.Remove(SelectedFieldDefinition);
-        SelectedFieldDefinition = null;
         Notify("字段已删除", "请保存字段配置以保留修改。", "Info");
         return Task.CompletedTask;
     }
@@ -1665,10 +1626,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            _fieldProfile = BuildFieldProfileFromGrid();
-            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
+            var fieldProfile = FieldProfileEditor.BuildProfileFromGrid();
             await using var stream = File.Create(fileName);
-            await _fieldProfileStore.SaveAsync(_fieldProfile, stream, CancellationToken.None);
+            await _fieldProfileStore.SaveAsync(fieldProfile, stream, CancellationToken.None);
             Notify("字段配置已保存", Path.GetFullPath(fileName), "Success");
         }
         catch (Exception exception)
@@ -1688,9 +1648,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await using var stream = File.OpenRead(fileName);
-            _fieldProfile = await _fieldProfileStore.LoadAsync(stream, CancellationToken.None);
-            CurrentFieldProfile = $"{_fieldProfile.ProfileName} ({_fieldProfile.Fields.Count} 字段)";
-            RefreshFieldDefinitions();
+            FieldProfileEditor.LoadProfile(await _fieldProfileStore.LoadAsync(stream, CancellationToken.None));
             Notify("字段配置已加载", Path.GetFileName(fileName), "Success");
         }
         catch (Exception exception)
@@ -1719,7 +1677,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task AnalyzeCsvFileAsync(string fileName)
     {
-        var result = await OfflineAnalysis.AnalyzeCsvFileAsync(fileName, _fieldProfile, CancellationToken.None);
+        var result = await OfflineAnalysis.AnalyzeCsvFileAsync(fileName, FieldProfileEditor.Profile, CancellationToken.None);
         Notify("离线分析已完成", $"{result.SourceFileName}，样本 {result.SampleCount} 条。", "Success");
     }
 
@@ -1747,12 +1705,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IsNotificationVisible = true;
     }
 
-    private void RefreshFieldDefinitions()
-    {
-        FieldDefinitions = new ObservableCollection<PidSampleFieldDefinitionViewModel>(
-            _fieldProfile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
-    }
-
     private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)
     {
         PlcConfigurationEditor.ApplyConfiguration(configuration);
@@ -1764,21 +1716,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private PlcProjectConfiguration BuildPlcConfigurationFromForm()
     {
         return PlcConfigurationEditor.BuildConfiguration();
-    }
-
-    private PidSampleFieldProfile BuildFieldProfileFromGrid()
-    {
-        var fields = FieldDefinitions.Select(field => field.ToDefinition()).ToArray();
-        var duplicateKey = fields
-            .GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-
-        if (duplicateKey is not null)
-        {
-            throw new InvalidOperationException($"字段 key 重复：{duplicateKey.Key}");
-        }
-
-        return _fieldProfile with { Fields = fields };
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
