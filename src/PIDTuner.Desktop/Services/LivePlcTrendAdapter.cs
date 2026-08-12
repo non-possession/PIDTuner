@@ -3,6 +3,7 @@ using System.Windows;
 using PIDTuner.Desktop.ViewModels;
 using PIDTuner.Domain.Plc;
 using ScottPlot;
+using ScottPlot.Plottables;
 using ScottPlot.WPF;
 
 namespace PIDTuner.Desktop.Services;
@@ -27,6 +28,8 @@ public sealed class LivePlcTrendAdapter
     private DateTimeOffset? _historicalVisibleEnd;
     private (double Min, double Max)? _manualYRange;
     private (double Min, double Max)? _manualRightYRange;
+    private DateTimeOffset? _cursorTimestamp;
+    private double? _cursorYValue;
 
     public LivePlcTrendAdapter(WpfPlot plot)
     {
@@ -157,6 +160,7 @@ public sealed class LivePlcTrendAdapter
             _manualYRange,
             _manualRightYRange,
             ShowFullHistory);
+        RenderCursorCrosshair();
     }
 
     public void AutoFitY()
@@ -253,9 +257,26 @@ public sealed class LivePlcTrendAdapter
             summaries.Add($"{tag.Name}={nearest.Value.ToString("0.###", CultureInfo.InvariantCulture)}{unit}");
         }
 
+        if (!ShowFullHistory)
+        {
+            return summaries.Count == 0
+                ? string.Empty
+                : $"光标 {target:HH:mm:ss.fff} | 最近值：{string.Join(" | ", summaries.Take(4))}";
+        }
+
+        _cursorTimestamp = new DateTimeOffset(target);
+        _cursorYValue = coordinates.Y;
+        Render(monitorTags);
         return summaries.Count == 0
-            ? string.Empty
-            : $"光标 {target:HH:mm:ss.fff} | 最近值：{string.Join(" | ", summaries.Take(4))}";
+            ? $"历史光标 {target:yyyy-MM-dd HH:mm:ss.fff} | Y={coordinates.Y.ToString("0.###", CultureInfo.InvariantCulture)}"
+            : $"历史光标 {target:yyyy-MM-dd HH:mm:ss.fff} | Y={coordinates.Y.ToString("0.###", CultureInfo.InvariantCulture)} | 最近值：{string.Join(" | ", summaries.Take(8))}";
+    }
+
+    public void ClearCursorCrosshair(IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
+    {
+        _cursorTimestamp = null;
+        _cursorYValue = null;
+        Render(monitorTags);
     }
 
     private void RemoveInactiveTags(IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
@@ -279,6 +300,26 @@ public sealed class LivePlcTrendAdapter
                 IsDualAxisLayout ? tag.AxisGroup : "Y1",
                 _pointsByTag[tag.TagId]))
             .ToArray();
+    }
+
+    private void RenderCursorCrosshair()
+    {
+        if (!_cursorTimestamp.HasValue || !_cursorYValue.HasValue)
+        {
+            _plot.Refresh();
+            return;
+        }
+
+        var x = _cursorTimestamp.Value.LocalDateTime.ToOADate();
+        VerticalLine verticalLine = _plot.Plot.Add.VerticalLine(x);
+        HorizontalLine horizontalLine = _plot.Plot.Add.HorizontalLine(_cursorYValue.Value);
+        verticalLine.LineColor = Colors.Gray;
+        horizontalLine.LineColor = Colors.Gray;
+        verticalLine.LinePattern = LinePattern.Dashed;
+        horizontalLine.LinePattern = LinePattern.Dashed;
+        verticalLine.LineWidth = 1;
+        horizontalLine.LineWidth = 1;
+        _plot.Refresh();
     }
 
     private void AppendPoints(

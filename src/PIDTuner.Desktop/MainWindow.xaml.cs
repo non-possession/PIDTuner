@@ -234,6 +234,7 @@ public partial class MainWindow : Window
 
     private void PlcTrendPlot_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        _plcTrendChartAdapter.ClearCursorCrosshair(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
     }
 
