@@ -34,7 +34,7 @@ var thread = new Thread(() =>
     if (window.DataContext is MainWindowViewModel viewModel)
     {
         PumpDispatcherUntilComplete(viewModel.LoadExampleAsync());
-        viewModel.PlcProtocol = "Preview";
+        viewModel.PlcConfigurationEditor.Protocol = "Preview";
         PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());
         Thread.Sleep(500);
         PumpDispatcherUntilComplete(viewModel.RefreshPlcMonitorAsync());

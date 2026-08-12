@@ -274,6 +274,12 @@ V2.0 的架构目标是：
 
 配置表单状态仍属于 `PlcConfigurationEditorViewModel`。workflow 只处理文件和通信检查流程。
 
+绑定收口：
+
+- PLC 配置页的配置名、协议、IP、Rack、Slot、超时、默认采样、最小采样、点位列表和选中点位已直接绑定 `PlcConfigurationEditor.*`。
+- `MainWindowViewModel` 不再提供 `PlcConfigurationName`、`PlcIpAddress`、`PlcDefaultSamplingMilliseconds`、`TagDefinitions` 等 PLC 配置表单包装属性。
+- `MainWindowViewModel` 仍保留加载、保存、检查通信命令，因为这些命令需要文件对话框、配置 workflow 和全局通知协作。
+
 ### 3.13 实时点位呈现模块
 
 已建立：

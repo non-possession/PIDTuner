@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.IO;
 using System.Globalization;
 using System.Linq;
@@ -1061,11 +1061,11 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
         new JsonPlcProjectConfigurationStore(),
         testSessionStorageDirectory: directory);
 
-    viewModel.PlcConfigurationName = "line-a-temperature-loop";
-    viewModel.PlcIpAddress = "10.10.0.5";
-    viewModel.PlcDefaultSamplingMilliseconds = 1000;
-    viewModel.PlcMinimumSamplingMilliseconds = 200;
-    viewModel.TagDefinitions[0].SamplingMilliseconds = 200;
+    viewModel.PlcConfigurationEditor.ConfigurationName = "line-a-temperature-loop";
+    viewModel.PlcConfigurationEditor.IpAddress = "10.10.0.5";
+    viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 1000;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 200;
+    viewModel.PlcConfigurationEditor.TagDefinitions[0].SamplingMilliseconds = 200;
 
     await viewModel.SavePlcConfigurationAsync();
 
@@ -1080,7 +1080,7 @@ static async Task MainViewModelSavesPlcConfigurationWithAbsolutePathNotification
     AssertEqual(1000, saved.DefaultSamplingMilliseconds, "saved default sampling milliseconds");
     AssertEqual(200, saved.MinimumSamplingMilliseconds, "saved minimum sampling milliseconds");
     AssertEqual(TimeSpan.FromMilliseconds(200), saved.Tags[0].SamplingInterval, "saved tag sampling interval");
-    AssertEqual(viewModel.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
+    AssertEqual(viewModel.PlcConfigurationEditor.TagDefinitions.Count, saved.Tags.Count, "saved plc tag count");
 }
 
 static async Task MainViewModelChecksPlcCommunicationAfterLoadingConfiguration()
@@ -1128,7 +1128,7 @@ static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
         new FixedPlcConnectivityProbe(true),
         testSessionStorageDirectory: directory);
 
-    viewModel.PlcIpAddress = "127.0.0.1";
+    viewModel.PlcConfigurationEditor.IpAddress = "127.0.0.1";
 
     await viewModel.CheckPlcCommunicationAsync();
 
@@ -1156,7 +1156,7 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertEqual("2", viewModel.PlcMonitorTags[0].ValueText, "second monitor value");
     AssertEqual(true, viewModel.PlcMonitorTags[0].TrendPoints.Count >= 2, "monitor trend point count");
     var editedAddress = "DB1.DBD120";
-    viewModel.TagDefinitions[0].Address = editedAddress;
+    viewModel.PlcConfigurationEditor.TagDefinitions[0].Address = editedAddress;
     await viewModel.RefreshPlcMonitorAsync();
     AssertEqual(editedAddress, viewModel.PlcMonitorTags[0].Address, "monitor address after configuration edit");
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
@@ -1174,8 +1174,8 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
         plcTagSnapshotReader: reader,
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
-    viewModel.PlcDefaultSamplingMilliseconds = 50;
-    viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
     viewModel.PlcSnapshotsApplied += (_, timestamp) => lastTrendTimestamp = timestamp;
 
     await viewModel.TogglePlcMonitoringAsync();
@@ -1203,8 +1203,8 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
         plcLiveDiagnosticsStore: diagnosticsStore,
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
-    viewModel.PlcDefaultSamplingMilliseconds = 50;
-    viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
     viewModel.PlcDiagnosticsDurationMinutes = 40;
 
     await viewModel.TogglePlcLiveDiagnosticsAsync();
@@ -1236,8 +1236,8 @@ static async Task MainViewModelFiltersDiagnosticsFramesBeforeSessionStart()
         plcLiveDiagnosticsStore: diagnosticsStore,
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
-    viewModel.PlcDefaultSamplingMilliseconds = 50;
-    viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
 
     await viewModel.TogglePlcMonitoringAsync();
     await viewModel.TogglePlcLiveDiagnosticsAsync();
@@ -1319,16 +1319,16 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
 
-    foreach (var tag in viewModel.TagDefinitions)
+    foreach (var tag in viewModel.PlcConfigurationEditor.TagDefinitions)
     {
         tag.IsEnabled = false;
     }
 
-    viewModel.TagDefinitions[0].IsEnabled = true;
-    viewModel.TagDefinitions[0].SamplingMilliseconds = 50;
-    viewModel.TagDefinitions[1].IsEnabled = true;
-    viewModel.TagDefinitions[1].SamplingMilliseconds = 500;
-    viewModel.PlcMinimumSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.TagDefinitions[0].IsEnabled = true;
+    viewModel.PlcConfigurationEditor.TagDefinitions[0].SamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.TagDefinitions[1].IsEnabled = true;
+    viewModel.PlcConfigurationEditor.TagDefinitions[1].SamplingMilliseconds = 500;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
 
     await viewModel.RecordPlcOneSecondAsync();
 
@@ -2002,3 +2002,4 @@ file sealed class FakePlcLiveDiagnosticsSession(TimeSpan duration, DateTimeOffse
         return ValueTask.CompletedTask;
     }
 }
+

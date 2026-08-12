@@ -255,60 +255,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _currentFieldProfile, value);
     }
 
-    public string PlcConfigurationName
-    {
-        get => PlcConfigurationEditor.ConfigurationName;
-        set => PlcConfigurationEditor.ConfigurationName = value;
-    }
-
-    public string PlcProtocol
-    {
-        get => PlcConfigurationEditor.Protocol;
-        set => PlcConfigurationEditor.Protocol = value;
-    }
-
-    public string PlcIpAddress
-    {
-        get => PlcConfigurationEditor.IpAddress;
-        set => PlcConfigurationEditor.IpAddress = value;
-    }
-
-    public int PlcRack
-    {
-        get => PlcConfigurationEditor.Rack;
-        set => PlcConfigurationEditor.Rack = value;
-    }
-
-    public int PlcSlot
-    {
-        get => PlcConfigurationEditor.Slot;
-        set => PlcConfigurationEditor.Slot = value;
-    }
-
-    public int PlcTimeoutMilliseconds
-    {
-        get => PlcConfigurationEditor.TimeoutMilliseconds;
-        set => PlcConfigurationEditor.TimeoutMilliseconds = value;
-    }
-
-    public int PlcDefaultSamplingMilliseconds
-    {
-        get => PlcConfigurationEditor.DefaultSamplingMilliseconds;
-        set => PlcConfigurationEditor.DefaultSamplingMilliseconds = value;
-    }
-
-    public int PlcMinimumSamplingMilliseconds
-    {
-        get => PlcConfigurationEditor.MinimumSamplingMilliseconds;
-        set => PlcConfigurationEditor.MinimumSamplingMilliseconds = value;
-    }
-
-    public string PlcConfigurationStatus
-    {
-        get => PlcConfigurationEditor.Status;
-        private set => _ = value;
-    }
-
     public string PlcCommunicationStatus
     {
         get => _plcCommunicationStatus;
@@ -587,12 +533,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _fieldDefinitions, value);
     }
 
-    public ObservableCollection<TagDefinitionViewModel> TagDefinitions
-    {
-        get => PlcConfigurationEditor.TagDefinitions;
-        private set => _ = value;
-    }
-
     public ObservableCollection<TestSessionListItemViewModel> HistorySessions
     {
         get => ExperimentHistory.HistorySessions;
@@ -669,12 +609,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _selectedTuningRecommendation;
         set => SetProperty(ref _selectedTuningRecommendation, value);
-    }
-
-    public TagDefinitionViewModel? SelectedTagDefinition
-    {
-        get => PlcConfigurationEditor.SelectedTagDefinition;
-        set => PlcConfigurationEditor.SelectedTagDefinition = value;
     }
 
     public PlcTagMonitorViewModel? SelectedPlcMonitorTag
@@ -824,42 +758,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void PlcConfigurationEditor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
-        {
-            case nameof(PlcConfigurationEditorViewModel.ConfigurationName):
-                OnPropertyChanged(nameof(PlcConfigurationName));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.Protocol):
-                OnPropertyChanged(nameof(PlcProtocol));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.IpAddress):
-                OnPropertyChanged(nameof(PlcIpAddress));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.Rack):
-                OnPropertyChanged(nameof(PlcRack));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.Slot):
-                OnPropertyChanged(nameof(PlcSlot));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.TimeoutMilliseconds):
-                OnPropertyChanged(nameof(PlcTimeoutMilliseconds));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.DefaultSamplingMilliseconds):
-                OnPropertyChanged(nameof(PlcDefaultSamplingMilliseconds));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.MinimumSamplingMilliseconds):
-                OnPropertyChanged(nameof(PlcMinimumSamplingMilliseconds));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.Status):
-                OnPropertyChanged(nameof(PlcConfigurationStatus));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.TagDefinitions):
-                OnPropertyChanged(nameof(TagDefinitions));
-                break;
-            case nameof(PlcConfigurationEditorViewModel.SelectedTagDefinition):
-                OnPropertyChanged(nameof(SelectedTagDefinition));
-                break;
-        }
+        OnPropertyChanged(nameof(PlcConfigurationEditor));
     }
 
     private void OfflineAnalysis_PropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -177,7 +177,7 @@
                       Width="96"
                       Height="36"
                       Margin="0,0,12,8" />
-              <TextBlock Text="{Binding PlcConfigurationStatus}"
+              <TextBlock Text="{Binding PlcConfigurationEditor.Status}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"
                          Foreground="#374151" />
@@ -208,7 +208,7 @@
               <TextBlock Text="配置名"
                          Foreground="#6B7280" />
               <TextBox Grid.Row="1"
-                       Text="{Binding PlcConfigurationName, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.ConfigurationName, UpdateSourceTrigger=PropertyChanged}"
                        Height="28" />
               <TextBlock Grid.Column="1"
                          Text="协议"
@@ -216,7 +216,7 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="1"
-                       Text="{Binding PlcProtocol, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.Protocol, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="2"
@@ -226,7 +226,7 @@
               <TextBox Grid.Row="1"
                        Grid.Column="2"
                        Grid.ColumnSpan="2"
-                       Text="{Binding PlcIpAddress, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.IpAddress, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="4"
@@ -235,7 +235,7 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="4"
-                       Text="{Binding PlcRack, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.Rack, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="5"
@@ -244,7 +244,7 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="5"
-                       Text="{Binding PlcSlot, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.Slot, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="6"
@@ -253,7 +253,7 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="6"
-                       Text="{Binding PlcTimeoutMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.TimeoutMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="7"
@@ -262,7 +262,7 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="7"
-                       Text="{Binding PlcDefaultSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.DefaultSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
               <TextBlock Grid.Column="8"
@@ -271,14 +271,14 @@
                          Margin="12,0,0,0" />
               <TextBox Grid.Row="1"
                        Grid.Column="8"
-                       Text="{Binding PlcMinimumSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                       Text="{Binding PlcConfigurationEditor.MinimumSamplingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                        Height="28"
                        Margin="12,0,0,0" />
             </Grid>
 
             <DataGrid Grid.Row="2"
-                      ItemsSource="{Binding TagDefinitions}"
-                      SelectedItem="{Binding SelectedTagDefinition}"
+                      ItemsSource="{Binding PlcConfigurationEditor.TagDefinitions}"
+                      SelectedItem="{Binding PlcConfigurationEditor.SelectedTagDefinition}"
                       AutoGenerateColumns="False"
                       IsReadOnly="False"
                       Margin="0,18,0,0"
