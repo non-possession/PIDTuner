@@ -35,7 +35,8 @@ public sealed class PlcConfigurationWorkflow(
             pendingStatus,
             status,
             result.IsReachable ? "PLC 通信检查通过" : "PLC 通信检查未通过",
-            result.IsReachable ? "Success" : "Warning");
+            result.IsReachable ? "Success" : "Warning",
+            result.IsReachable);
     }
 }
 
@@ -43,4 +44,5 @@ public sealed record PlcCommunicationCheckResult(
     string PendingStatus,
     string Status,
     string Title,
-    string Kind);
+    string Kind,
+    bool IsReachable);

@@ -467,16 +467,22 @@
                       Grid.Row="1"
                       Margin="0,8,0,0"
                       Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                   </Grid.ColumnDefinitions>
-                  <TextBlock Text="{Binding HistoricalTrendWorkbench.ViewportStartLabel}"
+                  <TextBlock Grid.Row="0"
+                             Text="{Binding HistoricalTrendWorkbench.ViewportStartLabel}"
                              VerticalAlignment="Center"
                              FontWeight="SemiBold"
                              Foreground="#1D4ED8" />
-                  <controls:AxisRangeBrush Grid.Column="1"
+                  <controls:AxisRangeBrush Grid.Row="0"
+                                           Grid.Column="1"
                                            Width="420"
                                            Orientation="Horizontal"
                                            Minimum="{Binding HistoricalTrendWorkbench.ViewportMinimum}"
@@ -484,12 +490,38 @@
                                            LowerValue="{Binding HistoricalTrendWorkbench.ViewportStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                            UpperValue="{Binding HistoricalTrendWorkbench.ViewportEnd, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                            IsEnabled="{Binding HistoricalTrendWorkbench.IsViewportEnabled}" />
-                  <TextBlock Grid.Column="2"
+                  <TextBlock Grid.Row="0"
+                             Grid.Column="2"
                              Text="{Binding HistoricalTrendWorkbench.ViewportEndLabel}"
                              VerticalAlignment="Center"
                              TextAlignment="Right"
                              FontWeight="SemiBold"
                              Foreground="#1D4ED8" />
+                  <StackPanel Grid.Row="1"
+                              Grid.ColumnSpan="3"
+                              Margin="0,6,0,0"
+                              Orientation="Horizontal"
+                              HorizontalAlignment="Center">
+                    <TextBlock Text="起始"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"
+                               Foreground="#475569" />
+                    <TextBox Text="{Binding HistoricalTrendWorkbench.RangeStartText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Width="180"
+                             Height="26" />
+                    <TextBlock Text="结束"
+                               VerticalAlignment="Center"
+                               Margin="12,0,6,0"
+                               Foreground="#475569" />
+                    <TextBox Text="{Binding HistoricalTrendWorkbench.RangeEndText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Width="180"
+                             Height="26" />
+                    <Button Command="{Binding ApplyPlcHistoricalRangeCommand}"
+                            Content="应用"
+                            Height="26"
+                            Width="58"
+                            Margin="10,0,0,0" />
+                  </StackPanel>
                 </Grid>
 
                 <controls:AxisRangeBrush Grid.Column="3"
@@ -697,13 +729,13 @@
                       Width="82"
                       Margin="0,0,8,8"
                       Style="{StaticResource DualAxisLayoutButtonStyle}" />
-              <Button Command="{Binding ShowPlcLiveTrendCommand}"
+              <Button Click="ShowPlcLiveTrend_Click"
                       Content="实时趋势"
                       Height="28"
                       Width="82"
                       Margin="0,0,8,8"
                       Style="{StaticResource LiveTrendModeButtonStyle}" />
-              <Button Command="{Binding ShowPlcHistoricalTrendCommand}"
+              <Button Click="ShowPlcHistoricalTrend_Click"
                       Content="历史趋势"
                       Height="28"
                       Width="82"

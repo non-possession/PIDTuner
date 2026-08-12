@@ -151,7 +151,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _viewportStart;
         set
         {
-            var clamped = ClampAxisSliderValue(value, ViewportMinimum, ViewportMaximum);
+            var clamped = Math.Min(
+                ClampAxisSliderValue(value, ViewportMinimum, ViewportMaximum),
+                ViewportEnd);
             if (SetProperty(ref _viewportStart, clamped))
             {
                 ApplyViewportSliderChange();
@@ -164,7 +166,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _viewportEnd;
         set
         {
-            var clamped = ClampAxisSliderValue(value, ViewportMinimum, ViewportMaximum);
+            var clamped = Math.Max(
+                ClampAxisSliderValue(value, ViewportMinimum, ViewportMaximum),
+                ViewportStart);
             if (SetProperty(ref _viewportEnd, clamped))
             {
                 ApplyViewportSliderChange();
@@ -189,7 +193,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _yLower;
         set
         {
-            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            var clamped = Math.Min(
+                ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum),
+                YUpper);
             if (SetProperty(ref _yLower, clamped))
             {
                 ApplyYSliderChange();
@@ -202,7 +208,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _yUpper;
         set
         {
-            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            var clamped = Math.Max(
+                ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum),
+                YLower);
             if (SetProperty(ref _yUpper, clamped))
             {
                 ApplyYSliderChange();
@@ -215,7 +223,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _rightYLower;
         set
         {
-            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            var clamped = Math.Min(
+                ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum),
+                RightYUpper);
             if (SetProperty(ref _rightYLower, clamped))
             {
                 ApplyRightYSliderChange();
@@ -228,7 +238,9 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         get => _rightYUpper;
         set
         {
-            var clamped = ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum);
+            var clamped = Math.Max(
+                ClampAxisSliderValue(value, YSliderMinimum, YSliderMaximum),
+                RightYLower);
             if (SetProperty(ref _rightYUpper, clamped))
             {
                 ApplyRightYSliderChange();
@@ -490,6 +502,11 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         }
 
         ApplyViewport(range.Start, range.End, updateSliderValues: true);
+    }
+
+    public void ApplyVisibleTimeRangeToViewport(DateTimeOffset start, DateTimeOffset end)
+    {
+        ApplyViewport(start, end, updateSliderValues: true);
     }
 
     public bool TrySetVisibleDuration(TimeSpan duration, out string? error)

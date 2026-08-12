@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
+    private readonly IPlcLiveDiagnosticsStore _plcLiveAcquisitionStore;
     private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
@@ -41,6 +42,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private readonly List<IReadOnlyList<PlcTagSnapshot>> _liveHistoricalFrames = [];
+    private IPlcLiveDiagnosticsSession? _plcLiveAcquisitionSession;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
@@ -111,6 +113,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "local",
                 "plc-diagnostics",
                 "plc-live-diagnostics.sqlite"));
+        _plcLiveAcquisitionStore = liveDiagnosticsStore;
         LiveMonitor = new PlcLiveMonitorViewModel(
             new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync));
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
@@ -611,6 +614,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task CheckPlcCommunicationAsync()
     {
+        _ = await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: false);
+    }
+
+    private async Task<bool> CheckPlcCommunicationInternalAsync(bool startMonitoringOnSuccess)
+    {
         try
         {
             var configuration = BuildPlcConfigurationFromForm();
@@ -618,10 +626,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcCommunicationStatus = result.PendingStatus;
             PlcCommunicationStatus = result.Status;
             Notify(result.Title, PlcCommunicationStatus, result.Kind);
+            if (result.IsReachable && startMonitoringOnSuccess)
+            {
+                await EnsurePlcMonitoringAsync(configuration, resetHistory: true);
+            }
+
+            return result.IsReachable;
         }
         catch (Exception exception)
         {
             Notify("PLC 通信检查失败", exception.Message, "Error");
+            return false;
         }
     }
 
@@ -664,7 +679,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcMonitorSnapshotPresenter.SelectedTag = LiveMonitor.SelectedTag;
         _plcMonitorSnapshotPresenter.Apply(snapshots, trendTimestamp, applyTrend);
         LiveMonitor.SelectedTag = _plcMonitorSnapshotPresenter.SelectedTag;
-        if (applyTrend && storeLiveHistory)
+        if (storeLiveHistory)
         {
             StoreLiveHistoricalFrame(snapshots, trendTimestamp);
         }
@@ -680,7 +695,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         foreach (var frame in result.Frames)
         {
-            ApplyPlcMonitorSnapshots(frame.Snapshots, frame.Diagnostics.PlannedTimestampUtc);
+            _plcLiveAcquisitionSession?.Enqueue(frame);
+            ApplyPlcMonitorSnapshots(
+                frame.Snapshots,
+                frame.Diagnostics.PlannedTimestampUtc,
+                applyTrend: !IsPlcHistoricalTrendMode);
             EnqueuePlcLiveDiagnosticsFrame(frame);
         }
 
@@ -719,6 +738,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task StopLiveMonitoringAsync()
     {
         _monitorTimer.Stop();
+        await StopPlcLiveAcquisitionRecordingAsync("实时采集已停止，SQLite 写入已关闭。");
         await LiveMonitor.StopAsync();
         await StopPlcLiveDiagnosticsAsync("实时监控已停止，诊断写入已关闭。");
     }
@@ -733,14 +753,57 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         StopPlcReplay();
-        _liveHistoricalFrames.Clear();
-        var configuration = BuildPlcConfigurationFromForm();
+        await EnsurePlcMonitoringAsync(BuildPlcConfigurationFromForm(), resetHistory: true);
+    }
+
+    private async Task EnsurePlcMonitoringAsync(
+        PlcProjectConfiguration configuration,
+        bool resetHistory)
+    {
+        if (IsPlcMonitoring)
+        {
+            return;
+        }
+
+        if (resetHistory)
+        {
+            _liveHistoricalFrames.Clear();
+        }
+
         var result = await LiveMonitor.StartAsync(
             configuration,
             CancellationToken.None);
+        await StartPlcLiveAcquisitionRecordingAsync(configuration);
         _monitorTimer.Interval = result.UiRefreshInterval;
         _monitorTimer.Start();
         PlcMonitorStatus = result.MonitorStatus;
+    }
+
+    private async Task StartPlcLiveAcquisitionRecordingAsync(PlcProjectConfiguration configuration)
+    {
+        await StopPlcLiveAcquisitionRecordingAsync(null);
+        _plcLiveAcquisitionSession = await _plcLiveAcquisitionStore.StartSessionAsync(
+            configuration,
+            TimeSpan.FromDays(3650),
+            CancellationToken.None);
+        PlcAcquisitionDiagnosticsStatus = $"采集记录：SQLite 写入中，{_plcLiveAcquisitionSession.DatabasePath}";
+    }
+
+    private async Task StopPlcLiveAcquisitionRecordingAsync(string? reason)
+    {
+        if (_plcLiveAcquisitionSession is null)
+        {
+            return;
+        }
+
+        var session = _plcLiveAcquisitionSession;
+        _plcLiveAcquisitionSession = null;
+        var summary = await session.StopAsync(CancellationToken.None);
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            PlcAcquisitionDiagnosticsStatus =
+                $"{reason} 已写入 {summary.FrameCount} 帧 / {summary.SnapshotCount} 条点位值，{summary.DatabasePath}";
+        }
     }
 
     public async Task TogglePlcLiveDiagnosticsAsync()
@@ -799,7 +862,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            await StopLiveMonitoringAsync();
             StopPlcReplay();
             var configuration = BuildPlcConfigurationFromForm();
             PlcMonitorStatus = "正在记录 1s 点位数据。";
@@ -849,7 +911,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await StopLiveMonitoringAsync();
             await using var stream = File.OpenRead(fileName);
             var recording = await JsonSerializer.DeserializeAsync<PlcOneSecondRecording>(
                 stream,
@@ -896,12 +957,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ShowPlcLiveTrendAsync()
     {
-        await StopLiveMonitoringAsync();
+        if (!IsPlcMonitoring)
+        {
+            await EnsurePlcMonitoringAsync(BuildPlcConfigurationFromForm(), resetHistory: false);
+        }
+
         StopPlcReplay();
         UsePlcLiveTrendMode();
-        LiveMonitor.ClearTags();
         PlcTrendResetRequested?.Invoke();
-        await RefreshPlcMonitorAsync();
+        ApplyBufferedLiveMonitorFrames();
     }
 
     public void UsePlcLiveTrendMode()
@@ -954,18 +1018,29 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Task.CompletedTask;
     }
 
-    public async Task ShowPlcHistoricalTrendAsync()
+    public Task ShowPlcHistoricalTrendAsync()
     {
-        await StopLiveMonitoringAsync();
+        ShowPlcHistoricalTrend(TimeSpan.FromSeconds(30));
+        return Task.CompletedTask;
+    }
+
+    public Task ShowPlcHistoricalTrendAsync(TimeSpan visibleWindow)
+    {
+        ShowPlcHistoricalTrend(visibleWindow);
+        return Task.CompletedTask;
+    }
+
+    private void ShowPlcHistoricalTrend(TimeSpan visibleWindow)
+    {
         StopPlcReplay();
         if (_liveHistoricalFrames.Count > 0)
         {
             var frames = _liveHistoricalFrames.Select(frame => frame.ToArray()).ToArray();
             _lastPlcRecordingFrames = frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
-            LiveMonitor.ClearTags();
             PlcTrendResetRequested?.Invoke();
             ShowLoadedPlcHistoricalTrend(frames);
+            SetHistoricalWindowEndingAt(DateTimeOffset.Now, visibleWindow);
             return;
         }
 
@@ -977,15 +1052,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        LiveMonitor.ClearTags();
         PlcTrendResetRequested?.Invoke();
         ShowLoadedPlcHistoricalTrend();
     }
 
     public Task ApplyPlcHistoricalRangeAsync()
     {
-        if (!EnsurePlcReplayLoaded())
+        if (!HistoricalTrendWorkbench.HasDataset)
         {
+            Notify("无法调整历史趋势区间", "请先切换到历史趋势，并确保已有采集数据。", "Warning");
             return Task.CompletedTask;
         }
 
@@ -1010,20 +1085,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task ResetPlcHistoricalRangeAsync()
     {
-        if (!EnsurePlcReplayLoaded())
+        if (!HistoricalTrendWorkbench.HasDataset)
         {
+            Notify("无法恢复历史趋势区间", "请先切换到历史趋势，并确保已有采集数据。", "Warning");
             return Task.CompletedTask;
         }
 
-        HistoricalTrendWorkbench.SetRangeTextFromFrames(Debug.LoadedReplayFrames);
         PlcTrendMode.UseHistoricalMode();
-        var dataRange = GetPlcReplayTimestampRange(Debug.LoadedReplayFrames);
-        if (dataRange is not null)
-        {
-            HistoricalTrendWorkbench.ResetTimeRangeToFull();
-        }
+        HistoricalTrendWorkbench.ResetTimeRangeToFull();
 
-        PlcMonitorStatus = $"历史趋势已恢复全量视图：{Debug.LoadedReplayFrames.Count} 帧。";
+        PlcMonitorStatus = $"历史趋势已恢复全量视图：{LastPlcRecordingFrames.Count} 帧。";
         Debug.UpdateReplayStatus("全量历史");
         return Task.CompletedTask;
     }
@@ -1053,6 +1124,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HistoricalTrendWorkbench.ResetRightYRangeToFull();
         PlcMonitorStatus = "趋势 Y2 轴已恢复当前变量量程。";
         return Task.CompletedTask;
+    }
+
+    private void SetHistoricalWindowEndingAt(DateTimeOffset end, TimeSpan window)
+    {
+        if (!HistoricalTrendWorkbench.HasDataset)
+        {
+            return;
+        }
+
+        var start = end - window;
+        HistoricalTrendWorkbench.SetVisibleTimeRange(start, end);
+        HistoricalTrendWorkbench.ApplyVisibleTimeRangeToViewport(start, end);
     }
 
     public Task TogglePlcReplayAsync()
@@ -1171,7 +1254,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HistoricalTrendWorkbench.LoadFrames(frames);
         for (var index = 0; index < frames.Count; index++)
         {
-            ApplyPlcMonitorSnapshots(frames[index], applyTrend: false);
+            ApplyPlcMonitorSnapshots(frames[index], applyTrend: false, storeLiveHistory: false);
         }
 
         PlcSnapshotFramesApplied?.Invoke(frames);
@@ -1259,7 +1342,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var configuration = await _plcConfigurationWorkflow.LoadAsync(fileName, CancellationToken.None);
             ApplyPlcConfiguration(configuration);
             Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
-            await CheckPlcCommunicationAsync();
+            await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: true);
         }
         catch (Exception exception)
         {

@@ -26,7 +26,8 @@ public sealed class AxisRangeBrush : FrameworkElement
         new FrameworkPropertyMetadata(
             0d,
             FrameworkPropertyMetadataOptions.BindsTwoWayByDefault | FrameworkPropertyMetadataOptions.AffectsRender,
-            OnRangeValueChanged));
+            OnRangeValueChanged,
+            CoerceLowerValue));
 
     public static readonly DependencyProperty UpperValueProperty = DependencyProperty.Register(
         nameof(UpperValue),
@@ -35,7 +36,8 @@ public sealed class AxisRangeBrush : FrameworkElement
         new FrameworkPropertyMetadata(
             1000d,
             FrameworkPropertyMetadataOptions.BindsTwoWayByDefault | FrameworkPropertyMetadataOptions.AffectsRender,
-            OnRangeValueChanged));
+            OnRangeValueChanged,
+            CoerceUpperValue));
 
     public static readonly DependencyProperty OrientationProperty = DependencyProperty.Register(
         nameof(Orientation),
@@ -72,13 +74,13 @@ public sealed class AxisRangeBrush : FrameworkElement
     public double LowerValue
     {
         get => (double)GetValue(LowerValueProperty);
-        set => SetValue(LowerValueProperty, value);
+        set => SetValue(LowerValueProperty, CoerceLowerValue(value));
     }
 
     public double UpperValue
     {
         get => (double)GetValue(UpperValueProperty);
-        set => SetValue(UpperValueProperty, value);
+        set => SetValue(UpperValueProperty, CoerceUpperValue(value));
     }
 
     public Orientation Orientation
@@ -193,7 +195,17 @@ public sealed class AxisRangeBrush : FrameworkElement
 
     private static void OnRangeValueChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
-        ((AxisRangeBrush)dependencyObject).InvalidateVisual();
+        var brush = (AxisRangeBrush)dependencyObject;
+        if (e.Property == LowerValueProperty)
+        {
+            brush.CoerceValue(UpperValueProperty);
+        }
+        else if (e.Property == UpperValueProperty)
+        {
+            brush.CoerceValue(LowerValueProperty);
+        }
+
+        brush.InvalidateVisual();
     }
 
     private void DrawHorizontal(DrawingContext context, Pen trackPen, Pen selectedPen, Pen handlePen, Brush handleBrush)
@@ -261,10 +273,10 @@ public sealed class AxisRangeBrush : FrameworkElement
         switch (_dragMode)
         {
             case DragMode.UpperHandle:
-                UpperValue = value;
+                UpperValue = Math.Max(value, LowerValue);
                 break;
             case DragMode.LowerHandle:
-                LowerValue = value;
+                LowerValue = Math.Min(value, UpperValue);
                 break;
             case DragMode.Range:
                 MoveSelectedRange(value - _dragStartPointerValue);
@@ -291,8 +303,34 @@ public sealed class AxisRangeBrush : FrameworkElement
             requestedLower = requestedUpper - span;
         }
 
-        LowerValue = Clamp(requestedLower, Minimum, Maximum);
-        UpperValue = Clamp(requestedUpper, Minimum, Maximum);
+        SetCurrentValue(LowerValueProperty, Clamp(requestedLower, Minimum, Maximum));
+        SetCurrentValue(UpperValueProperty, Clamp(requestedUpper, Minimum, Maximum));
+    }
+
+    private static object CoerceLowerValue(DependencyObject dependencyObject, object baseValue)
+    {
+        var brush = (AxisRangeBrush)dependencyObject;
+        var value = (double)baseValue;
+        return brush.CoerceLowerValue(value);
+    }
+
+    private static object CoerceUpperValue(DependencyObject dependencyObject, object baseValue)
+    {
+        var brush = (AxisRangeBrush)dependencyObject;
+        var value = (double)baseValue;
+        return brush.CoerceUpperValue(value);
+    }
+
+    private double CoerceLowerValue(double value)
+    {
+        var clamped = Clamp(value, Minimum, Maximum);
+        return Math.Min(clamped, UpperValue);
+    }
+
+    private double CoerceUpperValue(double value)
+    {
+        var clamped = Clamp(value, Minimum, Maximum);
+        return Math.Max(clamped, LowerValue);
     }
 
     private double PointerToValue(Point pointer)

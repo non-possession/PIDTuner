@@ -133,9 +133,29 @@ public partial class MainWindow : Window
     private async void PlcTrendWindow1Hour_Click(object sender, RoutedEventArgs e) =>
         await SetPlcTrendWindowAsync(TimeSpan.FromHours(1));
 
+    private async void ShowPlcLiveTrend_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.ShowPlcLiveTrendAsync();
+        _plcTrendChartAdapter.SetHistoricalVisibleRange(null, null);
+        _plcTrendChartAdapter.ClearManualYRange();
+        _plcTrendChartAdapter.ClearManualRightYRange();
+        ApplyPlcTrendChartState();
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
+    private async void ShowPlcHistoricalTrend_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.ShowPlcHistoricalTrendAsync(_plcTrendChartAdapter.VisibleWindow);
+        ApplyPlcTrendChartState();
+        _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
+        PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
+    }
+
     private void ApplyPlcHistoricalViewport(DateTimeOffset? start, DateTimeOffset? end)
     {
         ApplyPlcTrendChartState();
+        _plcTrendChartAdapter.ShowFullHistory = true;
         _plcTrendChartAdapter.SetHistoricalVisibleRange(start, end);
         _plcTrendChartAdapter.Render(_viewModel.LiveMonitor.Tags);
         PlcTrendStatusTextBlock.Text = BuildTrendStatusText();

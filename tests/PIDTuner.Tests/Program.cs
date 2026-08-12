@@ -1167,11 +1167,13 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
 {
     var directory = CreateTestStorageDirectory();
     var reader = new SequencePlcTagSnapshotReader();
+    var diagnosticsStore = new FakePlcLiveDiagnosticsStore();
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
         plcTagSnapshotReader: reader,
+        plcLiveDiagnosticsStore: diagnosticsStore,
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
 
@@ -1187,29 +1189,63 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     };
     viewModel.PlcSnapshotFramesApplied += _ => batchAppliedCount++;
 
+    viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
+    viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
+    await viewModel.TogglePlcMonitoringAsync();
+    await WaitUntilAsync(() => reader.SessionReadCount >= 3);
     await viewModel.RefreshPlcMonitorAsync();
-    await viewModel.RefreshPlcMonitorAsync();
-    await viewModel.RefreshPlcMonitorAsync();
-    await viewModel.ShowPlcHistoricalTrendAsync();
+    await viewModel.ShowPlcHistoricalTrendAsync(TimeSpan.FromSeconds(10));
 
     AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live snapshots switch to historical trend mode");
+    AssertEqual(true, viewModel.IsPlcMonitoring, "historical trend keeps acquisition running");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.HasDataset, "live snapshots create historical dataset");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsViewportEnabled, "live snapshots enable x viewport slider");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsYSliderEnabled, "live snapshots enable y slider");
     AssertEqual(1, batchAppliedCount, "live snapshots publish one historical frame batch");
-    AssertEqual(3, viewModel.LastPlcRecordingFrames.Count, "live snapshots are retained as historical frames");
+    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 3, "live snapshots are retained as historical frames");
+    AssertEqual(1, diagnosticsStore.StartCount, "live acquisition sqlite session starts");
+    AssertEqual(true, diagnosticsStore.LastSession!.EnqueueCount > 0, "live acquisition frames enqueue to sqlite session");
+    AssertEqual(
+        true,
+        DateTimeOffset.Now - requestedViewportEnd!.Value < TimeSpan.FromSeconds(2),
+        "historical window ends at mode switch time");
+    AssertEqual(
+        true,
+        requestedViewportEnd.Value - requestedViewportStart!.Value <= TimeSpan.FromSeconds(10),
+        "historical window starts at selected duration before switch time");
 
     viewModel.HistoricalTrendWorkbench.ViewportStart =
         viewModel.HistoricalTrendWorkbench.ViewportMinimum +
         (viewModel.HistoricalTrendWorkbench.ViewportMaximum - viewModel.HistoricalTrendWorkbench.ViewportMinimum) / 2d;
-    AssertEqual(1, viewportRequestCount, "live historical x slider requests viewport update");
+    AssertEqual(2, viewportRequestCount, "live historical x slider requests viewport update");
     AssertEqual(true, requestedViewportStart.HasValue, "live historical x slider start timestamp");
     AssertEqual(true, requestedViewportEnd.HasValue, "live historical x slider end timestamp");
+    viewModel.HistoricalTrendWorkbench.ViewportStart = 900d;
+    viewModel.HistoricalTrendWorkbench.ViewportEnd = 100d;
+    AssertEqual(
+        true,
+        viewModel.HistoricalTrendWorkbench.ViewportStart <= viewModel.HistoricalTrendWorkbench.ViewportEnd,
+        "historical x slider lower cannot exceed upper");
+    viewModel.HistoricalTrendWorkbench.YLower = 900d;
+    viewModel.HistoricalTrendWorkbench.YUpper = 100d;
+    AssertEqual(
+        true,
+        viewModel.HistoricalTrendWorkbench.YLower <= viewModel.HistoricalTrendWorkbench.YUpper,
+        "historical y1 slider lower cannot exceed upper");
+    viewModel.HistoricalTrendWorkbench.RightYLower = 900d;
+    viewModel.HistoricalTrendWorkbench.RightYUpper = 100d;
+    AssertEqual(
+        true,
+        viewModel.HistoricalTrendWorkbench.RightYLower <= viewModel.HistoricalTrendWorkbench.RightYUpper,
+        "historical y2 slider lower cannot exceed upper");
 
     await viewModel.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
-    AssertEqual(2, viewportRequestCount, "live historical preset requests viewport update");
+    AssertEqual(true, viewportRequestCount >= 3, "live historical preset requests viewport update");
     AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live historical preset keeps trend mode");
     AssertContains("历史趋势窗口", viewModel.PlcMonitorStatus);
+    await viewModel.ShowPlcLiveTrendAsync();
+    AssertEqual(true, viewModel.IsPlcMonitoring, "live trend resumes without stopping acquisition");
+    await viewModel.TogglePlcMonitoringAsync();
 }
 
 static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
@@ -1237,7 +1273,7 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
     AssertEqual(true, reader.SessionReadCount >= 3, "live monitor session read count");
     AssertEqual(0, reader.ReadCount, "live monitor single read count");
     AssertEqual(true, lastTrendTimestamp.HasValue, "live monitor planned trend timestamp");
-    AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
+    AssertContains("SQLite 写入已关闭", viewModel.PlcAcquisitionDiagnosticsStatus);
 }
 
 static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
@@ -1267,7 +1303,7 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     await viewModel.TogglePlcMonitoringAsync();
 
-    AssertEqual(1, diagnosticsStore.StartCount, "diagnostics start count");
+    AssertEqual(2, diagnosticsStore.StartCount, "diagnostics start count includes live acquisition sqlite session");
     AssertEqual(true, diagnosticsStore.LastSession is not null, "diagnostics session created");
     AssertEqual(true, diagnosticsStore.LastSession!.StopCount >= 1, "diagnostics session stopped");
     AssertContains("帧", viewModel.PlcLiveDiagnosticsStatus);
@@ -1295,7 +1331,7 @@ static async Task MainViewModelFiltersDiagnosticsFramesBeforeSessionStart()
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     await viewModel.TogglePlcMonitoringAsync();
 
-    AssertEqual(1, diagnosticsStore.StartCount, "future diagnostics start count");
+    AssertEqual(2, diagnosticsStore.StartCount, "future diagnostics start count includes live acquisition sqlite session");
     AssertEqual(0, diagnosticsStore.LastSession!.EnqueueCount, "future diagnostics should ignore frames before session start");
 }
 
