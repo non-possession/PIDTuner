@@ -32,6 +32,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("trend series builder normalizes SP PV and MV for plotting", TrendSeriesBuilderNormalizesPidSamples),
     ("plc trend dataset bridge groups frames by tag", PlcTrendDatasetBridgeGroupsFramesByTag),
     ("historical trend workbench clamps ranges and filters series", HistoricalTrendWorkbenchClampsRangesAndFiltersSeries),
+    ("historical time picker values stay ordered and inside data range", HistoricalTimePickerValuesStayOrdered),
     ("field profile editor adds updates and removes fields", FieldProfileEditorAddsUpdatesAndRemovesFields),
     ("analysis window parser returns optional validated windows", AnalysisWindowParserReturnsOptionalValidatedWindows),
     ("response assessment flags high overshoot and steady-state error", ResponseAssessmentFlagsHighOvershootAndSteadyStateError),
@@ -374,6 +375,32 @@ static Task HistoricalTrendWorkbenchClampsRangesAndFiltersSeries()
     AssertEqual(spId, visibleSeries[0].SeriesId, "remaining visible series");
     AssertEqual(2, visibleSeries[0].Points.Count, "visible points filtered by time");
 
+    return Task.CompletedTask;
+}
+
+static Task HistoricalTimePickerValuesStayOrdered()
+{
+    var start = new DateTimeOffset(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);
+    var end = start.AddMinutes(1);
+    var tagId = Guid.Parse("20000000-0000-0000-0000-000000000003");
+    IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames = new[]
+    {
+        new[] { new PlcTagSnapshot(tagId, "SP", "DB1.DBD6", 10, null, start, "Good", "PLC") },
+        new[] { new PlcTagSnapshot(tagId, "SP", "DB1.DBD6", 11, null, end, "Good", "PLC") },
+    };
+    var workbench = new HistoricalTrendWorkbenchViewModel();
+
+    workbench.LoadFrames(frames);
+    workbench.RangeStartValue = start.AddSeconds(40);
+    workbench.RangeEndValue = start.AddSeconds(20);
+
+    AssertEqual(start.AddSeconds(40), workbench.RangeEndValue, "end cannot precede start");
+
+    workbench.RangeStartValue = start.AddMinutes(-1);
+    workbench.RangeEndValue = end.AddMinutes(1);
+
+    AssertEqual(start, workbench.RangeStartValue, "start clamps to dataset minimum");
+    AssertEqual(end, workbench.RangeEndValue, "end clamps to dataset maximum");
     return Task.CompletedTask;
 }
 

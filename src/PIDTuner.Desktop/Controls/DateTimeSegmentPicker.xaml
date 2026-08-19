@@ -1,0 +1,150 @@
+<UserControl x:Class="PIDTuner.Desktop.Controls.DateTimeSegmentPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="196"
+             Height="28">
+  <UserControl.Resources>
+    <Style x:Key="DateTimeSegmentBorderStyle"
+           TargetType="{x:Type Border}">
+      <Setter Property="Padding"
+              Value="3,2" />
+      <Setter Property="CornerRadius"
+              Value="3" />
+      <Setter Property="Background"
+              Value="Transparent" />
+      <Setter Property="BorderBrush"
+              Value="Transparent" />
+      <Setter Property="BorderThickness"
+              Value="1" />
+      <Setter Property="Cursor"
+              Value="SizeNS" />
+      <Setter Property="Focusable"
+              Value="True" />
+      <Setter Property="ToolTip"
+              Value="滚轮或上下拖动调整" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver"
+                 Value="True">
+          <Setter Property="Background"
+                  Value="#ECFDF5" />
+          <Setter Property="BorderBrush"
+                  Value="#99F6E4" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="DateTimeSegmentTextStyle"
+           TargetType="{x:Type TextBlock}">
+      <Setter Property="FontSize"
+              Value="13" />
+      <Setter Property="FontWeight"
+              Value="SemiBold" />
+      <Setter Property="Foreground"
+              Value="#334155" />
+      <Setter Property="VerticalAlignment"
+              Value="Center" />
+      <Setter Property="TextAlignment"
+              Value="Center" />
+    </Style>
+  </UserControl.Resources>
+
+  <Border x:Name="PickerBorder"
+          Padding="2"
+          BorderBrush="#CBD5E1"
+          BorderThickness="1"
+          CornerRadius="4"
+          Background="#FFFFFF">
+    <StackPanel Orientation="Horizontal"
+                VerticalAlignment="Center">
+      <Border Tag="Year"
+              Width="39"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="YearText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+      <TextBlock Text="/"
+                 VerticalAlignment="Center"
+                 Foreground="#94A3B8" />
+      <Border Tag="Month"
+              Width="25"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="MonthText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+      <TextBlock Text="/"
+                 VerticalAlignment="Center"
+                 Foreground="#94A3B8" />
+      <Border Tag="Day"
+              Width="25"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="DayText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+
+      <Border Width="1"
+              Height="16"
+              Margin="5,0"
+              Background="#E2E8F0" />
+
+      <Border Tag="Hour"
+              Width="25"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="HourText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+      <TextBlock Text=":"
+                 VerticalAlignment="Center"
+                 Foreground="#94A3B8" />
+      <Border Tag="Minute"
+              Width="25"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="MinuteText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+      <TextBlock Text=":"
+                 VerticalAlignment="Center"
+                 Foreground="#94A3B8" />
+      <Border Tag="Second"
+              Width="25"
+              Style="{StaticResource DateTimeSegmentBorderStyle}"
+              PreviewMouseLeftButtonDown="Segment_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Segment_MouseLeftButtonUp"
+              PreviewMouseMove="Segment_MouseMove"
+              LostMouseCapture="Segment_LostMouseCapture"
+              PreviewMouseWheel="Segment_MouseWheel"
+              PreviewKeyDown="Segment_KeyDown">
+        <TextBlock x:Name="SecondText"
+                   Style="{StaticResource DateTimeSegmentTextStyle}" />
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>

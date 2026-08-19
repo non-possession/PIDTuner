@@ -20,6 +20,10 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         new HashSet<Guid>());
     private string _rangeStartText = string.Empty;
     private string _rangeEndText = string.Empty;
+    private DateTimeOffset _rangeStartValue = DateTimeOffset.Now;
+    private DateTimeOffset _rangeEndValue = DateTimeOffset.Now;
+    private DateTimeOffset _rangeMinimum = DateTimeOffset.MinValue;
+    private DateTimeOffset _rangeMaximum = DateTimeOffset.MaxValue;
     private string _yMinimumText = string.Empty;
     private string _yMaximumText = string.Empty;
     private string _rightYMinimumText = string.Empty;
@@ -96,6 +100,44 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
     {
         get => _rangeEndText;
         set => SetProperty(ref _rangeEndText, value);
+    }
+
+    public DateTimeOffset RangeStartValue
+    {
+        get => _rangeStartValue;
+        set
+        {
+            var clamped = ClampTimestamp(value, RangeMinimum, RangeEndValue);
+            if (SetProperty(ref _rangeStartValue, clamped))
+            {
+                RangeStartText = FormatTimestamp(clamped);
+            }
+        }
+    }
+
+    public DateTimeOffset RangeEndValue
+    {
+        get => _rangeEndValue;
+        set
+        {
+            var clamped = ClampTimestamp(value, RangeStartValue, RangeMaximum);
+            if (SetProperty(ref _rangeEndValue, clamped))
+            {
+                RangeEndText = FormatTimestamp(clamped);
+            }
+        }
+    }
+
+    public DateTimeOffset RangeMinimum
+    {
+        get => _rangeMinimum;
+        private set => SetProperty(ref _rangeMinimum, value);
+    }
+
+    public DateTimeOffset RangeMaximum
+    {
+        get => _rangeMaximum;
+        private set => SetProperty(ref _rangeMaximum, value);
     }
 
     public string YMinimumText
@@ -388,8 +430,8 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
             return;
         }
 
-        RangeStartText = FormatTimestamp(timestamps[0]);
-        RangeEndText = FormatTimestamp(timestamps[^1]);
+        SetRangeBounds(timestamps[0], timestamps[^1]);
+        SetRangeValues(timestamps[0], timestamps[^1]);
     }
 
     public bool TryApplyRangeText(out string? error)
@@ -606,6 +648,7 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
                 _totalEnd = timeRange.Value.End > timeRange.Value.Start
                     ? timeRange.Value.End
                     : timeRange.Value.Start.AddMilliseconds(1);
+                SetRangeBounds(_totalStart.Value, _totalEnd.Value);
                 ViewportMinimum = AxisSliderMinimum;
                 ViewportMaximum = AxisSliderMaximum;
                 SetViewportSliderValues(AxisSliderMinimum, AxisSliderMaximum);
@@ -746,10 +789,35 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
 
     private void UpdateViewportText(DateTimeOffset start, DateTimeOffset end)
     {
-        RangeStartText = FormatTimestamp(start);
-        RangeEndText = FormatTimestamp(end);
+        SetRangeValues(start, end);
         ViewportStartLabel = RangeStartText;
         ViewportEndLabel = RangeEndText;
+    }
+
+    private void SetRangeBounds(DateTimeOffset minimum, DateTimeOffset maximum)
+    {
+        if (minimum > maximum)
+        {
+            (minimum, maximum) = (maximum, minimum);
+        }
+
+        RangeMinimum = minimum;
+        RangeMaximum = maximum;
+    }
+
+    private void SetRangeValues(DateTimeOffset start, DateTimeOffset end)
+    {
+        if (start > end)
+        {
+            (start, end) = (end, start);
+        }
+
+        start = ClampTimestamp(start, RangeMinimum, RangeMaximum);
+        end = ClampTimestamp(end, start, RangeMaximum);
+        SetProperty(ref _rangeStartValue, start, nameof(RangeStartValue));
+        SetProperty(ref _rangeEndValue, end, nameof(RangeEndValue));
+        RangeStartText = FormatTimestamp(start);
+        RangeEndText = FormatTimestamp(end);
     }
 
     private void UpdateYRangeText(double min, double max)
@@ -1045,6 +1113,23 @@ public sealed class HistoricalTrendWorkbenchViewModel : INotifyPropertyChanged
         }
 
         return Math.Clamp(value, minimum, maximum);
+    }
+
+    private static DateTimeOffset ClampTimestamp(
+        DateTimeOffset value,
+        DateTimeOffset minimum,
+        DateTimeOffset maximum)
+    {
+        if (minimum > maximum)
+        {
+            maximum = minimum;
+        }
+
+        return value < minimum
+            ? minimum
+            : value > maximum
+                ? maximum
+                : value;
     }
 
     private static DateTimeOffset InterpolateTimestamp(DateTimeOffset start, DateTimeOffset end, double sliderValue)

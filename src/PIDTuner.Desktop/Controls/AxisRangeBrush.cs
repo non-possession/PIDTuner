@@ -50,6 +50,7 @@ public sealed class AxisRangeBrush : FrameworkElement
     private const double HandleHitTolerance = 14d;
 
     private DragMode _dragMode = DragMode.None;
+    private DragMode _hoverMode = DragMode.None;
     private double _dragStartPointerValue;
     private double _dragStartLowerValue;
     private double _dragStartUpperValue;
@@ -123,6 +124,7 @@ public sealed class AxisRangeBrush : FrameworkElement
         _dragStartPointerValue = PointerToValue(pointer);
         _dragStartLowerValue = LowerValue;
         _dragStartUpperValue = UpperValue;
+        InvalidateVisual();
         SetDraggedValue(pointer);
         e.Handled = true;
     }
@@ -137,7 +139,14 @@ public sealed class AxisRangeBrush : FrameworkElement
 
         if (!IsMouseCaptured)
         {
-            Cursor = ResolveDragMode(e.GetPosition(this)) == DragMode.None ? Cursors.Arrow : Cursors.Hand;
+            var hoverMode = ResolveHoverMode(e.GetPosition(this));
+            Cursor = hoverMode == DragMode.None ? Cursors.Arrow : Cursors.Hand;
+            if (_hoverMode != hoverMode)
+            {
+                _hoverMode = hoverMode;
+                InvalidateVisual();
+            }
+
             return;
         }
 
@@ -150,6 +159,17 @@ public sealed class AxisRangeBrush : FrameworkElement
         e.Handled = true;
     }
 
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        if (!IsMouseCaptured && _hoverMode != DragMode.None)
+        {
+            _hoverMode = DragMode.None;
+            InvalidateVisual();
+        }
+
+        base.OnMouseLeave(e);
+    }
+
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)
@@ -158,13 +178,17 @@ public sealed class AxisRangeBrush : FrameworkElement
         }
 
         _dragMode = DragMode.None;
+        _hoverMode = DragMode.None;
         ReleaseMouseCapture();
+        InvalidateVisual();
         e.Handled = true;
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         _dragMode = DragMode.None;
+        _hoverMode = DragMode.None;
+        InvalidateVisual();
         base.OnLostMouseCapture(e);
     }
 
@@ -172,24 +196,21 @@ public sealed class AxisRangeBrush : FrameworkElement
     {
         base.OnRender(drawingContext);
 
-        var trackPen = new Pen(new SolidColorBrush(Color.FromRgb(156, 163, 175)), 1d);
-        var selectedPen = new Pen(new SolidColorBrush(Color.FromRgb(37, 99, 235)), 4d)
+        var trackPen = new Pen(new SolidColorBrush(Color.FromRgb(203, 213, 225)), 1d);
+        var selectedPen = new Pen(new SolidColorBrush(Color.FromRgb(100, 116, 139)),
+            _dragMode == DragMode.Range || _hoverMode == DragMode.Range ? 3d : 1.5d)
         {
             StartLineCap = PenLineCap.Round,
             EndLineCap = PenLineCap.Round,
         };
-        var handlePen = new Pen(new SolidColorBrush(Color.FromRgb(29, 78, 216)), 2d);
-        var handleBrush = IsEnabled
-            ? new SolidColorBrush(Color.FromRgb(239, 246, 255))
-            : new SolidColorBrush(Color.FromRgb(229, 231, 235));
 
         if (Orientation == Orientation.Horizontal)
         {
-            DrawHorizontal(drawingContext, trackPen, selectedPen, handlePen, handleBrush);
+            DrawHorizontal(drawingContext, trackPen, selectedPen);
         }
         else
         {
-            DrawVertical(drawingContext, trackPen, selectedPen, handlePen, handleBrush);
+            DrawVertical(drawingContext, trackPen, selectedPen);
         }
     }
 
@@ -208,7 +229,7 @@ public sealed class AxisRangeBrush : FrameworkElement
         brush.InvalidateVisual();
     }
 
-    private void DrawHorizontal(DrawingContext context, Pen trackPen, Pen selectedPen, Pen handlePen, Brush handleBrush)
+    private void DrawHorizontal(DrawingContext context, Pen trackPen, Pen selectedPen)
     {
         var y = ActualHeight / 2d;
         var startX = HorizontalTrackPadding;
@@ -222,11 +243,11 @@ public sealed class AxisRangeBrush : FrameworkElement
 
         context.DrawLine(trackPen, new Point(startX, y), new Point(endX, y));
         context.DrawLine(selectedPen, new Point(lowerX, y), new Point(upperX, y));
-        context.DrawEllipse(handleBrush, handlePen, new Point(lowerX, y), 6d, 10d);
-        context.DrawEllipse(handleBrush, handlePen, new Point(upperX, y), 6d, 10d);
+        DrawHandleLine(context, new Point(lowerX, y), isVertical: true, DragMode.LowerHandle);
+        DrawHandleLine(context, new Point(upperX, y), isVertical: true, DragMode.UpperHandle);
     }
 
-    private void DrawVertical(DrawingContext context, Pen trackPen, Pen selectedPen, Pen handlePen, Brush handleBrush)
+    private void DrawVertical(DrawingContext context, Pen trackPen, Pen selectedPen)
     {
         var x = ActualWidth / 2d;
         var topY = VerticalTrackPadding;
@@ -238,8 +259,29 @@ public sealed class AxisRangeBrush : FrameworkElement
 
         context.DrawLine(trackPen, new Point(x, topY), new Point(x, bottomY));
         context.DrawLine(selectedPen, new Point(x, selectedTop), new Point(x, selectedBottom));
-        context.DrawEllipse(handleBrush, handlePen, new Point(x, upperY), 10d, 6d);
-        context.DrawEllipse(handleBrush, handlePen, new Point(x, lowerY), 10d, 6d);
+        DrawHandleLine(context, new Point(x, upperY), isVertical: false, DragMode.UpperHandle);
+        DrawHandleLine(context, new Point(x, lowerY), isVertical: false, DragMode.LowerHandle);
+    }
+
+    private void DrawHandleLine(DrawingContext context, Point center, bool isVertical, DragMode mode)
+    {
+        var isActive = _dragMode == mode || _hoverMode == mode;
+        var color = isActive
+            ? Color.FromRgb(15, 118, 110)
+            : Color.FromRgb(71, 85, 105);
+        var pen = new Pen(new SolidColorBrush(color), isActive ? 4d : 2d)
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+        };
+        var halfLength = isActive ? 9d : 6d;
+        var start = isVertical
+            ? new Point(center.X, center.Y - halfLength)
+            : new Point(center.X - halfLength, center.Y);
+        var end = isVertical
+            ? new Point(center.X, center.Y + halfLength)
+            : new Point(center.X + halfLength, center.Y);
+        context.DrawLine(pen, start, end);
     }
 
     private DragMode ResolveDragMode(Point pointer)
@@ -265,6 +307,27 @@ public sealed class AxisRangeBrush : FrameworkElement
         }
 
         return upperDistance <= lowerDistance ? DragMode.UpperHandle : DragMode.LowerHandle;
+    }
+
+    private DragMode ResolveHoverMode(Point pointer)
+    {
+        var lowerPosition = Orientation == Orientation.Horizontal
+            ? ValueToHorizontalPosition(LowerValue)
+            : ValueToVerticalPosition(LowerValue);
+        var upperPosition = Orientation == Orientation.Horizontal
+            ? ValueToHorizontalPosition(UpperValue)
+            : ValueToVerticalPosition(UpperValue);
+        var pointerPosition = Orientation == Orientation.Horizontal ? pointer.X : pointer.Y;
+        var lowerDistance = Math.Abs(pointerPosition - lowerPosition);
+        var upperDistance = Math.Abs(pointerPosition - upperPosition);
+        if (lowerDistance <= HandleHitTolerance || upperDistance <= HandleHitTolerance)
+        {
+            return upperDistance <= lowerDistance ? DragMode.UpperHandle : DragMode.LowerHandle;
+        }
+
+        return IsPointerInsideSelectedRange(pointerPosition, lowerPosition, upperPosition)
+            ? DragMode.Range
+            : DragMode.None;
     }
 
     private void SetDraggedValue(Point pointer)

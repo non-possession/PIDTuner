@@ -373,7 +373,7 @@
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="300" />
+              <ColumnDefinition Width="240" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Row="0"
@@ -384,11 +384,11 @@
                     Background="#F8FAFC">
               <Grid Margin="10">
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="150" />
-                  <ColumnDefinition Width="36" />
+                  <ColumnDefinition Width="132" />
+                  <ColumnDefinition Width="28" />
                   <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="36" />
-                  <ColumnDefinition Width="150" />
+                  <ColumnDefinition Width="28" />
+                  <ColumnDefinition Width="132" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                   <RowDefinition Height="*" />
@@ -460,7 +460,7 @@
 
                 <Grid Grid.Column="2"
                       Grid.Row="1"
-                      Margin="0,8,0,0"
+                      Margin="0,6,0,0"
                       Visibility="{Binding PlcTrendMode.IsHistoricalMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -474,8 +474,8 @@
                   <TextBlock Grid.Row="0"
                              Text="{Binding HistoricalTrendWorkbench.ViewportStartLabel}"
                              VerticalAlignment="Center"
-                             FontWeight="SemiBold"
-                             Foreground="#1D4ED8" />
+                             FontSize="11"
+                             Foreground="#64748B" />
                   <controls:AxisRangeBrush Grid.Row="0"
                                            Grid.Column="1"
                                            Width="420"
@@ -490,8 +490,8 @@
                              Text="{Binding HistoricalTrendWorkbench.ViewportEndLabel}"
                              VerticalAlignment="Center"
                              TextAlignment="Right"
-                             FontWeight="SemiBold"
-                             Foreground="#1D4ED8" />
+                             FontSize="11"
+                             Foreground="#64748B" />
                   <StackPanel Grid.Row="1"
                               Grid.ColumnSpan="3"
                               Margin="0,6,0,0"
@@ -501,20 +501,22 @@
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"
                                Foreground="#475569" />
-                    <TextBox Text="{Binding HistoricalTrendWorkbench.RangeStartText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Width="180"
-                             Height="26" />
-                    <TextBlock Text="结束"
+                    <controls:DateTimeSegmentPicker Value="{Binding HistoricalTrendWorkbench.RangeStartValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    Minimum="{Binding HistoricalTrendWorkbench.RangeMinimum}"
+                                                    Maximum="{Binding HistoricalTrendWorkbench.RangeMaximum}"
+                                                    IsEnabled="{Binding HistoricalTrendWorkbench.IsViewportEnabled}" />
+                    <TextBlock Text="至"
                                VerticalAlignment="Center"
-                               Margin="12,0,6,0"
+                               Margin="10,0"
                                Foreground="#475569" />
-                    <TextBox Text="{Binding HistoricalTrendWorkbench.RangeEndText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Width="180"
-                             Height="26" />
+                    <controls:DateTimeSegmentPicker Value="{Binding HistoricalTrendWorkbench.RangeEndValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    Minimum="{Binding HistoricalTrendWorkbench.RangeMinimum}"
+                                                    Maximum="{Binding HistoricalTrendWorkbench.RangeMaximum}"
+                                                    IsEnabled="{Binding HistoricalTrendWorkbench.IsViewportEnabled}" />
                     <Button Command="{Binding ApplyPlcHistoricalRangeCommand}"
-                            Content="应用"
-                            Height="26"
-                            Width="58"
+                            Content="应用时间"
+                            Height="28"
+                            Width="70"
                             Margin="10,0,0,0" />
                   </StackPanel>
                 </Grid>
@@ -592,15 +594,15 @@
                     Grid.Column="1"
                     BorderBrush="#CBD5E1"
                     BorderThickness="1"
-                    Background="#F8FAFC">
+                    Background="#FAFBFC">
               <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding LiveMonitor.Tags}"
-                              Margin="8">
+                              Margin="6">
                   <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Border Margin="0,0,0,8"
-                            Padding="8"
-                            BorderBrush="#CBD5E1"
+                    <Border Margin="0,0,0,6"
+                            Padding="7"
+                            BorderBrush="#E2E8F0"
                             BorderThickness="1"
                             Background="#FFFFFF">
                       <Grid>
@@ -614,7 +616,7 @@
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Name}"
-                                   FontSize="15"
+                                   FontSize="14"
                                    FontWeight="SemiBold"
                                    Foreground="#111827"
                                    TextWrapping="Wrap" />
@@ -636,7 +638,7 @@
                             <ColumnDefinition Width="88" />
                           </Grid.ColumnDefinitions>
                           <TextBlock Text="{Binding ValueText}"
-                                     FontSize="18"
+                                     FontSize="16"
                                      FontWeight="SemiBold"
                                      Foreground="#0F766E" />
                           <ComboBox Grid.Column="1"
