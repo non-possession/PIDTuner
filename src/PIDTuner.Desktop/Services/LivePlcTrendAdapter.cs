@@ -221,18 +221,16 @@ public sealed class LivePlcTrendAdapter
     }
 
     public string BuildNearestPointSummary(
-        Point position,
-        Size controlSize,
+        Pixel plotPixel,
         IReadOnlyList<PlcTagMonitorViewModel> monitorTags)
     {
-        if (controlSize.Width <= 0 || controlSize.Height <= 0 || _pointsByTag.Count == 0)
+        if (_pointsByTag.Count == 0)
         {
             return string.Empty;
         }
 
         Coordinates coordinates = _plot.Plot.GetCoordinates(
-            (float)position.X,
-            (float)position.Y,
+            plotPixel,
             _plot.Plot.Axes.Bottom,
             _plot.Plot.Axes.Left);
         var target = DateTime.SpecifyKind(DateTime.FromOADate(coordinates.X), DateTimeKind.Local);

@@ -27,6 +27,7 @@ namespace PIDTuner.Desktop.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     public const int LiveMonitorUiRefreshMilliseconds = 250;
+    private static readonly TimeSpan LiveHistoricalRetentionWindow = TimeSpan.FromHours(1);
 
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly FieldProfileWorkflow _fieldProfileWorkflow;
@@ -723,7 +724,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             : snapshots.ToArray();
         _liveHistoricalFrames.Add(frame);
 
-        const int maxLiveHistoricalFrames = 20000;
+        var intervalMilliseconds = CurrentPlcAcquisitionIntervalMilliseconds > 0
+            ? CurrentPlcAcquisitionIntervalMilliseconds
+            : PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
+        var maxLiveHistoricalFrames = Math.Max(
+            20_000,
+            (int)Math.Ceiling(LiveHistoricalRetentionWindow.TotalMilliseconds / intervalMilliseconds) + 100);
         if (_liveHistoricalFrames.Count > maxLiveHistoricalFrames)
         {
             _liveHistoricalFrames.RemoveRange(0, _liveHistoricalFrames.Count - maxLiveHistoricalFrames);

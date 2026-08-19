@@ -199,16 +199,17 @@ public partial class MainWindow : Window
 
     private async Task SetPlcTrendWindowAsync(TimeSpan window)
     {
+        _plcTrendChartAdapter.VisibleWindow = window;
         if (_viewModel.PlcTrendMode.IsHistoricalMode)
         {
             await _viewModel.SetPlcHistoricalTrendWindowAsync(window);
+            PlcTrendStatusTextBlock.Text = BuildTrendStatusText();
             return;
         }
 
         var wasHistoricalTrendMode = _viewModel.PlcTrendMode.IsHistoricalMode;
         _viewModel.UsePlcLiveTrendMode();
         ConfigurePlcTrendRetention();
-        _plcTrendChartAdapter.VisibleWindow = window;
         ApplyPlcTrendChartState();
         if (wasHistoricalTrendMode)
         {
@@ -223,8 +224,7 @@ public partial class MainWindow : Window
     private void PlcTrendPlot_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
         var summary = _plcTrendChartAdapter.BuildNearestPointSummary(
-            e.GetPosition(PlcTrendPlot),
-            new Size(PlcTrendPlot.ActualWidth, PlcTrendPlot.ActualHeight),
+            PlcTrendPlot.GetPlotPixelPosition(e),
             _viewModel.LiveMonitor.Tags);
         if (!string.IsNullOrWhiteSpace(summary))
         {

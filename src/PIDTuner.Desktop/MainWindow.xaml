@@ -204,11 +204,6 @@
                       Width="96"
                       Height="36"
                       Margin="0,0,12,8" />
-              <Button Command="{Binding CheckPlcCommunicationCommand}"
-                      Content="检查通信"
-                      Width="96"
-                      Height="36"
-                      Margin="0,0,12,8" />
               <TextBlock Text="{Binding PlcConfigurationEditor.Status}"
                          VerticalAlignment="Center"
                          Margin="4,0,0,8"
@@ -666,81 +661,130 @@
             <WrapPanel Grid.Row="1"
                        Grid.Column="1"
                        Margin="0,10,0,0"
-                       HorizontalAlignment="Right">
-              <Button Content="10s"
-                      Width="48"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow10Seconds_Click" />
-              <Button Content="30s"
-                      Width="48"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow30Seconds_Click" />
-              <Button Content="1min"
-                      Width="56"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow1Minute_Click" />
-              <Button Content="5min"
-                      Width="56"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow5Minutes_Click" />
-              <Button Content="10min"
-                      Width="62"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow10Minutes_Click" />
-              <Button Content="30min"
-                      Width="62"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow30Minutes_Click" />
-              <Button Content="1h"
-                      Width="48"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendWindow1Hour_Click" />
-              <Button Command="{Binding RefreshPlcMonitorCommand}"
-                      Content="刷新点位"
-                      Width="82"
-                      Height="28"
-                      Margin="0,0,8,8" />
-              <Button Command="{Binding TogglePlcMonitoringCommand}"
-                      Content="启动/停止"
-                      Width="82"
-                      Height="28"
-                      Margin="0,0,8,8" />
-              <Button Content="导出可见"
-                      Width="82"
-                      Height="28"
-                      Margin="0,0,8,8"
-                      Click="PlcTrendExportVisible_Click" />
-              <Button Command="{Binding SetPlcSingleAxisLayoutCommand}"
-                      Content="单轴布局"
-                      Height="28"
-                      Width="82"
-                      Margin="0,0,8,8"
-                      Style="{StaticResource SingleAxisLayoutButtonStyle}" />
-              <Button Command="{Binding SetPlcDualAxisLayoutCommand}"
-                      Content="双轴布局"
-                      Height="28"
-                      Width="82"
-                      Margin="0,0,8,8"
-                      Style="{StaticResource DualAxisLayoutButtonStyle}" />
-              <Button Click="ShowPlcLiveTrend_Click"
-                      Content="实时趋势"
-                      Height="28"
-                      Width="82"
-                      Margin="0,0,8,8"
-                      Style="{StaticResource LiveTrendModeButtonStyle}" />
-              <Button Click="ShowPlcHistoricalTrend_Click"
-                      Content="历史趋势"
-                      Height="28"
-                      Width="82"
-                      Margin="0,0,0,8"
-                      Style="{StaticResource HistoricalTrendModeButtonStyle}" />
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top">
+              <Border Margin="0,0,10,8"
+                      Padding="8"
+                      BorderBrush="#CBD5E1"
+                      BorderThickness="1"
+                      Background="#FFFFFF">
+                <StackPanel>
+                  <TextBlock Text="窗口"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#475569"
+                             Margin="0,0,0,6" />
+                  <WrapPanel>
+                    <Button Content="10s"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow10Seconds_Click" />
+                    <Button Content="30s"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow30Seconds_Click" />
+                    <Button Content="1min"
+                            Width="56"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow1Minute_Click" />
+                    <Button Content="5min"
+                            Width="56"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow5Minutes_Click" />
+                    <Button Content="10min"
+                            Width="62"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow10Minutes_Click" />
+                    <Button Content="30min"
+                            Width="62"
+                            Height="28"
+                            Margin="0,0,6,6"
+                            Click="PlcTrendWindow30Minutes_Click" />
+                    <Button Content="1h"
+                            Width="48"
+                            Height="28"
+                            Margin="0,0,0,6"
+                            Click="PlcTrendWindow1Hour_Click" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,0,10,8"
+                      Padding="8"
+                      BorderBrush="#CBD5E1"
+                      BorderThickness="1"
+                      Background="#FFFFFF">
+                <StackPanel>
+                  <TextBlock Text="导出"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#475569"
+                             Margin="0,0,0,6" />
+                  <Button Content="导出可见"
+                          Width="88"
+                          Height="28"
+                          Click="PlcTrendExportVisible_Click" />
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,0,10,8"
+                      Padding="8"
+                      BorderBrush="#CBD5E1"
+                      BorderThickness="1"
+                      Background="#FFFFFF">
+                <StackPanel>
+                  <TextBlock Text="轴布局"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#475569"
+                             Margin="0,0,0,6" />
+                  <StackPanel Orientation="Horizontal">
+                    <Button Command="{Binding SetPlcSingleAxisLayoutCommand}"
+                            Content="单轴"
+                            Height="28"
+                            Width="58"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource SingleAxisLayoutButtonStyle}" />
+                    <Button Command="{Binding SetPlcDualAxisLayoutCommand}"
+                            Content="双轴"
+                            Height="28"
+                            Width="58"
+                            Style="{StaticResource DualAxisLayoutButtonStyle}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,0,0,8"
+                      Padding="8"
+                      BorderBrush="#CBD5E1"
+                      BorderThickness="1"
+                      Background="#FFFFFF">
+                <StackPanel>
+                  <TextBlock Text="趋势"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#475569"
+                             Margin="0,0,0,6" />
+                  <StackPanel Orientation="Horizontal">
+                    <Button Click="ShowPlcLiveTrend_Click"
+                            Content="实时"
+                            Height="28"
+                            Width="58"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource LiveTrendModeButtonStyle}" />
+                    <Button Click="ShowPlcHistoricalTrend_Click"
+                            Content="历史"
+                            Height="28"
+                            Width="58"
+                            Style="{StaticResource HistoricalTrendModeButtonStyle}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
             </WrapPanel>
           </Grid>
         </TabItem>
@@ -753,6 +797,35 @@
             </Grid.RowDefinitions>
 
             <WrapPanel>
+              <Border Margin="0,0,12,8"
+                      Padding="8"
+                      BorderBrush="#CBD5E1"
+                      BorderThickness="1"
+                      Background="#FFFFFF">
+                <StackPanel>
+                  <TextBlock Text="通信与采集"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#475569"
+                             Margin="0,0,0,6" />
+                  <StackPanel Orientation="Horizontal">
+                    <Button Command="{Binding CheckPlcCommunicationCommand}"
+                            Content="检查通信"
+                            Width="88"
+                            Height="32"
+                            Margin="0,0,8,0" />
+                    <Button Command="{Binding RefreshPlcMonitorCommand}"
+                            Content="刷新点位"
+                            Width="88"
+                            Height="32"
+                            Margin="0,0,8,0" />
+                    <Button Command="{Binding TogglePlcMonitoringCommand}"
+                            Content="启动/停止"
+                            Width="88"
+                            Height="32" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
               <Button Command="{Binding RecordPlcOneSecondCommand}"
                       Content="记录 1s"
                       Width="96"
