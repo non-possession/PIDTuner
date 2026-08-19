@@ -651,141 +651,125 @@
               </ScrollViewer>
             </Border>
 
-            <TextBlock x:Name="PlcTrendStatusTextBlock"
-                       Grid.Row="1"
-                       Grid.Column="0"
-                       Margin="0,10,14,0"
-                       VerticalAlignment="Center"
-                       Foreground="#374151" />
+            <Border Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,8,0,0"
+                    Padding="8,5"
+                    BorderBrush="#CBD5E1"
+                    BorderThickness="0,1,0,0"
+                    Background="#F8FAFC">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <WrapPanel Grid.Row="1"
-                       Grid.Column="1"
-                       Margin="0,10,0,0"
-                       HorizontalAlignment="Right"
-                       VerticalAlignment="Top">
-              <Border Margin="0,0,10,8"
-                      Padding="8"
-                      BorderBrush="#CBD5E1"
-                      BorderThickness="1"
-                      Background="#FFFFFF">
-                <StackPanel>
-                  <TextBlock Text="窗口"
-                             FontSize="12"
-                             FontWeight="SemiBold"
-                             Foreground="#475569"
-                             Margin="0,0,0,6" />
-                  <WrapPanel>
-                    <Button Content="10s"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow10Seconds_Click" />
-                    <Button Content="30s"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow30Seconds_Click" />
-                    <Button Content="1min"
-                            Width="56"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow1Minute_Click" />
-                    <Button Content="5min"
-                            Width="56"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow5Minutes_Click" />
-                    <Button Content="10min"
-                            Width="62"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow10Minutes_Click" />
-                    <Button Content="30min"
-                            Width="62"
-                            Height="28"
-                            Margin="0,0,6,6"
-                            Click="PlcTrendWindow30Minutes_Click" />
-                    <Button Content="1h"
-                            Width="48"
-                            Height="28"
-                            Margin="0,0,0,6"
-                            Click="PlcTrendWindow1Hour_Click" />
-                  </WrapPanel>
-                </StackPanel>
-              </Border>
+                <TextBlock x:Name="PlcTrendStatusTextBlock"
+                           Margin="0,0,12,0"
+                           VerticalAlignment="Center"
+                           Foreground="#475569"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
 
-              <Border Margin="0,0,10,8"
-                      Padding="8"
-                      BorderBrush="#CBD5E1"
-                      BorderThickness="1"
-                      Background="#FFFFFF">
-                <StackPanel>
-                  <TextBlock Text="导出"
-                             FontSize="12"
-                             FontWeight="SemiBold"
-                             Foreground="#475569"
-                             Margin="0,0,0,6" />
-                  <Button Content="导出可见"
-                          Width="88"
-                          Height="28"
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                  <Button Content="10 秒"
+                          Width="48"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 10 秒"
+                          Click="PlcTrendWindow10Seconds_Click" />
+                  <Button Content="30 秒"
+                          Width="48"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 30 秒"
+                          Click="PlcTrendWindow30Seconds_Click" />
+                  <Button Content="1 分"
+                          Width="46"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 1 分钟"
+                          Click="PlcTrendWindow1Minute_Click" />
+                  <Button Content="5 分"
+                          Width="46"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 5 分钟"
+                          Click="PlcTrendWindow5Minutes_Click" />
+                  <Button Content="10 分"
+                          Width="50"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 10 分钟"
+                          Click="PlcTrendWindow10Minutes_Click" />
+                  <Button Content="30 分"
+                          Width="50"
+                          Height="30"
+                          Margin="0,0,4,0"
+                          ToolTip="显示最近 30 分钟"
+                          Click="PlcTrendWindow30Minutes_Click" />
+                  <Button Content="1 小时"
+                          Width="58"
+                          Height="30"
+                          ToolTip="显示最近 1 小时"
+                          Click="PlcTrendWindow1Hour_Click" />
+
+                  <Border Width="1"
+                          Height="22"
+                          Margin="10,4"
+                          Background="#CBD5E1" />
+
+                  <Button Content="导出当前视图"
+                          Width="112"
+                          Height="30"
+                          ToolTip="导出画布当前可见范围的数据"
                           Click="PlcTrendExportVisible_Click" />
-                </StackPanel>
-              </Border>
 
-              <Border Margin="0,0,10,8"
-                      Padding="8"
-                      BorderBrush="#CBD5E1"
-                      BorderThickness="1"
-                      Background="#FFFFFF">
-                <StackPanel>
-                  <TextBlock Text="轴布局"
-                             FontSize="12"
-                             FontWeight="SemiBold"
-                             Foreground="#475569"
-                             Margin="0,0,0,6" />
-                  <StackPanel Orientation="Horizontal">
-                    <Button Command="{Binding SetPlcSingleAxisLayoutCommand}"
-                            Content="单轴"
-                            Height="28"
-                            Width="58"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource SingleAxisLayoutButtonStyle}" />
-                    <Button Command="{Binding SetPlcDualAxisLayoutCommand}"
-                            Content="双轴"
-                            Height="28"
-                            Width="58"
-                            Style="{StaticResource DualAxisLayoutButtonStyle}" />
-                  </StackPanel>
-                </StackPanel>
-              </Border>
+                  <Border Width="1"
+                          Height="22"
+                          Margin="10,4"
+                          Background="#CBD5E1" />
 
-              <Border Margin="0,0,0,8"
-                      Padding="8"
-                      BorderBrush="#CBD5E1"
-                      BorderThickness="1"
-                      Background="#FFFFFF">
-                <StackPanel>
-                  <TextBlock Text="趋势"
-                             FontSize="12"
-                             FontWeight="SemiBold"
-                             Foreground="#475569"
-                             Margin="0,0,0,6" />
-                  <StackPanel Orientation="Horizontal">
-                    <Button Click="ShowPlcLiveTrend_Click"
-                            Content="实时"
-                            Height="28"
-                            Width="58"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource LiveTrendModeButtonStyle}" />
-                    <Button Click="ShowPlcHistoricalTrend_Click"
-                            Content="历史"
-                            Height="28"
-                            Width="58"
-                            Style="{StaticResource HistoricalTrendModeButtonStyle}" />
-                  </StackPanel>
+                  <Button Command="{Binding SetPlcSingleAxisLayoutCommand}"
+                          Content="单 Y 轴"
+                          Height="30"
+                          Width="70"
+                          Margin="0,0,4,0"
+                          ToolTip="所有曲线共用一个 Y 轴"
+                          Style="{StaticResource SingleAxisLayoutButtonStyle}" />
+                  <Button Command="{Binding SetPlcDualAxisLayoutCommand}"
+                          Content="双 Y 轴"
+                          Height="30"
+                          Width="70"
+                          Margin="0"
+                          ToolTip="曲线可分别使用 Y1、Y2 轴"
+                          Style="{StaticResource DualAxisLayoutButtonStyle}" />
+
+                  <Border Width="1"
+                          Height="22"
+                          Margin="10,4"
+                          Background="#CBD5E1" />
+
+                  <Button Click="ShowPlcLiveTrend_Click"
+                          Content="实时趋势"
+                          Height="30"
+                          Width="78"
+                          Margin="0,0,4,0"
+                          ToolTip="显示持续更新的实时数据"
+                          Style="{StaticResource LiveTrendModeButtonStyle}" />
+                  <Button Click="ShowPlcHistoricalTrend_Click"
+                          Content="历史趋势"
+                          Height="30"
+                          Width="78"
+                          Margin="0"
+                          ToolTip="冻结画布并查看历史数据"
+                          Style="{StaticResource HistoricalTrendModeButtonStyle}" />
                 </StackPanel>
-              </Border>
-            </WrapPanel>
+              </Grid>
+            </Border>
+
           </Grid>
         </TabItem>
         <TabItem Header="调试">
