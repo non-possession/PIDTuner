@@ -57,6 +57,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
     ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
     ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
+    ("sqlite plc historical store queries planned-time frames", SqlitePlcHistoricalStoreQueriesPlannedTimeFrames),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication after loading configuration", MainViewModelChecksPlcCommunicationAfterLoadingConfiguration),
@@ -1348,17 +1349,75 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     AssertContains("已刷新", viewModel.PlcMonitorStatus);
 }
 
+static async Task SqlitePlcHistoricalStoreQueriesPlannedTimeFrames()
+{
+    var directory = CreateTestStorageDirectory();
+    var databasePath = Path.Combine(directory, "plc-history.sqlite");
+    var store = new SqlitePlcHistoricalTrendStore(databasePath);
+    var configuration = PlcProjectConfiguration.CreateDefault();
+    var origin = DateTimeOffset.Parse("2026-08-20T10:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+    var tag = configuration.Tags[0];
+    var session = await store.StartSessionAsync(configuration, CancellationToken.None);
+
+    for (var index = 0; index < 3; index++)
+    {
+        var planned = origin.AddMilliseconds(index * 100);
+        session.Enqueue(new PlcAcquisitionFrame(
+            new[]
+            {
+                new PlcTagSnapshot(
+                    tag.Id,
+                    tag.Name,
+                    tag.Address,
+                    10d + index,
+                    tag.Unit,
+                    planned.AddMilliseconds(37),
+                    "Good",
+                    "Test")
+            },
+            DiagnosticFrame(
+                index,
+                origin,
+                plannedMs: index * 100,
+                requestMs: index * 100 + 12,
+                responseMs: index * 100 + 25,
+                bufferedMs: index * 100 + 27,
+                uiMs: index * 100 + 40,
+                snapshots: 1,
+                PlcAcquisitionFrameState.Normal)));
+    }
+
+    var summary = await session.StopAsync(CancellationToken.None);
+    var availableRange = await store.GetAvailableRangeAsync(CancellationToken.None);
+    var frames = await store.QueryFramesAsync(
+        origin.AddMilliseconds(50),
+        origin.AddMilliseconds(250),
+        maximumPointsPerTag: 100,
+        CancellationToken.None);
+
+    AssertEqual(3, summary.FrameCount, "historical sqlite frame count");
+    AssertEqual(3, summary.SnapshotCount, "historical sqlite snapshot count");
+    AssertEqual(Path.GetFullPath(databasePath), summary.DatabasePath, "historical sqlite absolute path");
+    AssertEqual(origin, availableRange!.Value.Start, "historical sqlite available start");
+    AssertEqual(origin.AddMilliseconds(200), availableRange.Value.End, "historical sqlite available end");
+    AssertEqual(2, frames.Count, "historical sqlite range frame count");
+    AssertEqual(origin.AddMilliseconds(100), frames[0][0].Timestamp, "historical sqlite uses planned timestamp");
+    AssertClose(11d, frames[0][0].Value!.Value, 0.001, "historical sqlite queried value");
+}
+
 static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
 {
     var directory = CreateTestStorageDirectory();
     var reader = new SequencePlcTagSnapshotReader();
     var diagnosticsStore = new FakePlcLiveDiagnosticsStore();
+    var historicalStore = new FakePlcHistoricalTrendStore();
     var viewModel = new MainWindowViewModel(
         new NoFileDialogService(),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
         plcTagSnapshotReader: reader,
         plcLiveDiagnosticsStore: diagnosticsStore,
+        plcHistoricalTrendStore: historicalStore,
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
 
@@ -1388,8 +1447,9 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsYSliderEnabled, "live snapshots enable y slider");
     AssertEqual(1, batchAppliedCount, "live snapshots publish one historical frame batch");
     AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 3, "live snapshots are retained as historical frames");
-    AssertEqual(1, diagnosticsStore.StartCount, "live acquisition sqlite session starts");
-    AssertEqual(true, diagnosticsStore.LastSession!.EnqueueCount > 0, "live acquisition frames enqueue to sqlite session");
+    AssertEqual(0, diagnosticsStore.StartCount, "live acquisition does not start diagnostics");
+    AssertEqual(1, historicalStore.StartCount, "live acquisition starts historical sqlite session");
+    AssertEqual(true, historicalStore.LastSession!.EnqueueCount > 0, "live acquisition frames enqueue to historical sqlite session");
     AssertEqual(
         true,
         DateTimeOffset.Now - requestedViewportEnd!.Value < TimeSpan.FromSeconds(2),
@@ -1488,7 +1548,7 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     await viewModel.TogglePlcMonitoringAsync();
 
-    AssertEqual(2, diagnosticsStore.StartCount, "diagnostics start count includes live acquisition sqlite session");
+    AssertEqual(1, diagnosticsStore.StartCount, "diagnostics starts only when explicitly requested");
     AssertEqual(true, diagnosticsStore.LastSession is not null, "diagnostics session created");
     AssertEqual(true, diagnosticsStore.LastSession!.StopCount >= 1, "diagnostics session stopped");
     AssertContains("帧", viewModel.PlcLiveDiagnosticsStatus);
@@ -1516,7 +1576,7 @@ static async Task MainViewModelFiltersDiagnosticsFramesBeforeSessionStart()
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     await viewModel.TogglePlcMonitoringAsync();
 
-    AssertEqual(2, diagnosticsStore.StartCount, "future diagnostics start count includes live acquisition sqlite session");
+    AssertEqual(1, diagnosticsStore.StartCount, "future diagnostics starts only when explicitly requested");
     AssertEqual(0, diagnosticsStore.LastSession!.EnqueueCount, "future diagnostics should ignore frames before session start");
 }
 
@@ -1538,6 +1598,7 @@ static async Task MainViewModelTogglesLiveTrendScrollingPause()
         new NoFileDialogService(plcRecordingFile: recordingPath),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
+        plcHistoricalTrendStore: new FakePlcHistoricalTrendStore(),
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: recordingDirectory);
 
@@ -1637,6 +1698,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         new NoFileDialogService(plcRecordingFile: recordingPath),
         new JsonPidSampleFieldProfileStore(),
         new JsonPlcProjectConfigurationStore(),
+        plcHistoricalTrendStore: new FakePlcHistoricalTrendStore(),
         testSessionStorageDirectory: directory,
         plcRecordingStorageDirectory: recordingDirectory);
 
@@ -2324,6 +2386,74 @@ file sealed class FakePlcLiveDiagnosticsStore(DateTimeOffset? startedAtUtc = nul
         LastSession = new FakePlcLiveDiagnosticsSession(duration, startedAtUtc);
         return Task.FromResult<IPlcLiveDiagnosticsSession>(LastSession);
     }
+}
+
+file sealed class FakePlcHistoricalTrendStore : IPlcHistoricalTrendStore
+{
+    private readonly List<PlcAcquisitionFrame> _frames = [];
+
+    public int StartCount { get; private set; }
+
+    public FakePlcHistoricalTrendWriteSession? LastSession { get; private set; }
+
+    public string DatabasePath { get; } = Path.Combine(Path.GetTempPath(), "fake-plc-history.sqlite");
+
+    public Task<IPlcHistoricalTrendWriteSession> StartSessionAsync(
+        PlcProjectConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        StartCount++;
+        LastSession = new FakePlcHistoricalTrendWriteSession(DatabasePath, _frames);
+        return Task.FromResult<IPlcHistoricalTrendWriteSession>(LastSession);
+    }
+
+    public Task<(DateTimeOffset Start, DateTimeOffset End)?> GetAvailableRangeAsync(
+        CancellationToken cancellationToken)
+    {
+        var timestamps = _frames.Select(frame => frame.Diagnostics.PlannedTimestampUtc).ToArray();
+        (DateTimeOffset Start, DateTimeOffset End)? range = timestamps.Length == 0
+            ? null
+            : (timestamps.Min(), timestamps.Max());
+        return Task.FromResult(range);
+    }
+
+    public Task<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>> QueryFramesAsync(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        int maximumPointsPerTag,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames = _frames
+            .Where(frame => frame.Diagnostics.PlannedTimestampUtc >= start && frame.Diagnostics.PlannedTimestampUtc <= end)
+            .Select(frame => (IReadOnlyList<PlcTagSnapshot>)frame.Snapshots
+                .Select(snapshot => snapshot with { Timestamp = frame.Diagnostics.PlannedTimestampUtc })
+                .ToArray())
+            .ToArray();
+        return Task.FromResult(frames);
+    }
+}
+
+file sealed class FakePlcHistoricalTrendWriteSession(
+    string databasePath,
+    List<PlcAcquisitionFrame> frames) : IPlcHistoricalTrendWriteSession
+{
+    public int EnqueueCount { get; private set; }
+
+    public string DatabasePath { get; } = databasePath;
+
+    public void Enqueue(PlcAcquisitionFrame frame)
+    {
+        EnqueueCount++;
+        frames.Add(frame);
+    }
+
+    public Task<PlcHistoricalTrendWriteSummary> StopAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(new PlcHistoricalTrendWriteSummary(
+            DatabasePath,
+            frames.Count,
+            frames.Sum(frame => frame.Snapshots.Count)));
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 file sealed class FakePlcLiveDiagnosticsSession(TimeSpan duration, DateTimeOffset? startedAtUtc) : IPlcLiveDiagnosticsSession

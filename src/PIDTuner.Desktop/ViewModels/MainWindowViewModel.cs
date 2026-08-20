@@ -34,7 +34,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PidAnalysisResultCsvExporter _analysisResultExporter = new();
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
-    private readonly IPlcLiveDiagnosticsStore _plcLiveAcquisitionStore;
+    private readonly IPlcHistoricalTrendStore _plcHistoricalTrendStore;
     private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
@@ -43,7 +43,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private readonly List<IReadOnlyList<PlcTagSnapshot>> _liveHistoricalFrames = [];
-    private IPlcLiveDiagnosticsSession? _plcLiveAcquisitionSession;
+    private IPlcHistoricalTrendWriteSession? _plcHistoricalWriteSession;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
@@ -78,6 +78,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IPidRecommendationReviewRepository? recommendationReviewRepository = null,
         IPidParameterSetRepository? parameterSetRepository = null,
         IPlcLiveDiagnosticsStore? plcLiveDiagnosticsStore = null,
+        IPlcHistoricalTrendStore? plcHistoricalTrendStore = null,
         string? testSessionStorageDirectory = null,
         string? plcRecordingStorageDirectory = null)
     {
@@ -114,7 +115,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "local",
                 "plc-diagnostics",
                 "plc-live-diagnostics.sqlite"));
-        _plcLiveAcquisitionStore = liveDiagnosticsStore;
+        _plcHistoricalTrendStore = plcHistoricalTrendStore
+            ?? new SqlitePlcHistoricalTrendStore(Path.Combine(
+                FindRepositoryRoot(),
+                "local",
+                "plc-history",
+                "plc-history.sqlite"));
         LiveMonitor = new PlcLiveMonitorViewModel(
             new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync));
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
@@ -696,7 +702,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         foreach (var frame in result.Frames)
         {
-            _plcLiveAcquisitionSession?.Enqueue(frame);
+            _plcHistoricalWriteSession?.Enqueue(frame);
             ApplyPlcMonitorSnapshots(
                 frame.Snapshots,
                 frame.Diagnostics.PlannedTimestampUtc,
@@ -779,31 +785,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var result = await LiveMonitor.StartAsync(
             configuration,
             CancellationToken.None);
-        await StartPlcLiveAcquisitionRecordingAsync(configuration);
+        await StartPlcHistoricalRecordingAsync(configuration);
         _monitorTimer.Interval = result.UiRefreshInterval;
         _monitorTimer.Start();
         PlcMonitorStatus = result.MonitorStatus;
     }
 
-    private async Task StartPlcLiveAcquisitionRecordingAsync(PlcProjectConfiguration configuration)
+    private async Task StartPlcHistoricalRecordingAsync(PlcProjectConfiguration configuration)
     {
-        await StopPlcLiveAcquisitionRecordingAsync(null);
-        _plcLiveAcquisitionSession = await _plcLiveAcquisitionStore.StartSessionAsync(
+        await StopPlcHistoricalRecordingAsync(null);
+        _plcHistoricalWriteSession = await _plcHistoricalTrendStore.StartSessionAsync(
             configuration,
-            TimeSpan.FromDays(3650),
             CancellationToken.None);
-        PlcAcquisitionDiagnosticsStatus = $"采集记录：SQLite 写入中，{_plcLiveAcquisitionSession.DatabasePath}";
+        PlcAcquisitionDiagnosticsStatus =
+            $"历史数据：SQLite 写入中，{_plcHistoricalWriteSession.DatabasePath}";
     }
 
-    private async Task StopPlcLiveAcquisitionRecordingAsync(string? reason)
+    private async Task StopPlcHistoricalRecordingAsync(string? reason)
     {
-        if (_plcLiveAcquisitionSession is null)
+        if (_plcHistoricalWriteSession is null)
         {
             return;
         }
 
-        var session = _plcLiveAcquisitionSession;
-        _plcLiveAcquisitionSession = null;
+        var session = _plcHistoricalWriteSession;
+        _plcHistoricalWriteSession = null;
         var summary = await session.StopAsync(CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(reason))
         {
@@ -811,6 +817,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 $"{reason} 已写入 {summary.FrameCount} 帧 / {summary.SnapshotCount} 条点位值，{summary.DatabasePath}";
         }
     }
+
+    private Task StopPlcLiveAcquisitionRecordingAsync(string? reason) =>
+        StopPlcHistoricalRecordingAsync(reason);
 
     public async Task TogglePlcLiveDiagnosticsAsync()
     {
@@ -1004,7 +1013,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Task.CompletedTask;
     }
 
-    public Task SetPlcHistoricalTrendWindowAsync(TimeSpan window)
+    public async Task SetPlcHistoricalTrendWindowAsync(TimeSpan window)
+    {
+        var end = HistoricalTrendWorkbench.HasDataset
+            ? HistoricalTrendWorkbench.RangeEndValue
+            : DateTimeOffset.Now;
+        var frames = await LoadHistoricalFramesAsync(end - window, end);
+        if (frames.Count > 0)
+        {
+            _lastPlcRecordingFrames = frames;
+            HistoricalTrendWorkbench.LoadFrames(frames);
+            PlcSnapshotFramesApplied?.Invoke(frames);
+        }
+
+        await SetPlcHistoricalTrendWindowFromLoadedDataAsync(window);
+    }
+
+    private Task SetPlcHistoricalTrendWindowFromLoadedDataAsync(TimeSpan window)
     {
         if (!HistoricalTrendWorkbench.HasDataset)
         {
@@ -1024,16 +1049,59 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Task.CompletedTask;
     }
 
-    public Task ShowPlcHistoricalTrendAsync()
+    public async Task ShowPlcHistoricalTrendAsync()
     {
-        ShowPlcHistoricalTrend(TimeSpan.FromSeconds(30));
-        return Task.CompletedTask;
+        await ShowPlcHistoricalTrendFromStoreAsync(TimeSpan.FromSeconds(30));
     }
 
-    public Task ShowPlcHistoricalTrendAsync(TimeSpan visibleWindow)
+    public async Task ShowPlcHistoricalTrendAsync(TimeSpan visibleWindow)
     {
-        ShowPlcHistoricalTrend(visibleWindow);
-        return Task.CompletedTask;
+        await ShowPlcHistoricalTrendFromStoreAsync(visibleWindow);
+    }
+
+    private async Task ShowPlcHistoricalTrendFromStoreAsync(TimeSpan visibleWindow)
+    {
+        StopPlcReplay();
+        var end = DateTimeOffset.Now;
+        var start = end - visibleWindow;
+        var frames = await LoadHistoricalFramesAsync(start, end);
+        if (frames.Count == 0)
+        {
+            ShowPlcHistoricalTrend(visibleWindow);
+            return;
+        }
+
+        _lastPlcRecordingFrames = frames;
+        OnPropertyChanged(nameof(LastPlcRecordingFrames));
+        PlcTrendResetRequested?.Invoke();
+        ShowLoadedPlcHistoricalTrend(frames);
+        SetHistoricalWindowEndingAt(end, visibleWindow);
+    }
+
+    private async Task<IReadOnlyList<IReadOnlyList<PlcTagSnapshot>>> LoadHistoricalFramesAsync(
+        DateTimeOffset start,
+        DateTimeOffset end)
+    {
+        var persisted = await _plcHistoricalTrendStore.QueryFramesAsync(
+            start,
+            end,
+            maximumPointsPerTag: 20_000,
+            CancellationToken.None);
+        var buffered = _liveHistoricalFrames
+            .Where(frame => frame.Count > 0 && frame[0].Timestamp >= start && frame[0].Timestamp <= end)
+            .ToArray();
+
+        return persisted
+            .Concat(buffered)
+            .Where(frame => frame.Count > 0)
+            .GroupBy(frame => frame[0].Timestamp)
+            .OrderBy(group => group.Key)
+            .Select(group => (IReadOnlyList<PlcTagSnapshot>)group
+                .SelectMany(frame => frame)
+                .GroupBy(snapshot => snapshot.TagId)
+                .Select(tagGroup => tagGroup.Last())
+                .ToArray())
+            .ToArray();
     }
 
     private void ShowPlcHistoricalTrend(TimeSpan visibleWindow)
@@ -1062,7 +1130,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ShowLoadedPlcHistoricalTrend();
     }
 
-    public Task ApplyPlcHistoricalRangeAsync()
+    public async Task ApplyPlcHistoricalRangeAsync()
+    {
+        var frames = await LoadHistoricalFramesAsync(
+            HistoricalTrendWorkbench.RangeStartValue,
+            HistoricalTrendWorkbench.RangeEndValue);
+        if (frames.Count > 0)
+        {
+            _lastPlcRecordingFrames = frames;
+            HistoricalTrendWorkbench.LoadFrames(frames);
+            PlcSnapshotFramesApplied?.Invoke(frames);
+        }
+
+        await ApplyPlcHistoricalRangeFromLoadedDataAsync();
+    }
+
+    private Task ApplyPlcHistoricalRangeFromLoadedDataAsync()
     {
         if (!HistoricalTrendWorkbench.HasDataset)
         {
