@@ -13,6 +13,24 @@ public sealed record PlcAcquisitionFrame(
     }
 }
 
+public enum PlcCommunicationErrorCategory
+{
+    None,
+    Configuration,
+    Connection,
+    Handshake,
+    Send,
+    ReceiveHeader,
+    ReceivePayload,
+    Protocol,
+    PlcResponse,
+    Parsing,
+    Timeout,
+    Cancellation,
+    Reconnect,
+    Unknown
+}
+
 public sealed record PlcReadOperationDiagnostics(
     int OperationIndex,
     string OperationKind,
@@ -25,7 +43,11 @@ public sealed record PlcReadOperationDiagnostics(
     double ReceivePayloadDurationMilliseconds,
     int SuccessCount,
     int FailureCount,
-    string? Error)
+    string? Error,
+    PlcCommunicationErrorCategory ErrorCategory = PlcCommunicationErrorCategory.None,
+    string? ErrorCode = null,
+    string? ErrorContext = null,
+    bool IsTransient = false)
 {
     public double DurationMilliseconds =>
         (ResponseReceivedTimestampUtc - RequestStartedTimestampUtc).TotalMilliseconds;

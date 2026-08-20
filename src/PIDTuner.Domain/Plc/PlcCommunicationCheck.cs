@@ -5,4 +5,7 @@ public sealed record PlcCommunicationCheck(
     string Host,
     TimeSpan Duration,
     string Message,
-    DateTimeOffset CheckedAt);
+    DateTimeOffset CheckedAt,
+    PlcCommunicationErrorCategory ErrorCategory = PlcCommunicationErrorCategory.None,
+    string? ErrorCode = null,
+    string? ErrorContext = null);

@@ -38,12 +38,16 @@ public sealed class SiemensS7ConnectivityProbe : IPlcConnectivityProbe
         catch (SiemensS7ConnectionException exception)
         {
             stopwatch.Stop();
+            var (category, code, context) = ClassifyConnectionFailure(exception);
             return new PlcCommunicationCheck(
                 false,
                 configuration.IpAddress,
                 stopwatch.Elapsed,
                 $"{StageLabel(exception.Stage)}：{exception.Message}",
-                DateTimeOffset.Now);
+                DateTimeOffset.Now,
+                category,
+                code,
+                context);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -53,8 +57,33 @@ public sealed class SiemensS7ConnectivityProbe : IPlcConnectivityProbe
                 configuration.IpAddress,
                 stopwatch.Elapsed,
                 $"S7 通信检查失败：{exception.Message}",
-                DateTimeOffset.Now);
+                DateTimeOffset.Now,
+                PlcCommunicationErrorCategory.Unknown,
+                "S7.CHECK_UNKNOWN",
+                exception.GetType().Name);
         }
+    }
+
+    private static (PlcCommunicationErrorCategory Category, string Code, string Context) ClassifyConnectionFailure(
+        SiemensS7ConnectionException exception)
+    {
+        var timedOut = exception.InnerException is OperationCanceledException;
+        return exception.Stage switch
+        {
+            SiemensS7ConnectionStage.TcpConnect => (
+                timedOut ? PlcCommunicationErrorCategory.Timeout : PlcCommunicationErrorCategory.Connection,
+                timedOut ? "S7.TCP_CONNECT_TIMEOUT" : "S7.TCP_CONNECT_FAILED",
+                "TCP 102 connect"),
+            SiemensS7ConnectionStage.IsoOnTcpHandshake => (
+                timedOut ? PlcCommunicationErrorCategory.Timeout : PlcCommunicationErrorCategory.Handshake,
+                timedOut ? "S7.ISO_HANDSHAKE_TIMEOUT" : "S7.ISO_HANDSHAKE_FAILED",
+                "ISO-on-TCP handshake"),
+            SiemensS7ConnectionStage.S7SetupCommunication => (
+                timedOut ? PlcCommunicationErrorCategory.Timeout : PlcCommunicationErrorCategory.Handshake,
+                timedOut ? "S7.SETUP_TIMEOUT" : "S7.SETUP_FAILED",
+                "S7 Setup Communication"),
+            _ => (PlcCommunicationErrorCategory.Unknown, "S7.CONNECT_UNKNOWN", exception.Stage.ToString())
+        };
     }
 
     private static string StageLabel(SiemensS7ConnectionStage stage)

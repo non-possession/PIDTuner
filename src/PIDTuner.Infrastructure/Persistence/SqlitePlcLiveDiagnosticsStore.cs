@@ -133,6 +133,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 success_count INTEGER NOT NULL,
                 failure_count INTEGER NOT NULL,
                 error TEXT NULL,
+                error_category TEXT NOT NULL DEFAULT 'None',
+                error_code TEXT NULL,
+                error_context TEXT NULL,
+                is_transient INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (session_id, frame_index, operation_index)
             );
 
@@ -211,11 +215,15 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             }
         }
 
-        foreach (var column in new[]
+        foreach (var (column, definition) in new[]
         {
-            "send_duration_ms",
-            "receive_header_duration_ms",
-            "receive_payload_duration_ms"
+            ("send_duration_ms", "REAL NOT NULL DEFAULT 0"),
+            ("receive_header_duration_ms", "REAL NOT NULL DEFAULT 0"),
+            ("receive_payload_duration_ms", "REAL NOT NULL DEFAULT 0"),
+            ("error_category", "TEXT NOT NULL DEFAULT 'None'"),
+            ("error_code", "TEXT NULL"),
+            ("error_context", "TEXT NULL"),
+            ("is_transient", "INTEGER NOT NULL DEFAULT 0")
         })
         {
             if (existingColumns.Contains(column))
@@ -224,7 +232,7 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             }
 
             await using var alter = connection.CreateCommand();
-            alter.CommandText = $"ALTER TABLE plc_read_operations ADD COLUMN {column} REAL NOT NULL DEFAULT 0;";
+            alter.CommandText = $"ALTER TABLE plc_read_operations ADD COLUMN {column} {definition};";
             await alter.ExecuteNonQueryAsync(cancellationToken);
         }
     }
@@ -602,7 +610,11 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     receive_payload_duration_ms,
                     success_count,
                     failure_count,
-                    error)
+                    error,
+                    error_category,
+                    error_code,
+                    error_context,
+                    is_transient)
                 VALUES (
                     $session_id,
                     $frame_index,
@@ -618,7 +630,11 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $receive_payload_duration_ms,
                     $success_count,
                     $failure_count,
-                    $error);
+                    $error,
+                    $error_category,
+                    $error_code,
+                    $error_context,
+                    $is_transient);
                 """;
             command.Parameters.AddWithValue("$session_id", SessionId.ToString("D"));
             command.Parameters.AddWithValue("$frame_index", frameIndex);
@@ -635,6 +651,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             command.Parameters.AddWithValue("$success_count", operation.SuccessCount);
             command.Parameters.AddWithValue("$failure_count", operation.FailureCount);
             command.Parameters.AddWithValue("$error", operation.Error is null ? DBNull.Value : operation.Error);
+            command.Parameters.AddWithValue("$error_category", operation.ErrorCategory.ToString());
+            command.Parameters.AddWithValue("$error_code", operation.ErrorCode is null ? DBNull.Value : operation.ErrorCode);
+            command.Parameters.AddWithValue("$error_context", operation.ErrorContext is null ? DBNull.Value : operation.ErrorContext);
+            command.Parameters.AddWithValue("$is_transient", operation.IsTransient ? 1 : 0);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 

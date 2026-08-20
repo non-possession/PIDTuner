@@ -47,6 +47,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 address parser maps DB offsets and bits", S7AddressParserMapsDbOffsetsAndBits),
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
     ("s7 db block parser decodes sparse real offsets", S7DbBlockParserDecodesSparseRealOffsets),
+    ("s7 communication failures use stable categories and codes", S7CommunicationFailuresUseStableCategoriesAndCodes),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
@@ -772,6 +773,33 @@ static Task S7DbBlockParserDecodesSparseRealOffsets()
     return Task.CompletedTask;
 }
 
+static Task S7CommunicationFailuresUseStableCategoriesAndCodes()
+{
+    var failureType = typeof(SiemensS7Client).Assembly.GetType(
+        "PIDTuner.Infrastructure.Plc.SiemensS7CommunicationFailure",
+        throwOnError: true)!;
+    var classifier = failureType.GetMethod(
+        "FromException",
+        BindingFlags.Public | BindingFlags.Static)
+        ?? throw new InvalidOperationException("S7 failure classifier was not found.");
+    var failure = classifier.Invoke(null, new object[] { new IOException("socket closed") })
+        ?? throw new InvalidOperationException("S7 failure classifier returned null.");
+
+    AssertEqual(
+        PlcCommunicationErrorCategory.Connection,
+        failureType.GetProperty("Category")?.GetValue(failure),
+        "S7 IO failure category");
+    AssertEqual(
+        "S7.CONNECTION_IO",
+        failureType.GetProperty("Code")?.GetValue(failure),
+        "S7 IO failure code");
+    AssertEqual(
+        true,
+        failureType.GetProperty("IsTransient")?.GetValue(failure),
+        "S7 IO failure transient flag");
+    return Task.CompletedTask;
+}
+
 static Task PlcAcquisitionDiagnosticsSummarizesFrameTiming()
 {
     var start = new DateTimeOffset(2026, 8, 5, 9, 0, 0, TimeSpan.Zero);
@@ -899,9 +927,13 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
                 1.5,
                 7.5,
                 1.0,
-                3,
-                0,
-                null)
+                2,
+                1,
+                "socket closed",
+                PlcCommunicationErrorCategory.Connection,
+                "S7.CONNECTION_IO",
+                "TCP stream",
+                true)
         }));
     session.Enqueue(new PlcAcquisitionFrame(
         new[]
@@ -968,9 +1000,13 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             receive_header_duration_ms,
             receive_payload_duration_ms,
             success_count,
-            failure_count
+            failure_count,
+            error_category,
+            error_code,
+            error_context,
+            is_transient
         FROM plc_read_operations
-        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count;
+        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count, error_category, error_code, error_context, is_transient;
         """;
     await using var reader = await command.ExecuteReaderAsync();
     AssertEqual(true, await reader.ReadAsync(), "sqlite diagnostics read operation exists");
@@ -982,8 +1018,12 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertClose(1.5, reader.GetDouble(5), 0.001, "sqlite diagnostics read operation send duration");
     AssertClose(7.5, reader.GetDouble(6), 0.001, "sqlite diagnostics read operation header duration");
     AssertClose(1, reader.GetDouble(7), 0.001, "sqlite diagnostics read operation payload duration");
-    AssertEqual(3, reader.GetInt32(8), "sqlite diagnostics read operation success count");
-    AssertEqual(0, reader.GetInt32(9), "sqlite diagnostics read operation failure count");
+    AssertEqual(2, reader.GetInt32(8), "sqlite diagnostics read operation success count");
+    AssertEqual(1, reader.GetInt32(9), "sqlite diagnostics read operation failure count");
+    AssertEqual("Connection", reader.GetString(10), "sqlite diagnostics read operation error category");
+    AssertEqual("S7.CONNECTION_IO", reader.GetString(11), "sqlite diagnostics read operation error code");
+    AssertEqual("TCP stream", reader.GetString(12), "sqlite diagnostics read operation error context");
+    AssertEqual(1, reader.GetInt32(13), "sqlite diagnostics read operation transient flag");
 
     await using var frameCommand = connection.CreateCommand();
     frameCommand.CommandText = """

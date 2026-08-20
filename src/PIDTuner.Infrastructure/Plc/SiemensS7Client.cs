@@ -150,6 +150,12 @@ public sealed class SiemensS7Client : IAsyncDisposable
             var startedAtUtc = DateTimeOffset.UtcNow;
             IReadOnlyList<S7ReadResult> chunkResults;
             string? error = null;
+            var failure = new SiemensS7CommunicationFailure(
+                PlcCommunicationErrorCategory.None,
+                string.Empty,
+                string.Empty,
+                false,
+                string.Empty);
             var request = BuildReadRequest(chunk);
             var sendStartedAtUtc = DateTimeOffset.UtcNow;
             var sendFinishedAtUtc = sendStartedAtUtc;
@@ -171,7 +177,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
                     sendFinishedAtUtc = DateTimeOffset.UtcNow;
                 }
 
-                error = exception.Message;
+                failure = SiemensS7CommunicationFailure.FromException(exception);
+                error = failure.Message;
                 chunkResults = chunk
                     .Select(address => new S7ReadResult(address, null, error))
                     .ToArray();
@@ -191,7 +198,11 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 receivePayloadDurationMilliseconds,
                 chunkResults.Count(result => result.Error is null),
                 chunkResults.Count(result => result.Error is not null),
-                error));
+                error,
+                failure.Category,
+                NullIfEmpty(failure.Code),
+                NullIfEmpty(failure.Context),
+                failure.IsTransient));
             operationIndex++;
         }
 
@@ -224,6 +235,12 @@ public sealed class SiemensS7Client : IAsyncDisposable
             var byteCount = endByteExclusive - startByte;
             var startedAtUtc = DateTimeOffset.UtcNow;
             string? error = null;
+            var failure = new SiemensS7CommunicationFailure(
+                PlcCommunicationErrorCategory.None,
+                string.Empty,
+                string.Empty,
+                false,
+                string.Empty);
             var sendStartedAtUtc = DateTimeOffset.UtcNow;
             var sendFinishedAtUtc = sendStartedAtUtc;
             var receiveHeaderDurationMilliseconds = 0d;
@@ -246,7 +263,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
                     sendFinishedAtUtc = DateTimeOffset.UtcNow;
                 }
 
-                error = exception.Message;
+                failure = SiemensS7CommunicationFailure.FromException(exception);
+                error = failure.Message;
                 blockResults = blockAddresses
                     .Select(address => new S7ReadResult(address, null, error))
                     .ToArray();
@@ -270,7 +288,11 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 receivePayloadDurationMilliseconds,
                 blockResults.Count(result => result.Error is null),
                 blockResults.Count(result => result.Error is not null),
-                error));
+                error,
+                failure.Category,
+                NullIfEmpty(failure.Code),
+                NullIfEmpty(failure.Context),
+                failure.IsTransient));
             operationIndex++;
         }
 
@@ -301,7 +323,20 @@ public sealed class SiemensS7Client : IAsyncDisposable
             throw new InvalidOperationException("S7 client is not connected.");
         }
 
-        await _stream.WriteAsync(bytes, cancellationToken);
+        try
+        {
+            await _stream.WriteAsync(bytes, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Send,
+                "S7.SEND_FAILED",
+                "TCP request write",
+                exception.Message,
+                isTransient: true,
+                exception);
+        }
     }
 
     private async Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
@@ -318,18 +353,48 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
         var header = new byte[4];
         var headerStartedAtUtc = DateTimeOffset.UtcNow;
-        await _stream.ReadExactlyAsync(header, cancellationToken);
+        try
+        {
+            await _stream.ReadExactlyAsync(header, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.ReceiveHeader,
+                "S7.RECEIVE_HEADER_FAILED",
+                "TPKT header",
+                exception.Message,
+                isTransient: true,
+                exception);
+        }
         var headerReceivedAtUtc = DateTimeOffset.UtcNow;
         var length = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2, 2));
         if (length < 4)
         {
-            throw new InvalidOperationException("Invalid S7 response length.");
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.INVALID_TPKT_LENGTH",
+                "TPKT header length",
+                "Invalid S7 response length.");
         }
 
         var response = new byte[length];
         header.CopyTo(response, 0);
         var payloadStartedAtUtc = DateTimeOffset.UtcNow;
-        await _stream.ReadExactlyAsync(response.AsMemory(4), cancellationToken);
+        try
+        {
+            await _stream.ReadExactlyAsync(response.AsMemory(4), cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.ReceivePayload,
+                "S7.RECEIVE_PAYLOAD_FAILED",
+                $"TPKT payload ({length - 4} bytes)",
+                exception.Message,
+                isTransient: true,
+                exception);
+        }
         var payloadReceivedAtUtc = DateTimeOffset.UtcNow;
         return new TimedS7Response(
             response,
@@ -441,6 +506,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
         return string.Join("; ", groups);
     }
 
+    private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
+
     private static void WriteReadItem(Span<byte> item, S7Address address)
     {
         WriteReadItem(item, address.DataBlock, address.ByteOffset, address.BitOffset, address.DataType == PlcDataType.Boolean ? 1 : address.ReadByteCount);
@@ -473,7 +540,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         const int s7Offset = 7;
         if (response.Length < s7Offset + 12 || response[s7Offset] != 0x32)
         {
-            throw new InvalidOperationException("Invalid S7 read response.");
+            throw InvalidReadResponse("S7.INVALID_RESPONSE", "S7 header", "Invalid S7 read response.");
         }
 
         var rosctr = response[s7Offset + 1];
@@ -488,7 +555,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         {
             if (response.Length < offset + 4)
             {
-                throw new InvalidOperationException("S7 read response does not contain data.");
+                throw InvalidReadResponse("S7.MISSING_DATA", "ReadVar data item", "S7 read response does not contain data.");
             }
 
             var address = addresses[index];
@@ -501,7 +568,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
             var payloadOffset = offset + 4;
             if (response.Length < payloadOffset + byteCount)
             {
-                throw new InvalidOperationException("S7 read response payload is truncated.");
+                throw InvalidReadResponse("S7.TRUNCATED_PAYLOAD", "ReadVar item payload", "S7 read response payload is truncated.");
             }
 
             if (returnCode != 0xFF)
@@ -573,7 +640,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         const int s7Offset = 7;
         if (response.Length < s7Offset + 12 || response[s7Offset] != 0x32)
         {
-            throw new InvalidOperationException("Invalid S7 read response.");
+            throw InvalidReadResponse("S7.INVALID_RESPONSE", "S7 header", "Invalid S7 read response.");
         }
 
         var rosctr = response[s7Offset + 1];
@@ -582,7 +649,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
         var dataOffset = s7Offset + headerLength + parameterLength;
         if (response.Length < dataOffset + 4)
         {
-            throw new InvalidOperationException("S7 read response does not contain data.");
+            throw InvalidReadResponse("S7.MISSING_DATA", "ReadVar data item", "S7 read response does not contain data.");
         }
 
         var returnCode = response[dataOffset];
@@ -594,16 +661,23 @@ public sealed class SiemensS7Client : IAsyncDisposable
         var payloadOffset = dataOffset + 4;
         if (returnCode != 0xFF)
         {
-            throw new InvalidOperationException($"S7 read failed with return code 0x{returnCode:X2}.");
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.PlcResponse,
+                $"S7.RETURN_CODE_{returnCode:X2}",
+                "ReadVar return code",
+                $"S7 read failed with return code 0x{returnCode:X2}.");
         }
 
         if (response.Length < payloadOffset + byteCount)
         {
-            throw new InvalidOperationException("S7 read response payload is truncated.");
+            throw InvalidReadResponse("S7.TRUNCATED_PAYLOAD", "ReadVar item payload", "S7 read response payload is truncated.");
         }
 
         return response.AsSpan(payloadOffset, byteCount);
     }
+
+    private static SiemensS7ProtocolException InvalidReadResponse(string code, string context, string message) =>
+        new(PlcCommunicationErrorCategory.Protocol, code, context, message);
 
     private static double DecodeNumericPayload(S7Address address, ReadOnlySpan<byte> payload)
     {
