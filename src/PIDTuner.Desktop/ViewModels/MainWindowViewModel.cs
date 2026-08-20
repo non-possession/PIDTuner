@@ -31,8 +31,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
     private readonly PlcReplayController _plcReplayController;
+    private readonly PlcDiagnosticsController _plcDiagnosticsController;
     private readonly DispatcherTimer _monitorTimer = new();
-    private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
@@ -126,6 +126,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
         Debug.PropertyChanged += Debug_PropertyChanged;
         _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
+        _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         OfflineAnalysis = new OfflineAnalysisViewModel();
@@ -150,8 +151,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
         };
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
-        _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
-        _plcLiveDiagnosticsTimer.Tick += async (_, _) => await StopExpiredPlcLiveDiagnosticsAsync();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -783,36 +782,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var result = await Debug.StartDiagnosticsAsync(
+        await _plcDiagnosticsController.StartAsync(
             BuildPlcConfigurationFromForm(),
             TimeSpan.FromMinutes(PlcDiagnosticsDurationMinutes),
             CancellationToken.None);
-        ApplyPlcDiagnosticsOperation(result);
-    }
-
-    private async Task StopExpiredPlcLiveDiagnosticsAsync()
-    {
-        var result = await Debug.StopExpiredDiagnosticsAsync(CancellationToken.None);
-        ApplyPlcDiagnosticsOperation(result);
     }
 
     private async Task StopPlcLiveDiagnosticsAsync(string reason)
     {
-        var result = await Debug.StopDiagnosticsAsync(reason, CancellationToken.None);
-        ApplyPlcDiagnosticsOperation(result);
+        await _plcDiagnosticsController.StopAsync(reason, CancellationToken.None);
     }
 
     private void ApplyPlcDiagnosticsOperation(PlcDiagnosticsOperationResult result)
     {
-        if (result.ShouldKeepTimerRunning)
-        {
-            _plcLiveDiagnosticsTimer.Start();
-        }
-        else
-        {
-            _plcLiveDiagnosticsTimer.Stop();
-        }
-
         if (!string.IsNullOrWhiteSpace(result.NotificationTitle)
             && !string.IsNullOrWhiteSpace(result.NotificationMessage)
             && !string.IsNullOrWhiteSpace(result.NotificationKind))
