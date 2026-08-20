@@ -50,6 +50,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 communication failures use stable categories and codes", S7CommunicationFailuresUseStableCategoriesAndCodes),
     ("s7 db read planner honors pdu and sparse gaps", S7DbReadPlannerHonorsPduAndSparseGaps),
     ("s7 setup response exposes negotiated pdu length", S7SetupResponseExposesNegotiatedPduLength),
+    ("s7 response rejects mismatched pdu reference", S7ResponseRejectsMismatchedPduReference),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
@@ -848,6 +849,28 @@ static Task S7SetupResponseExposesNegotiatedPduLength()
     return Task.CompletedTask;
 }
 
+static Task S7ResponseRejectsMismatchedPduReference()
+{
+    var response = BuildS7ReadResponseWithDbBlock(0, 4, new Dictionary<int, float> { [0] = 1f });
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(11, 2), 7);
+    var method = typeof(SiemensS7Client).GetMethod(
+        "ValidateResponsePduReference",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("S7 PDU reference validator was not found.");
+
+    try
+    {
+        method.Invoke(null, new object[] { response, (ushort)6 });
+    }
+    catch (TargetInvocationException exception) when (exception.InnerException is not null)
+    {
+        AssertContains("does not match request", exception.InnerException.Message);
+        return Task.CompletedTask;
+    }
+
+    throw new InvalidOperationException("S7 mismatched PDU reference was accepted.");
+}
+
 static Task PlcAcquisitionDiagnosticsSummarizesFrameTiming()
 {
     var start = new DateTimeOffset(2026, 8, 5, 9, 0, 0, TimeSpan.Zero);
@@ -981,7 +1004,9 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
                 PlcCommunicationErrorCategory.Connection,
                 "S7.CONNECTION_IO",
                 "TCP stream",
-                true)
+                true,
+                23,
+                23)
         }));
     session.Enqueue(new PlcAcquisitionFrame(
         new[]
@@ -1052,9 +1077,11 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             error_category,
             error_code,
             error_context,
-            is_transient
+            is_transient,
+            request_pdu_reference,
+            response_pdu_reference
         FROM plc_read_operations
-        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count, error_category, error_code, error_context, is_transient;
+        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count, error_category, error_code, error_context, is_transient, request_pdu_reference, response_pdu_reference;
         """;
     await using var reader = await command.ExecuteReaderAsync();
     AssertEqual(true, await reader.ReadAsync(), "sqlite diagnostics read operation exists");
@@ -1072,6 +1099,8 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertEqual("S7.CONNECTION_IO", reader.GetString(11), "sqlite diagnostics read operation error code");
     AssertEqual("TCP stream", reader.GetString(12), "sqlite diagnostics read operation error context");
     AssertEqual(1, reader.GetInt32(13), "sqlite diagnostics read operation transient flag");
+    AssertEqual(23, reader.GetInt32(14), "sqlite diagnostics request PDU reference");
+    AssertEqual(23, reader.GetInt32(15), "sqlite diagnostics response PDU reference");
 
     await using var frameCommand = connection.CreateCommand();
     frameCommand.CommandText = """

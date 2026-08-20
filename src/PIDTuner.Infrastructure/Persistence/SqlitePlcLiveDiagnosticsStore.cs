@@ -137,6 +137,8 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 error_code TEXT NULL,
                 error_context TEXT NULL,
                 is_transient INTEGER NOT NULL DEFAULT 0,
+                request_pdu_reference INTEGER NULL,
+                response_pdu_reference INTEGER NULL,
                 PRIMARY KEY (session_id, frame_index, operation_index)
             );
 
@@ -223,7 +225,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             ("error_category", "TEXT NOT NULL DEFAULT 'None'"),
             ("error_code", "TEXT NULL"),
             ("error_context", "TEXT NULL"),
-            ("is_transient", "INTEGER NOT NULL DEFAULT 0")
+            ("is_transient", "INTEGER NOT NULL DEFAULT 0"),
+            ("request_pdu_reference", "INTEGER NULL"),
+            ("response_pdu_reference", "INTEGER NULL")
         })
         {
             if (existingColumns.Contains(column))
@@ -614,7 +618,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     error_category,
                     error_code,
                     error_context,
-                    is_transient)
+                    is_transient,
+                    request_pdu_reference,
+                    response_pdu_reference)
                 VALUES (
                     $session_id,
                     $frame_index,
@@ -634,7 +640,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $error_category,
                     $error_code,
                     $error_context,
-                    $is_transient);
+                    $is_transient,
+                    $request_pdu_reference,
+                    $response_pdu_reference);
                 """;
             command.Parameters.AddWithValue("$session_id", SessionId.ToString("D"));
             command.Parameters.AddWithValue("$frame_index", frameIndex);
@@ -655,6 +663,12 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             command.Parameters.AddWithValue("$error_code", operation.ErrorCode is null ? DBNull.Value : operation.ErrorCode);
             command.Parameters.AddWithValue("$error_context", operation.ErrorContext is null ? DBNull.Value : operation.ErrorContext);
             command.Parameters.AddWithValue("$is_transient", operation.IsTransient ? 1 : 0);
+            command.Parameters.AddWithValue(
+                "$request_pdu_reference",
+                operation.RequestPduReference.HasValue ? operation.RequestPduReference.Value : DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$response_pdu_reference",
+                operation.ResponsePduReference.HasValue ? operation.ResponsePduReference.Value : DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 

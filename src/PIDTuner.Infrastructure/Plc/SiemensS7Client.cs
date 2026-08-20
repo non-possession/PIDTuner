@@ -43,7 +43,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
     private TcpClient? _client;
     private NetworkStream? _stream;
-    private ushort _sequence = 1;
+    private readonly SemaphoreSlim _requestGate = new(1, 1);
+    private ushort _sequence = 2;
 
     internal int NegotiatedPduLength { get; private set; } = RequestedPduLength;
 
@@ -77,8 +78,10 @@ public sealed class SiemensS7Client : IAsyncDisposable
         // ISO-on-TCP connection request, followed by S7 setup communication negotiation.
         try
         {
-            await SendAsync(BuildConnectionRequest(configuration.Rack, configuration.Slot), timeout.Token);
-            _ = await ReceiveAsync(timeout.Token);
+            _ = await ExchangeAsync(
+                BuildConnectionRequest(configuration.Rack, configuration.Slot),
+                validatePduReference: false,
+                timeout.Token);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -97,8 +100,10 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
         try
         {
-            await SendAsync(BuildSetupCommunicationRequest(), timeout.Token);
-            var setupResponse = await ReceiveAsync(timeout.Token);
+            var setupResponse = await ExchangeAsync(
+                BuildSetupCommunicationRequest(),
+                validatePduReference: true,
+                timeout.Token);
             NegotiatedPduLength = ParseSetupCommunicationResponse(setupResponse);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -161,15 +166,23 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 false,
                 string.Empty);
             var request = BuildReadRequest(chunk);
+            var requestPduReference = ReadPduReference(request);
+            ushort? responsePduReference = null;
             var sendStartedAtUtc = DateTimeOffset.UtcNow;
             var sendFinishedAtUtc = sendStartedAtUtc;
+            var requestGateEntered = false;
             var receiveHeaderDurationMilliseconds = 0d;
             var receivePayloadDurationMilliseconds = 0d;
             try
             {
+                await _requestGate.WaitAsync(cancellationToken);
+                requestGateEntered = true;
+                sendStartedAtUtc = DateTimeOffset.UtcNow;
                 await SendAsync(request, cancellationToken);
                 sendFinishedAtUtc = DateTimeOffset.UtcNow;
                 var response = await ReceiveTimedAsync(cancellationToken);
+                ValidateResponsePduReference(response.Bytes, requestPduReference);
+                responsePduReference = ReadPduReference(response.Bytes);
                 receiveHeaderDurationMilliseconds = response.ReceiveHeaderDurationMilliseconds;
                 receivePayloadDurationMilliseconds = response.ReceivePayloadDurationMilliseconds;
                 chunkResults = ExtractReadResults(response.Bytes, chunk);
@@ -186,6 +199,13 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 chunkResults = chunk
                     .Select(address => new S7ReadResult(address, null, error))
                     .ToArray();
+            }
+            finally
+            {
+                if (requestGateEntered)
+                {
+                    _requestGate.Release();
+                }
             }
 
             var receivedAtUtc = DateTimeOffset.UtcNow;
@@ -206,7 +226,9 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 failure.Category,
                 NullIfEmpty(failure.Code),
                 NullIfEmpty(failure.Context),
-                failure.IsTransient));
+                failure.IsTransient,
+                requestPduReference,
+                responsePduReference));
             operationIndex++;
         }
 
@@ -248,12 +270,21 @@ public sealed class SiemensS7Client : IAsyncDisposable
             var receiveHeaderDurationMilliseconds = 0d;
             var receivePayloadDurationMilliseconds = 0d;
             IReadOnlyList<S7ReadResult> blockResults;
+            var requestGateEntered = false;
+            var request = BuildAreaReadRequest(block.DataBlock, startByte, byteCount);
+            var requestPduReference = ReadPduReference(request);
+            ushort? responsePduReference = null;
 
             try
             {
-                await SendAsync(BuildAreaReadRequest(block.DataBlock, startByte, byteCount), cancellationToken);
+                await _requestGate.WaitAsync(cancellationToken);
+                requestGateEntered = true;
+                sendStartedAtUtc = DateTimeOffset.UtcNow;
+                await SendAsync(request, cancellationToken);
                 sendFinishedAtUtc = DateTimeOffset.UtcNow;
                 var response = await ReceiveTimedAsync(cancellationToken);
+                ValidateResponsePduReference(response.Bytes, requestPduReference);
+                responsePduReference = ReadPduReference(response.Bytes);
                 receiveHeaderDurationMilliseconds = response.ReceiveHeaderDurationMilliseconds;
                 receivePayloadDurationMilliseconds = response.ReceivePayloadDurationMilliseconds;
                 blockResults = ExtractBlockReadResults(response.Bytes, blockAddresses, startByte, byteCount);
@@ -270,6 +301,13 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 blockResults = blockAddresses
                     .Select(address => new S7ReadResult(address, null, error))
                     .ToArray();
+            }
+            finally
+            {
+                if (requestGateEntered)
+                {
+                    _requestGate.Release();
+                }
             }
 
             var receivedAtUtc = DateTimeOffset.UtcNow;
@@ -294,7 +332,9 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 failure.Category,
                 NullIfEmpty(failure.Code),
                 NullIfEmpty(failure.Context),
-                failure.IsTransient));
+                failure.IsTransient,
+                requestPduReference,
+                responsePduReference));
             operationIndex++;
         }
 
@@ -314,6 +354,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
         {
             _client.Dispose();
         }
+
+        _requestGate.Dispose();
 
         await ValueTask.CompletedTask;
     }
@@ -344,6 +386,29 @@ public sealed class SiemensS7Client : IAsyncDisposable
     private async Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
     {
         return (await ReceiveTimedAsync(cancellationToken)).Bytes;
+    }
+
+    private async Task<byte[]> ExchangeAsync(
+        byte[] request,
+        bool validatePduReference,
+        CancellationToken cancellationToken)
+    {
+        await _requestGate.WaitAsync(cancellationToken);
+        try
+        {
+            await SendAsync(request, cancellationToken);
+            var response = await ReceiveAsync(cancellationToken);
+            if (validatePduReference)
+            {
+                ValidateResponsePduReference(response, ReadPduReference(request));
+            }
+
+            return response;
+        }
+        finally
+        {
+            _requestGate.Release();
+        }
     }
 
     private async Task<TimedS7Response> ReceiveTimedAsync(CancellationToken cancellationToken)
@@ -472,6 +537,34 @@ public sealed class SiemensS7Client : IAsyncDisposable
         }
 
         return negotiatedPduLength;
+    }
+
+    private static ushort ReadPduReference(IReadOnlyList<byte> message)
+    {
+        const int pduReferenceOffset = 11;
+        if (message.Count < pduReferenceOffset + 2)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.MISSING_PDU_REFERENCE",
+                "S7 header PDU reference",
+                "S7 message does not contain a PDU reference.");
+        }
+
+        return (ushort)((message[pduReferenceOffset] << 8) | message[pduReferenceOffset + 1]);
+    }
+
+    private static void ValidateResponsePduReference(byte[] response, ushort expectedReference)
+    {
+        var actualReference = ReadPduReference(response);
+        if (actualReference != expectedReference)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.PDU_REFERENCE_MISMATCH",
+                $"expected={expectedReference}, actual={actualReference}",
+                $"S7 response PDU reference {actualReference} does not match request {expectedReference}.");
+        }
     }
 
     private byte[] BuildReadRequest(IReadOnlyList<S7Address> addresses)

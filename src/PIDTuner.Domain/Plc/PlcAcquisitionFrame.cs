@@ -47,7 +47,9 @@ public sealed record PlcReadOperationDiagnostics(
     PlcCommunicationErrorCategory ErrorCategory = PlcCommunicationErrorCategory.None,
     string? ErrorCode = null,
     string? ErrorContext = null,
-    bool IsTransient = false)
+    bool IsTransient = false,
+    ushort? RequestPduReference = null,
+    ushort? ResponsePduReference = null)
 {
     public double DurationMilliseconds =>
         (ResponseReceivedTimestampUtc - RequestStartedTimestampUtc).TotalMilliseconds;
