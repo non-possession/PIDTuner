@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -26,6 +25,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly FieldProfileWorkflow _fieldProfileWorkflow;
     private readonly AnalysisResultExportWorkflow _analysisResultExportWorkflow = new();
+    private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
@@ -1391,34 +1391,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using var stream = File.Create(fileName);
-            await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            await writer.WriteLineAsync(
-                "timestampUtc,timestampLocal,tagName,tagId,address,value,unit,quality,source,visibleStartUtc,visibleEndUtc,trendMode");
-
-            var visibleStartUtc = export.VisibleStart.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-            var visibleEndUtc = export.VisibleEnd.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-            var trendMode = export.IsHistoricalMode ? "Historical" : "Live";
-
-            foreach (var point in export.Points)
-            {
-                var columns = new[]
-                {
-                    point.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
-                    point.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
-                    point.TagName,
-                    point.TagId.ToString("D"),
-                    point.Address,
-                    point.Value.ToString("G17", CultureInfo.InvariantCulture),
-                    point.Unit ?? string.Empty,
-                    point.Quality,
-                    point.Source,
-                    visibleStartUtc,
-                    visibleEndUtc,
-                    trendMode
-                };
-                await writer.WriteLineAsync(string.Join(",", columns.Select(EscapeCsv)));
-            }
+            await _plcTrendVisibleExportWorkflow.ExportAsync(
+                fileName,
+                export,
+                CancellationToken.None);
 
             Notify(
                 "可见趋势已导出",
@@ -1629,19 +1605,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
         return (samples, OfflineAnalysis.AnalyzeSamples(samples, window));
-    }
-
-    private static string EscapeCsv(string value)
-    {
-        if (!value.Contains('"') &&
-            !value.Contains(',') &&
-            !value.Contains('\r') &&
-            !value.Contains('\n'))
-        {
-            return value;
-        }
-
-        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     private async Task ExportAnalysisResultAsync()

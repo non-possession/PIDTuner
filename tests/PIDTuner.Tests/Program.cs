@@ -1521,6 +1521,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("IPlcHistoricalTrendWriteSession", StringComparison.Ordinal), "main view model historical session ownership");
     AssertEqual(false, source.Contains("StartPlcHistoricalRecording", StringComparison.Ordinal), "main view model historical start workflow");
     AssertEqual(false, source.Contains("StopPlcHistoricalRecording", StringComparison.Ordinal), "main view model historical stop workflow");
+    AssertEqual(false, source.Contains("StreamWriter", StringComparison.Ordinal), "main view model csv writer implementation");
+    AssertEqual(false, source.Contains("EscapeCsv", StringComparison.Ordinal), "main view model csv escaping implementation");
     return Task.CompletedTask;
 }
 
