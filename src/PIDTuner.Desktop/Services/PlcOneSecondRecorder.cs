@@ -15,6 +15,24 @@ public sealed class PlcOneSecondRecorder(
 {
     private static readonly TimeSpan RecordingDuration = TimeSpan.FromSeconds(1);
 
+    public async Task<PlcOneSecondRecordingLoadResult> LoadAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+
+        var absolutePath = Path.GetFullPath(fileName);
+        await using var stream = File.OpenRead(absolutePath);
+        var recording = await JsonSerializer.DeserializeAsync<PlcOneSecondRecording>(
+            stream,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web),
+            cancellationToken);
+
+        return recording is null || recording.Frames.Count == 0
+            ? PlcOneSecondRecordingLoadResult.Empty(absolutePath)
+            : PlcOneSecondRecordingLoadResult.Success(absolutePath, recording);
+    }
+
     public async Task<PlcOneSecondRecordingResult> RecordAsync(
         PlcProjectConfiguration configuration,
         Action<IReadOnlyList<PlcTagSnapshot>>? snapshotsCaptured,
@@ -206,6 +224,20 @@ public sealed record PlcOneSecondRecordingResult(
         Diagnostics: Array.Empty<PlcAcquisitionFrameDiagnostics>(),
         MonitorStatus: string.Empty,
         DiagnosticsStatus: string.Empty);
+}
+
+public sealed record PlcOneSecondRecordingLoadResult(
+    bool IsSuccess,
+    string AbsolutePath,
+    PlcOneSecondRecording? Recording)
+{
+    public static PlcOneSecondRecordingLoadResult Empty(string absolutePath) =>
+        new(false, absolutePath, null);
+
+    public static PlcOneSecondRecordingLoadResult Success(
+        string absolutePath,
+        PlcOneSecondRecording recording) =>
+        new(true, absolutePath, recording);
 }
 
 public sealed record PlcOneSecondRecording(

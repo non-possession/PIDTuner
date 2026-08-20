@@ -1523,6 +1523,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("StopPlcHistoricalRecording", StringComparison.Ordinal), "main view model historical stop workflow");
     AssertEqual(false, source.Contains("StreamWriter", StringComparison.Ordinal), "main view model csv writer implementation");
     AssertEqual(false, source.Contains("EscapeCsv", StringComparison.Ordinal), "main view model csv escaping implementation");
+    AssertEqual(false, source.Contains("File.OpenRead", StringComparison.Ordinal), "main view model recording file access");
+    AssertEqual(false, source.Contains("DeserializeAsync<PlcOneSecondRecording>", StringComparison.Ordinal), "main view model recording deserialization");
     return Task.CompletedTask;
 }
 

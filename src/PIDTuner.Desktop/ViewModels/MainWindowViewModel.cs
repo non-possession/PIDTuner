@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -875,17 +874,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await using var stream = File.OpenRead(fileName);
-            var recording = await JsonSerializer.DeserializeAsync<PlcOneSecondRecording>(
-                stream,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web),
+            var loadResult = await _plcOneSecondRecorder.LoadAsync(
+                fileName,
                 CancellationToken.None);
-            if (recording is null || recording.Frames.Count == 0)
+            if (!loadResult.IsSuccess)
             {
                 Notify("PLC 记录加载失败", "记录文件没有可回放的帧。", "Warning");
                 return;
             }
 
+            var recording = loadResult.Recording!;
             StopPlcReplay();
             HistoricalTrend.ClearLiveFrames();
             Debug.LoadReplay(recording.Frames, recording.IntervalMilliseconds);
