@@ -123,3 +123,55 @@ public static class PlcAcquisitionDiagnostics
         return sortedValues[Math.Clamp(rank, 0, sortedValues.Count - 1)];
     }
 }
+
+public sealed record PlcReadOperationsDiagnosticsSummary(
+    int OperationCount,
+    int AddressCount,
+    int RequestedPayloadBytes,
+    int UsefulPayloadBytes,
+    double PayloadEfficiency,
+    double AverageDurationMilliseconds,
+    double P95DurationMilliseconds,
+    double P99DurationMilliseconds,
+    int FailedOperationCount,
+    int TransientFailureCount)
+{
+    public static PlcReadOperationsDiagnosticsSummary Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+}
+
+public static class PlcReadOperationsDiagnostics
+{
+    public static PlcReadOperationsDiagnosticsSummary Summarize(
+        IReadOnlyList<PlcReadOperationDiagnostics> operations)
+    {
+        if (operations.Count == 0)
+        {
+            return PlcReadOperationsDiagnosticsSummary.Empty;
+        }
+
+        var durations = operations
+            .Select(operation => Math.Max(0, operation.DurationMilliseconds))
+            .Order()
+            .ToArray();
+        var requestedPayloadBytes = operations.Sum(operation => operation.RequestedPayloadBytes);
+        var usefulPayloadBytes = operations.Sum(operation => operation.UsefulPayloadBytes);
+
+        return new PlcReadOperationsDiagnosticsSummary(
+            operations.Count,
+            operations.Sum(operation => operation.AddressCount),
+            requestedPayloadBytes,
+            usefulPayloadBytes,
+            requestedPayloadBytes == 0 ? 0 : (double)usefulPayloadBytes / requestedPayloadBytes,
+            durations.Average(),
+            Percentile(durations, 0.95d),
+            Percentile(durations, 0.99d),
+            operations.Count(operation => operation.FailureCount > 0),
+            operations.Count(operation => operation.FailureCount > 0 && operation.IsTransient));
+    }
+
+    private static double Percentile(IReadOnlyList<double> sortedValues, double percentile)
+    {
+        var rank = (int)Math.Ceiling(percentile * sortedValues.Count) - 1;
+        return sortedValues[Math.Clamp(rank, 0, sortedValues.Count - 1)];
+    }
+}

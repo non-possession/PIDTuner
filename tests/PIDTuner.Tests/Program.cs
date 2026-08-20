@@ -52,6 +52,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 setup response exposes negotiated pdu length", S7SetupResponseExposesNegotiatedPduLength),
     ("s7 response rejects mismatched pdu reference", S7ResponseRejectsMismatchedPduReference),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
+    ("plc read diagnostics summarize latency and payload efficiency", PlcReadDiagnosticsSummarizeLatencyAndPayloadEfficiency),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
     ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
@@ -897,6 +898,37 @@ static Task PlcAcquisitionDiagnosticsSummarizesFrameTiming()
     return Task.CompletedTask;
 }
 
+static Task PlcReadDiagnosticsSummarizeLatencyAndPayloadEfficiency()
+{
+    var start = DateTimeOffset.UtcNow;
+    var operations = new[]
+    {
+        new PlcReadOperationDiagnostics(
+            0, "S7ReadDbBlock", "DB8.DBB6-DBB51", 3,
+            start, start.AddMilliseconds(8), 1, 5, 2, 3, 0, null,
+            RequestedPayloadBytes: 46, UsefulPayloadBytes: 12, NegotiatedPduLength: 480),
+        new PlcReadOperationDiagnostics(
+            1, "S7ReadDbBlock", "DB8.DBB200-DBB203", 1,
+            start, start.AddMilliseconds(20), 1, 15, 4, 0, 1, "timeout",
+            PlcCommunicationErrorCategory.Timeout, "S7.TIMEOUT", "ReadVar", true,
+            RequestedPayloadBytes: 4, UsefulPayloadBytes: 4, NegotiatedPduLength: 480)
+    };
+
+    var summary = PlcReadOperationsDiagnostics.Summarize(operations);
+
+    AssertEqual(2, summary.OperationCount, "PLC read diagnostic operation count");
+    AssertEqual(4, summary.AddressCount, "PLC read diagnostic address count");
+    AssertEqual(50, summary.RequestedPayloadBytes, "PLC read diagnostic requested bytes");
+    AssertEqual(16, summary.UsefulPayloadBytes, "PLC read diagnostic useful bytes");
+    AssertClose(0.32, summary.PayloadEfficiency, 0.001, "PLC read diagnostic payload efficiency");
+    AssertClose(14, summary.AverageDurationMilliseconds, 0.001, "PLC read diagnostic average duration");
+    AssertClose(20, summary.P95DurationMilliseconds, 0.001, "PLC read diagnostic p95 duration");
+    AssertClose(20, summary.P99DurationMilliseconds, 0.001, "PLC read diagnostic p99 duration");
+    AssertEqual(1, summary.FailedOperationCount, "PLC read diagnostic failed operations");
+    AssertEqual(1, summary.TransientFailureCount, "PLC read diagnostic transient failures");
+    return Task.CompletedTask;
+}
+
 static async Task PlcAcquisitionEngineRejectsInvalidInterval()
 {
     var reader = new SequencePlcTagSnapshotReader();
@@ -1006,7 +1038,10 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
                 "TCP stream",
                 true,
                 23,
-                23)
+                23,
+                46,
+                12,
+                480)
         }));
     session.Enqueue(new PlcAcquisitionFrame(
         new[]
@@ -1079,9 +1114,12 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
             error_context,
             is_transient,
             request_pdu_reference,
-            response_pdu_reference
+            response_pdu_reference,
+            requested_payload_bytes,
+            useful_payload_bytes,
+            negotiated_pdu_length
         FROM plc_read_operations
-        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count, error_category, error_code, error_context, is_transient, request_pdu_reference, response_pdu_reference;
+        GROUP BY operation_kind, target, address_count, duration_ms, send_duration_ms, receive_header_duration_ms, receive_payload_duration_ms, success_count, failure_count, error_category, error_code, error_context, is_transient, request_pdu_reference, response_pdu_reference, requested_payload_bytes, useful_payload_bytes, negotiated_pdu_length;
         """;
     await using var reader = await command.ExecuteReaderAsync();
     AssertEqual(true, await reader.ReadAsync(), "sqlite diagnostics read operation exists");
@@ -1101,6 +1139,9 @@ static async Task SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames()
     AssertEqual(1, reader.GetInt32(13), "sqlite diagnostics read operation transient flag");
     AssertEqual(23, reader.GetInt32(14), "sqlite diagnostics request PDU reference");
     AssertEqual(23, reader.GetInt32(15), "sqlite diagnostics response PDU reference");
+    AssertEqual(46, reader.GetInt32(16), "sqlite diagnostics requested payload bytes");
+    AssertEqual(12, reader.GetInt32(17), "sqlite diagnostics useful payload bytes");
+    AssertEqual(480, reader.GetInt32(18), "sqlite diagnostics negotiated PDU length");
 
     await using var frameCommand = connection.CreateCommand();
     frameCommand.CommandText = """

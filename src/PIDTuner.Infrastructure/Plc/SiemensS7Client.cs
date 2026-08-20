@@ -228,7 +228,10 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 NullIfEmpty(failure.Context),
                 failure.IsTransient,
                 requestPduReference,
-                responsePduReference));
+                responsePduReference,
+                chunk.Sum(address => address.ReadByteCount),
+                chunk.Sum(address => address.ReadByteCount),
+                NegotiatedPduLength));
             operationIndex++;
         }
 
@@ -334,7 +337,10 @@ public sealed class SiemensS7Client : IAsyncDisposable
                 NullIfEmpty(failure.Context),
                 failure.IsTransient,
                 requestPduReference,
-                responsePduReference));
+                responsePduReference,
+                byteCount,
+                CalculateUsefulPayloadBytes(blockAddresses),
+                NegotiatedPduLength));
             operationIndex++;
         }
 
@@ -647,6 +653,42 @@ public sealed class SiemensS7Client : IAsyncDisposable
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
+
+    private static int CalculateUsefulPayloadBytes(IReadOnlyList<S7Address> addresses)
+    {
+        var usefulBytes = 0;
+        foreach (var group in addresses.GroupBy(address => address.DataBlock))
+        {
+            var intervals = group
+                .Select(address => (Start: address.ByteOffset, End: address.ByteOffset + address.ReadByteCount))
+                .OrderBy(interval => interval.Start)
+                .ToArray();
+            if (intervals.Length == 0)
+            {
+                continue;
+            }
+
+            var currentStart = intervals[0].Start;
+            var currentEnd = intervals[0].End;
+            foreach (var interval in intervals.Skip(1))
+            {
+                if (interval.Start > currentEnd)
+                {
+                    usefulBytes += currentEnd - currentStart;
+                    currentStart = interval.Start;
+                    currentEnd = interval.End;
+                }
+                else
+                {
+                    currentEnd = Math.Max(currentEnd, interval.End);
+                }
+            }
+
+            usefulBytes += currentEnd - currentStart;
+        }
+
+        return usefulBytes;
+    }
 
     private static void WriteReadItem(Span<byte> item, S7Address address)
     {

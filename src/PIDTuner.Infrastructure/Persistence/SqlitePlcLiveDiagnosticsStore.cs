@@ -139,6 +139,9 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                 is_transient INTEGER NOT NULL DEFAULT 0,
                 request_pdu_reference INTEGER NULL,
                 response_pdu_reference INTEGER NULL,
+                requested_payload_bytes INTEGER NOT NULL DEFAULT 0,
+                useful_payload_bytes INTEGER NOT NULL DEFAULT 0,
+                negotiated_pdu_length INTEGER NULL,
                 PRIMARY KEY (session_id, frame_index, operation_index)
             );
 
@@ -227,7 +230,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             ("error_context", "TEXT NULL"),
             ("is_transient", "INTEGER NOT NULL DEFAULT 0"),
             ("request_pdu_reference", "INTEGER NULL"),
-            ("response_pdu_reference", "INTEGER NULL")
+            ("response_pdu_reference", "INTEGER NULL"),
+            ("requested_payload_bytes", "INTEGER NOT NULL DEFAULT 0"),
+            ("useful_payload_bytes", "INTEGER NOT NULL DEFAULT 0"),
+            ("negotiated_pdu_length", "INTEGER NULL")
         })
         {
             if (existingColumns.Contains(column))
@@ -620,7 +626,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     error_context,
                     is_transient,
                     request_pdu_reference,
-                    response_pdu_reference)
+                    response_pdu_reference,
+                    requested_payload_bytes,
+                    useful_payload_bytes,
+                    negotiated_pdu_length)
                 VALUES (
                     $session_id,
                     $frame_index,
@@ -642,7 +651,10 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
                     $error_context,
                     $is_transient,
                     $request_pdu_reference,
-                    $response_pdu_reference);
+                    $response_pdu_reference,
+                    $requested_payload_bytes,
+                    $useful_payload_bytes,
+                    $negotiated_pdu_length);
                 """;
             command.Parameters.AddWithValue("$session_id", SessionId.ToString("D"));
             command.Parameters.AddWithValue("$frame_index", frameIndex);
@@ -669,6 +681,11 @@ public sealed class SqlitePlcLiveDiagnosticsStore(string databasePath) : IPlcLiv
             command.Parameters.AddWithValue(
                 "$response_pdu_reference",
                 operation.ResponsePduReference.HasValue ? operation.ResponsePduReference.Value : DBNull.Value);
+            command.Parameters.AddWithValue("$requested_payload_bytes", operation.RequestedPayloadBytes);
+            command.Parameters.AddWithValue("$useful_payload_bytes", operation.UsefulPayloadBytes);
+            command.Parameters.AddWithValue(
+                "$negotiated_pdu_length",
+                operation.NegotiatedPduLength.HasValue ? operation.NegotiatedPduLength.Value : DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 

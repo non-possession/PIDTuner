@@ -49,8 +49,15 @@ public sealed record PlcReadOperationDiagnostics(
     string? ErrorContext = null,
     bool IsTransient = false,
     ushort? RequestPduReference = null,
-    ushort? ResponsePduReference = null)
+    ushort? ResponsePduReference = null,
+    int RequestedPayloadBytes = 0,
+    int UsefulPayloadBytes = 0,
+    int? NegotiatedPduLength = null)
 {
     public double DurationMilliseconds =>
         (ResponseReceivedTimestampUtc - RequestStartedTimestampUtc).TotalMilliseconds;
+
+    public double PayloadEfficiency => RequestedPayloadBytes <= 0
+        ? 0
+        : (double)UsefulPayloadBytes / RequestedPayloadBytes;
 }
