@@ -39,10 +39,13 @@ internal sealed record TimedS7Response(
 public sealed class SiemensS7Client : IAsyncDisposable
 {
     internal const int MaxReadItemsPerRequest = 16;
+    internal const int RequestedPduLength = 960;
 
     private TcpClient? _client;
     private NetworkStream? _stream;
     private ushort _sequence = 1;
+
+    internal int NegotiatedPduLength { get; private set; } = RequestedPduLength;
 
     public async Task ConnectAsync(PlcProjectConfiguration configuration, CancellationToken cancellationToken)
     {
@@ -95,7 +98,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
         try
         {
             await SendAsync(BuildSetupCommunicationRequest(), timeout.Token);
-            _ = await ReceiveAsync(timeout.Token);
+            var setupResponse = await ReceiveAsync(timeout.Token);
+            NegotiatedPduLength = ParseSetupCommunicationResponse(setupResponse);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -224,15 +228,13 @@ public sealed class SiemensS7Client : IAsyncDisposable
         var operations = new List<PlcReadOperationDiagnostics>();
         var operationIndex = 0;
 
-        foreach (var group in addresses.GroupBy(address => address.DataBlock).OrderBy(group => group.Key))
+        var maximumPayloadBytes = S7DbReadPlanner.CalculateMaximumReadPayload(NegotiatedPduLength);
+        foreach (var block in S7DbReadPlanner.Plan(addresses, maximumPayloadBytes))
         {
-            var blockAddresses = group
-                .OrderBy(address => address.ByteOffset)
-                .ThenBy(address => address.BitOffset ?? 0)
-                .ToArray();
-            var startByte = blockAddresses.Min(address => address.ByteOffset);
-            var endByteExclusive = blockAddresses.Max(address => address.ByteOffset + address.ReadByteCount);
-            var byteCount = endByteExclusive - startByte;
+            var blockAddresses = block.Addresses;
+            var startByte = block.StartByte;
+            var endByteExclusive = block.EndByteExclusive;
+            var byteCount = block.ByteCount;
             var startedAtUtc = DateTimeOffset.UtcNow;
             string? error = null;
             var failure = new SiemensS7CommunicationFailure(
@@ -249,7 +251,7 @@ public sealed class SiemensS7Client : IAsyncDisposable
 
             try
             {
-                await SendAsync(BuildAreaReadRequest(group.Key, startByte, byteCount), cancellationToken);
+                await SendAsync(BuildAreaReadRequest(block.DataBlock, startByte, byteCount), cancellationToken);
                 sendFinishedAtUtc = DateTimeOffset.UtcNow;
                 var response = await ReceiveTimedAsync(cancellationToken);
                 receiveHeaderDurationMilliseconds = response.ReceiveHeaderDurationMilliseconds;
@@ -279,8 +281,8 @@ public sealed class SiemensS7Client : IAsyncDisposable
             operations.Add(new PlcReadOperationDiagnostics(
                 operationIndex,
                 "S7ReadDbBlock",
-                $"DB{group.Key}.DBB{startByte}-DBB{endByteExclusive - 1}",
-                blockAddresses.Length,
+                $"DB{block.DataBlock}.DBB{startByte}-DBB{endByteExclusive - 1}",
+                blockAddresses.Count,
                 startedAtUtc,
                 receivedAtUtc,
                 (sendFinishedAtUtc - sendStartedAtUtc).TotalMilliseconds,
@@ -423,8 +425,53 @@ public sealed class SiemensS7Client : IAsyncDisposable
             0x02, 0xF0, 0x80,
             0x32, 0x01, 0x00, 0x00, 0x00, 0x01,
             0x00, 0x08, 0x00, 0x00,
-            0xF0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x03, 0xC0
+            0xF0, 0x00, 0x00, 0x01, 0x00, 0x01,
+            (byte)(RequestedPduLength >> 8), (byte)(RequestedPduLength & 0xFF)
         };
+    }
+
+    private static int ParseSetupCommunicationResponse(byte[] response)
+    {
+        const int s7Offset = 7;
+        const int setupParameterLength = 8;
+        if (response.Length < s7Offset + 12 + setupParameterLength
+            || response[0] != 0x03
+            || response[s7Offset] != 0x32)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.INVALID_SETUP_RESPONSE",
+                "S7 Setup Communication response",
+                "Invalid S7 Setup Communication response.");
+        }
+
+        var rosctr = response[s7Offset + 1];
+        var headerLength = rosctr == 0x03 ? 12 : 10;
+        var parameterLength = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(s7Offset + 6, 2));
+        var parameterOffset = s7Offset + headerLength;
+        if (parameterLength < setupParameterLength
+            || response.Length < parameterOffset + parameterLength
+            || response[parameterOffset] != 0xF0)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.INVALID_SETUP_PARAMETER",
+                "S7 Setup Communication parameter",
+                "S7 Setup Communication response does not contain a valid setup parameter.");
+        }
+
+        var negotiatedPduLength = BinaryPrimitives.ReadUInt16BigEndian(
+            response.AsSpan(parameterOffset + 6, 2));
+        if (negotiatedPduLength < 64)
+        {
+            throw new SiemensS7ProtocolException(
+                PlcCommunicationErrorCategory.Protocol,
+                "S7.INVALID_NEGOTIATED_PDU",
+                "S7 Setup Communication PDU length",
+                $"PLC negotiated an invalid S7 PDU length of {negotiatedPduLength} bytes.");
+        }
+
+        return negotiatedPduLength;
     }
 
     private byte[] BuildReadRequest(IReadOnlyList<S7Address> addresses)

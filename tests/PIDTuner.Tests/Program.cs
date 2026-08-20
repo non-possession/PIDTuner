@@ -48,6 +48,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("s7 read response parser handles adjacent multi-real items", S7ReadResponseParserHandlesAdjacentMultiRealItems),
     ("s7 db block parser decodes sparse real offsets", S7DbBlockParserDecodesSparseRealOffsets),
     ("s7 communication failures use stable categories and codes", S7CommunicationFailuresUseStableCategoriesAndCodes),
+    ("s7 db read planner honors pdu and sparse gaps", S7DbReadPlannerHonorsPduAndSparseGaps),
+    ("s7 setup response exposes negotiated pdu length", S7SetupResponseExposesNegotiatedPduLength),
     ("plc acquisition diagnostics summarizes frame timing", PlcAcquisitionDiagnosticsSummarizesFrameTiming),
     ("plc acquisition engine rejects invalid interval", PlcAcquisitionEngineRejectsInvalidInterval),
     ("plc acquisition engine skips overdue schedule slots", PlcAcquisitionEngineSkipsOverdueScheduleSlots),
@@ -797,6 +799,52 @@ static Task S7CommunicationFailuresUseStableCategoriesAndCodes()
         true,
         failureType.GetProperty("IsTransient")?.GetValue(failure),
         "S7 IO failure transient flag");
+    return Task.CompletedTask;
+}
+
+static Task S7DbReadPlannerHonorsPduAndSparseGaps()
+{
+    var plannerType = typeof(SiemensS7Client).Assembly.GetType(
+        "PIDTuner.Infrastructure.Plc.S7DbReadPlanner",
+        throwOnError: true)!;
+    var planMethod = plannerType.GetMethod("Plan", BindingFlags.Public | BindingFlags.Static)
+        ?? throw new InvalidOperationException("S7 DB read planner was not found.");
+    var addresses = new[]
+    {
+        S7AddressParser.Parse("DB8.DBD6", PlcDataType.Float),
+        S7AddressParser.Parse("DB8.DBD10", PlcDataType.Float),
+        S7AddressParser.Parse("DB8.DBD48", PlcDataType.Float),
+        S7AddressParser.Parse("DB8.DBD200", PlcDataType.Float),
+        S7AddressParser.Parse("DB9.DBD0", PlcDataType.Float)
+    };
+    var blocks = ((System.Collections.IEnumerable)(planMethod.Invoke(null, new object[] { addresses, 100 })
+        ?? throw new InvalidOperationException("S7 DB read planner returned null.")))
+        .Cast<object>()
+        .ToArray();
+
+    AssertEqual(3, blocks.Length, "S7 DB read planned block count");
+    AssertEqual(6, GetIntProperty(blocks[0], "StartByte"), "S7 first block start");
+    AssertEqual(46, GetIntProperty(blocks[0], "ByteCount"), "S7 existing sparse points remain coherent");
+    AssertEqual(200, GetIntProperty(blocks[1], "StartByte"), "S7 large sparse gap starts another block");
+    AssertEqual(9, GetIntProperty(blocks[2], "DataBlock"), "S7 different DB starts another block");
+
+    var pduBlocks = ((System.Collections.IEnumerable)(planMethod.Invoke(null, new object[] { addresses[..3], 40 })
+        ?? throw new InvalidOperationException("S7 DB read planner returned null.")))
+        .Cast<object>()
+        .ToArray();
+    AssertEqual(2, pduBlocks.Length, "S7 PDU payload splits oversized coverage");
+    return Task.CompletedTask;
+}
+
+static Task S7SetupResponseExposesNegotiatedPduLength()
+{
+    var response = BuildS7SetupCommunicationResponse(480);
+    var method = typeof(SiemensS7Client).GetMethod(
+        "ParseSetupCommunicationResponse",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("S7 setup response parser was not found.");
+
+    AssertEqual(480, (int)method.Invoke(null, new object[] { response })!, "negotiated S7 PDU length");
     return Task.CompletedTask;
 }
 
@@ -1969,6 +2017,27 @@ static byte[] BuildS7ReadResponseWithTwoAdjacentRealItems(float first, float sec
     return response;
 }
 
+static byte[] BuildS7SetupCommunicationResponse(int pduLength)
+{
+    var response = new byte[27];
+    response[0] = 0x03;
+    response[1] = 0x00;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(2, 2), (ushort)response.Length);
+    response[4] = 0x02;
+    response[5] = 0xF0;
+    response[6] = 0x80;
+    response[7] = 0x32;
+    response[8] = 0x03;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(11, 2), 1);
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(13, 2), 8);
+    response[19] = 0xF0;
+    response[20] = 0x00;
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(21, 2), 1);
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(23, 2), 1);
+    BinaryPrimitives.WriteUInt16BigEndian(response.AsSpan(25, 2), (ushort)pduLength);
+    return response;
+}
+
 static byte[] BuildS7ReadResponseWithDbBlock(
     int startByte,
     int byteCount,
@@ -2018,6 +2087,10 @@ static string? GetS7ReadResultError(object result)
 {
     return (string?)result.GetType().GetProperty("Error")?.GetValue(result);
 }
+
+static int GetIntProperty(object instance, string propertyName) =>
+    (int)(instance.GetType().GetProperty(propertyName)?.GetValue(instance)
+        ?? throw new InvalidOperationException($"Property {propertyName} was not found."));
 
 static PidSampleFieldDefinition Field(
     string key,
