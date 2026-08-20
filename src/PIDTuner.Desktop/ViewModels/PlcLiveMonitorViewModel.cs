@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using PIDTuner.Application.Interfaces;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Plc;
@@ -14,6 +15,7 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
     private const int UiRefreshMilliseconds = 250;
 
     private readonly PlcAcquisitionEngine _acquisitionEngine;
+    private readonly PlcHistoricalAcquisitionWriter _historicalWriter;
     private readonly PlcSampleBuffer _sampleBuffer = new();
     private bool _isMonitoring;
     private bool _isLiveTrendPaused;
@@ -22,9 +24,12 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public PlcLiveMonitorViewModel(PlcAcquisitionEngine acquisitionEngine)
+    public PlcLiveMonitorViewModel(
+        PlcAcquisitionEngine acquisitionEngine,
+        PlcHistoricalAcquisitionWriter historicalWriter)
     {
         _acquisitionEngine = acquisitionEngine;
+        _historicalWriter = historicalWriter;
         Tags.CollectionChanged += Tags_CollectionChanged;
     }
 
@@ -69,23 +74,34 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
         var acquisitionIntervalMilliseconds = ResolveMonitoringIntervalMilliseconds(configuration);
         CurrentAcquisitionIntervalMilliseconds = acquisitionIntervalMilliseconds;
         _sampleBuffer.Clear();
-        await _acquisitionEngine.StartAsync(
-            configuration,
-            TimeSpan.FromMilliseconds(acquisitionIntervalMilliseconds),
-            _sampleBuffer,
-            cancellationToken);
+        await _historicalWriter.StartAsync(configuration, cancellationToken);
+        try
+        {
+            await _acquisitionEngine.StartAsync(
+                configuration,
+                TimeSpan.FromMilliseconds(acquisitionIntervalMilliseconds),
+                _sampleBuffer,
+                cancellationToken);
+        }
+        catch
+        {
+            await _historicalWriter.StopAsync(CancellationToken.None);
+            throw;
+        }
         IsMonitoring = true;
 
         return new PlcLiveMonitorStartResult(
             TimeSpan.FromMilliseconds(UiRefreshMilliseconds),
-            $"点位监控运行中，采集周期 {acquisitionIntervalMilliseconds} ms，界面刷新 {UiRefreshMilliseconds} ms。");
+            $"点位监控运行中，采集周期 {acquisitionIntervalMilliseconds} ms，界面刷新 {UiRefreshMilliseconds} ms。",
+            _historicalWriter.DatabasePath);
     }
 
-    public async Task StopAsync()
+    public async Task<PlcHistoricalTrendWriteSummary?> StopAsync()
     {
         IsMonitoring = false;
         await _acquisitionEngine.StopAsync();
         _sampleBuffer.Clear();
+        return await _historicalWriter.StopAsync(CancellationToken.None);
     }
 
     public void ClearTags()
@@ -226,7 +242,8 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
 
 public sealed record PlcLiveMonitorStartResult(
     TimeSpan UiRefreshInterval,
-    string MonitorStatus);
+    string MonitorStatus,
+    string HistoricalDatabasePath);
 
 public sealed record PlcLiveMonitorDrainResult(
     IReadOnlyList<PlcAcquisitionFrame> Frames,

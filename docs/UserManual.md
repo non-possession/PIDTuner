@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-08-20, V2 communication/history stage 5.
+Last updated: 2026-08-20, V2 historical architecture refactor.
 
 ## Requirements
 
@@ -247,7 +247,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 50 tests pass.
+Current expected result: 52 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -277,6 +277,7 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
 - Persist live PLC acquisition frames asynchronously to `local\plc-history\plc-history.sqlite` while monitoring runs.
 - Query static historical trends from the independent SQLite history store by the selected time range.
+- Persist acquisition frames before UI draining, so SQLite history writing is independent of chart refresh timing.
 - Downsample long historical ranges before plotting while preserving the first and last point.
 - Export only the data points visible in the current trend canvas to UTF-8 BOM CSV.
 - Pause and resume live trend scrolling without stopping background PLC acquisition.
@@ -343,8 +344,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-V2 communication/history stage 5 snapshot:
+V2 historical architecture refactor snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-stage5.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-architecture-refactor.png
 ```

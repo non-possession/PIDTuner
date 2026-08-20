@@ -59,6 +59,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
     ("sqlite plc historical store queries planned-time frames", SqlitePlcHistoricalStoreQueriesPlannedTimeFrames),
     ("sqlite plc historical store sustains thirty simulated minutes", SqlitePlcHistoricalStoreSustainsThirtySimulatedMinutes),
+    ("historical trend coordinator merges buffered frames", HistoricalTrendCoordinatorMergesBufferedFrames),
+    ("main view model respects infrastructure seam", MainViewModelRespectsInfrastructureSeam),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication after loading configuration", MainViewModelChecksPlcCommunicationAfterLoadingConfiguration),
@@ -1467,6 +1469,61 @@ static async Task SqlitePlcHistoricalStoreSustainsThirtySimulatedMinutes()
         "thirty minute query preserves last point");
 }
 
+static async Task HistoricalTrendCoordinatorMergesBufferedFrames()
+{
+    var store = new FakePlcHistoricalTrendStore();
+    var coordinator = new PlcHistoricalTrendCoordinator(store);
+    var configuration = PlcProjectConfiguration.CreateDefault();
+    var tag = configuration.Tags[0];
+    var timestamp = DateTimeOffset.Parse("2026-08-20T12:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+    var persistedFrame = new PlcAcquisitionFrame(
+        new[]
+        {
+            new PlcTagSnapshot(tag.Id, tag.Name, tag.Address, 10d, tag.Unit, timestamp, "Good", "SQLite")
+        },
+        DiagnosticFrame(0, timestamp, 0, 1, 2, 3, 4, 1, PlcAcquisitionFrameState.Normal));
+    var session = await store.StartSessionAsync(configuration, CancellationToken.None);
+    session.Enqueue(persistedFrame);
+
+    coordinator.ObserveLiveFrame(
+        persistedFrame with
+        {
+            Snapshots = new[]
+            {
+                new PlcTagSnapshot(tag.Id, tag.Name, tag.Address, 20d, tag.Unit, timestamp, "Good", "Buffer")
+            }
+        },
+        samplingIntervalMilliseconds: 100);
+    var frames = await coordinator.LoadRangeAsync(
+        timestamp.AddSeconds(-1),
+        timestamp.AddSeconds(1),
+        CancellationToken.None);
+
+    AssertEqual(1, frames.Count, "historical coordinator merged frame count");
+    AssertEqual(1, frames[0].Count, "historical coordinator merged tag count");
+    AssertClose(20d, frames[0][0].Value!.Value, 0.001, "historical coordinator buffered value wins");
+}
+
+static Task MainViewModelRespectsInfrastructureSeam()
+{
+    var root = FindRepositoryRootForTests();
+    var source = File.ReadAllText(Path.Combine(
+        root,
+        "src",
+        "PIDTuner.Desktop",
+        "ViewModels",
+        "MainWindowViewModel.cs"));
+
+    AssertEqual(false, source.Contains("PIDTuner.Infrastructure", StringComparison.Ordinal), "main view model infrastructure namespace");
+    AssertEqual(false, source.Contains("QueryFramesAsync(", StringComparison.Ordinal), "main view model historical query implementation");
+    AssertEqual(false, source.Contains("SqlitePlc", StringComparison.Ordinal), "main view model sqlite implementation");
+    AssertEqual(false, source.Contains("_plcHistoricalWriter", StringComparison.Ordinal), "main view model historical writer ownership");
+    AssertEqual(false, source.Contains("IPlcHistoricalTrendWriteSession", StringComparison.Ordinal), "main view model historical session ownership");
+    AssertEqual(false, source.Contains("StartPlcHistoricalRecording", StringComparison.Ordinal), "main view model historical start workflow");
+    AssertEqual(false, source.Contains("StopPlcHistoricalRecording", StringComparison.Ordinal), "main view model historical stop workflow");
+    return Task.CompletedTask;
+}
+
 static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
 {
     var directory = CreateTestStorageDirectory();
@@ -1499,6 +1556,10 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
     await viewModel.TogglePlcMonitoringAsync();
     await WaitUntilAsync(() => reader.SessionReadCount >= 3);
+    AssertEqual(
+        true,
+        historicalStore.LastSession!.EnqueueCount >= 3,
+        "historical sqlite receives acquisition frames before ui drain");
     await viewModel.RefreshPlcMonitorAsync();
     await viewModel.ShowPlcHistoricalTrendAsync(TimeSpan.FromSeconds(10));
 
@@ -1875,6 +1936,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     loader.HistoricalTrendWorkbench.SelectedLeftAxisSeriesId = preservedSeriesId;
     AssertClose(preservedLower, loader.HistoricalTrendWorkbench.YLower, 0.0001d, "historical selected series keeps y brush");
 
+    viewportRequestCount = 0;
     var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
     loader.HistoricalTrendWorkbench.RangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
@@ -2209,6 +2271,22 @@ static byte[] BuildS7ReadResponseWithTwoAdjacentRealItems(float first, float sec
     WriteS7RealReadItem(response.AsSpan(21, 8), first);
     WriteS7RealReadItem(response.AsSpan(29, 8), second);
     return response;
+}
+
+static string FindRepositoryRootForTests()
+{
+    var current = new DirectoryInfo(AppContext.BaseDirectory);
+    while (current is not null)
+    {
+        if (File.Exists(Path.Combine(current.FullName, "PIDTuner.sln")))
+        {
+            return current.FullName;
+        }
+
+        current = current.Parent;
+    }
+
+    throw new DirectoryNotFoundException("PIDTuner repository root was not found.");
 }
 
 static byte[] BuildS7SetupCommunicationResponse(int pduLength)

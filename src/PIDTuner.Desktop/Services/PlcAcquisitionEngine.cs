@@ -5,7 +5,9 @@ using PIDTuner.Domain.Plc;
 
 namespace PIDTuner.Desktop.Services;
 
-public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, CancellationToken, Task<IPlcTagSnapshotReadSession>> openSessionAsync)
+public sealed class PlcAcquisitionEngine(
+    Func<PlcProjectConfiguration, CancellationToken, Task<IPlcTagSnapshotReadSession>> openSessionAsync,
+    Action<PlcAcquisitionFrame>? frameAcquired = null)
     : IAsyncDisposable
 {
     private CancellationTokenSource? _cancellation;
@@ -66,7 +68,7 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
         await StopAsync();
     }
 
-    private static async Task RunAsync(
+    private async Task RunAsync(
         IPlcTagSnapshotReadSession session,
         TimeSpan interval,
         PlcSampleBuffer buffer,
@@ -103,7 +105,7 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
                 ? (responseReceivedTimestampUtc - previousResponseReceivedTimestampUtc.Value).TotalMilliseconds
                 : (double?)null;
             var requestElapsed = requestStartedTimestampUtc - startedAtUtc;
-            buffer.Add(new PlcAcquisitionFrame(
+            var frame = new PlcAcquisitionFrame(
                 snapshots,
                 new PlcAcquisitionFrameDiagnostics(
                     frameIndex,
@@ -130,7 +132,9 @@ public sealed class PlcAcquisitionEngine(Func<PlcProjectConfiguration, Cancellat
                     PhaseMilliseconds(requestElapsed, 5_000),
                     PhaseMilliseconds(requestElapsed, 10_000),
                     PhaseMilliseconds(requestElapsed, 11_000)),
-                readOperations));
+                readOperations);
+            frameAcquired?.Invoke(frame);
+            buffer.Add(frame);
 
             previousRequestStartedTimestampUtc = requestStartedTimestampUtc;
             previousResponseReceivedTimestampUtc = responseReceivedTimestampUtc;

@@ -1,0 +1,43 @@
+using PIDTuner.Application.Interfaces;
+using PIDTuner.Infrastructure.Configuration;
+using PIDTuner.Infrastructure.Persistence;
+using PIDTuner.Infrastructure.Plc;
+
+namespace PIDTuner.Desktop.Services;
+
+internal static class MainWindowComposition
+{
+    public static IPidSampleFieldProfileStore CreateFieldProfileStore() =>
+        new JsonPidSampleFieldProfileStore();
+
+    public static IPlcProjectConfigurationStore CreatePlcConfigurationStore() =>
+        new JsonPlcProjectConfigurationStore();
+
+    public static IPlcConnectivityProbe CreatePlcConnectivityProbe() =>
+        new ConfiguredPlcConnectivityProbe(
+            new SiemensS7ConnectivityProbe(),
+            new PingPlcConnectivityProbe());
+
+    public static IPlcTagSnapshotReader CreatePlcTagSnapshotReader() =>
+        new ConfiguredPlcTagSnapshotReader(
+            new SiemensS7PlcTagSnapshotReader(),
+            new PreviewPlcTagSnapshotReader());
+
+    public static ITestSessionRepository CreateTestSessionRepository(string directory) =>
+        new JsonTestSessionRepository(directory);
+
+    public static IPidSampleRepository CreatePidSampleRepository(string directory) =>
+        new JsonPidSampleRepository(directory);
+
+    public static IPidRecommendationReviewRepository CreateRecommendationReviewRepository(string directory) =>
+        new JsonPidRecommendationReviewRepository(directory);
+
+    public static IPidParameterSetRepository CreateParameterSetRepository(string directory) =>
+        new JsonPidParameterSetRepository(directory);
+
+    public static IPlcLiveDiagnosticsStore CreateLiveDiagnosticsStore(string databasePath) =>
+        new SqlitePlcLiveDiagnosticsStore(databasePath);
+
+    public static IPlcHistoricalTrendStore CreateHistoricalTrendStore(string databasePath) =>
+        new SqlitePlcHistoricalTrendStore(databasePath);
+}
