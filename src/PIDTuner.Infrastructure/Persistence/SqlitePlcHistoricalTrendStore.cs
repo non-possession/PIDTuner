@@ -138,7 +138,7 @@ public sealed class SqlitePlcHistoricalTrendStore : IPlcHistoricalTrendStore
     }
 
     private static string FormatTimestamp(DateTimeOffset timestamp) =>
-        timestamp.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static DateTimeOffset ParseTimestamp(string timestamp) =>
         DateTimeOffset.Parse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);

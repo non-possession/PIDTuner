@@ -58,6 +58,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("plc trend chart calculates live retention from time windows", PlcTrendChartCalculatesLiveRetentionFromTimeWindows),
     ("sqlite plc live diagnostics store writes queued frames", SqlitePlcLiveDiagnosticsStoreWritesQueuedFrames),
     ("sqlite plc historical store queries planned-time frames", SqlitePlcHistoricalStoreQueriesPlannedTimeFrames),
+    ("sqlite plc historical store sustains thirty simulated minutes", SqlitePlcHistoricalStoreSustainsThirtySimulatedMinutes),
     ("plc project configuration store round trips editable connection and tags", PlcProjectConfigurationStoreRoundTripsEditableConnectionAndTags),
     ("main view model saves plc configuration with absolute path notification", MainViewModelSavesPlcConfigurationWithAbsolutePathNotification),
     ("main view model checks plc communication after loading configuration", MainViewModelChecksPlcCommunicationAfterLoadingConfiguration),
@@ -1403,6 +1404,67 @@ static async Task SqlitePlcHistoricalStoreQueriesPlannedTimeFrames()
     AssertEqual(2, frames.Count, "historical sqlite range frame count");
     AssertEqual(origin.AddMilliseconds(100), frames[0][0].Timestamp, "historical sqlite uses planned timestamp");
     AssertClose(11d, frames[0][0].Value!.Value, 0.001, "historical sqlite queried value");
+}
+
+static async Task SqlitePlcHistoricalStoreSustainsThirtySimulatedMinutes()
+{
+    const int frameCount = 18_000;
+    var directory = CreateTestStorageDirectory();
+    var store = new SqlitePlcHistoricalTrendStore(Path.Combine(directory, "plc-history-30min.sqlite"));
+    var configuration = PlcProjectConfiguration.CreateDefault();
+    var tag = configuration.Tags[0];
+    var origin = DateTimeOffset.Parse("2026-08-20T11:00:00.0000000+00:00", CultureInfo.InvariantCulture);
+    var session = await store.StartSessionAsync(configuration, CancellationToken.None);
+
+    for (var index = 0; index < frameCount; index++)
+    {
+        var timestamp = origin.AddMilliseconds(index * 100L);
+        session.Enqueue(new PlcAcquisitionFrame(
+            new[]
+            {
+                new PlcTagSnapshot(
+                    tag.Id,
+                    tag.Name,
+                    tag.Address,
+                    index,
+                    tag.Unit,
+                    timestamp,
+                    "Good",
+                    "StabilityTest")
+            },
+            DiagnosticFrame(
+                index,
+                origin,
+                plannedMs: index * 100,
+                requestMs: index * 100 + 5,
+                responseMs: index * 100 + 15,
+                bufferedMs: index * 100 + 16,
+                uiMs: index * 100 + 30,
+                snapshots: 1,
+                PlcAcquisitionFrameState.Normal)));
+    }
+
+    var summary = await session.StopAsync(CancellationToken.None);
+    var range = await store.GetAvailableRangeAsync(CancellationToken.None);
+    var displayFrames = await store.QueryFramesAsync(
+        origin,
+        origin.AddMilliseconds((frameCount - 1) * 100L),
+        maximumPointsPerTag: 600,
+        CancellationToken.None);
+
+    AssertEqual(frameCount, summary.FrameCount, "thirty minute historical frame count");
+    AssertEqual(frameCount, summary.SnapshotCount, "thirty minute historical snapshot count");
+    AssertEqual(origin, range!.Value.Start, "thirty minute historical start");
+    AssertEqual(origin.AddMilliseconds((frameCount - 1) * 100L), range.Value.End, "thirty minute historical end");
+    AssertEqual(true, displayFrames.Count <= 602, "thirty minute query is bounded for plotting");
+    AssertEqual(
+        origin.ToUnixTimeMilliseconds(),
+        displayFrames[0][0].Timestamp.ToUnixTimeMilliseconds(),
+        "thirty minute query preserves first point");
+    AssertEqual(
+        range.Value.End.ToUnixTimeMilliseconds(),
+        displayFrames[^1][0].Timestamp.ToUnixTimeMilliseconds(),
+        "thirty minute query preserves last point");
 }
 
 static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
