@@ -30,8 +30,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
+    private readonly PlcReplayController _plcReplayController;
     private readonly DispatcherTimer _monitorTimer = new();
-    private readonly DispatcherTimer _plcReplayTimer = new();
     private readonly DispatcherTimer _plcLiveDiagnosticsTimer = new();
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
@@ -125,6 +125,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
         Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
         Debug.PropertyChanged += Debug_PropertyChanged;
+        _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         OfflineAnalysis = new OfflineAnalysisViewModel();
@@ -149,7 +150,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
         };
         _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
-        _plcReplayTimer.Tick += (_, _) => ApplyNextPlcReplayFrame();
         _plcLiveDiagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
         _plcLiveDiagnosticsTimer.Tick += async (_, _) => await StopExpiredPlcLiveDiagnosticsAsync();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
@@ -1071,68 +1071,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task TogglePlcReplayAsync()
     {
-        if (IsPlcReplayRunning)
-        {
-            _plcReplayTimer.Stop();
-            ApplyPlcReplayOperation(Debug.PauseReplay());
-            return Task.CompletedTask;
-        }
-
-        var result = Debug.StartReplay();
-        ApplyPlcReplayOperation(result);
-        if (Debug.IsReplayRunning)
-        {
-            _plcReplayTimer.Interval = TimeSpan.FromMilliseconds(Debug.EffectiveReplayIntervalMilliseconds);
-            _plcReplayTimer.Start();
-        }
-
+        _plcReplayController.Toggle();
         return Task.CompletedTask;
     }
 
     public Task StepPlcReplayBackwardAsync()
     {
-        if (!EnsurePlcReplayLoaded())
-        {
-            return Task.CompletedTask;
-        }
-
-        _plcReplayTimer.Stop();
-        ApplyPlcReplayOperation(Debug.StepBackward());
+        _plcReplayController.StepBackward();
         return Task.CompletedTask;
     }
 
     public Task StepPlcReplayForwardAsync()
     {
-        if (!EnsurePlcReplayLoaded())
-        {
-            return Task.CompletedTask;
-        }
-
-        _plcReplayTimer.Stop();
-        ApplyPlcReplayOperation(Debug.StepForward());
+        _plcReplayController.StepForward();
         return Task.CompletedTask;
     }
 
     public Task SetPlcReplaySpeedAsync(double speedMultiplier)
     {
-        Debug.SetReplaySpeed(speedMultiplier);
-        if (IsPlcReplayRunning)
-        {
-            _plcReplayTimer.Interval = TimeSpan.FromMilliseconds(Debug.EffectiveReplayIntervalMilliseconds);
-        }
-
+        _plcReplayController.SetSpeed(speedMultiplier);
         return Task.CompletedTask;
-    }
-
-    private void ApplyNextPlcReplayFrame()
-    {
-        var result = Debug.ApplyNextReplayFrame();
-        if (!Debug.IsReplayRunning)
-        {
-            _plcReplayTimer.Stop();
-        }
-
-        ApplyPlcReplayOperation(result);
     }
 
     private void ApplyPlcReplayOperation(PlcReplayOperationResult result)
@@ -1206,8 +1164,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void StopPlcReplay()
     {
-        _plcReplayTimer.Stop();
-        Debug.StopReplay();
+        _plcReplayController.Stop();
     }
 
     private async Task<IPlcTagSnapshotReadSession> OpenPlcSnapshotSessionAsync(

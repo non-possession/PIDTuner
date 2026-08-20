@@ -1525,6 +1525,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("EscapeCsv", StringComparison.Ordinal), "main view model csv escaping implementation");
     AssertEqual(false, source.Contains("File.OpenRead", StringComparison.Ordinal), "main view model recording file access");
     AssertEqual(false, source.Contains("DeserializeAsync<PlcOneSecondRecording>", StringComparison.Ordinal), "main view model recording deserialization");
+    AssertEqual(false, source.Contains("_plcReplayTimer", StringComparison.Ordinal), "main view model replay timer ownership");
+    AssertEqual(false, source.Contains("ApplyNextPlcReplayFrame", StringComparison.Ordinal), "main view model replay tick implementation");
     return Task.CompletedTask;
 }
 
