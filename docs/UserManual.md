@@ -1,6 +1,6 @@
 # PIDTuner User Manual
 
-Last updated: 2026-07-29, iteration 68.
+Last updated: 2026-08-20, V2 communication/history stage 5.
 
 ## Requirements
 
@@ -247,7 +247,7 @@ $env:DOTNET_CLI_HOME = (Get-Location).Path
 dotnet run --project .\tests\PIDTuner.Tests\PIDTuner.Tests.csproj
 ```
 
-Current expected result: 24 tests pass.
+Current expected result: 50 tests pass.
 
 ## Generate A UI Snapshot
 
@@ -275,6 +275,10 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 - Record one second of enabled PLC tag snapshots in memory and JSON at the fastest enabled tag interval, bounded by the configured minimum sampling interval.
 - Show one-second acquisition diagnostics on the real-time monitor page and persist frame-level diagnostics in the saved PLC recording JSON.
 - Show enabled PLC tag values as a multi-series ScottPlot real-time trend with per-tag visibility and selectable time windows.
+- Persist live PLC acquisition frames asynchronously to `local\plc-history\plc-history.sqlite` while monitoring runs.
+- Query static historical trends from the independent SQLite history store by the selected time range.
+- Downsample long historical ranges before plotting while preserving the first and last point.
+- Export only the data points visible in the current trend canvas to UTF-8 BOM CSV.
 - Pause and resume live trend scrolling without stopping background PLC acquisition.
 - Show loaded PLC recordings as static historical trends with editable time range filtering and Y-axis auto-fit.
 - Load and replay saved PLC recording JSON files through the same monitor table and trend chart, with frame progress, manual stepping, and playback speed control.
@@ -322,8 +326,8 @@ It loads the bundled example profile and sample CSV, switches PLC monitoring to 
 ## Current Limitations
 
 - Siemens S7 read support is intentionally narrow: current DB address parsing covers `DBX`, `DBB`, `DBW`, and `DBD`. PLC writeback is still disabled.
-- No SQLite persistence for PLC trend history yet.
-- PLC recording playback currently uses saved JSON recording files; long-history SQLite trend storage is not integrated yet.
+- Historical SQLite retention and database maintenance policies are not configurable yet.
+- Saved JSON recording playback remains available as a debug workflow and is independent of SQLite trend history.
 - CSV parsing supports quoted fields with commas and escaped double quotes on a single line.
 - Field profile editing uses dropdowns for field type and semantic role.
 
@@ -339,8 +343,8 @@ Every time the project reaches another fifth iteration, update this manual befor
 
 ## Latest UI Snapshot
 
-Iteration 65 snapshot:
+V2 communication/history stage 5 snapshot:
 
 ```text
-C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-iteration-65-rendered.png
+C:\Users\30559\.codex\visualizations\2026\07\29\019fabb6-3a21-78f2-a9dc-660eb64b7ca9\pidtuner-stage5.png
 ```
