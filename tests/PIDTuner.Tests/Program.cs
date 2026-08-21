@@ -1592,6 +1592,10 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("new PlcOneSecondRecorder", StringComparison.Ordinal), "main view model recorder composition");
     AssertEqual(false, source.Contains("new ExperimentSessionCoordinator", StringComparison.Ordinal), "main view model experiment composition");
     AssertEqual(false, source.Contains("Path.GetFullPath", StringComparison.Ordinal), "main view model storage path composition");
+    AssertEqual(false, source.Contains("PlcConfigurationEditor.BuildConfiguration", StringComparison.Ordinal), "main view model plc configuration snapshot coordination");
+    AssertEqual(false, source.Contains("LiveMonitor.IsMonitoring", StringComparison.Ordinal), "main view model monitoring state branching");
+    AssertEqual(false, source.Contains("StopLiveMonitoringAsync", StringComparison.Ordinal), "main view model monitoring stop workflow");
+    AssertEqual(false, source.Contains("PlcRecordingWorkspace.StopReplay", StringComparison.Ordinal), "main view model replay and monitoring arbitration");
     return Task.CompletedTask;
 }
 

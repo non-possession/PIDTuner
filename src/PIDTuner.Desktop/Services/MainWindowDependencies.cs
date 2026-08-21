@@ -14,6 +14,7 @@ internal sealed record MainWindowDependencies(
     PlcConfigurationEditorViewModel PlcConfigurationEditor,
     PlcConnectionWorkspaceViewModel PlcConnectionWorkspace,
     PlcDiagnosticsWorkspaceViewModel PlcDiagnosticsWorkspace,
+    PlcMonitoringWorkspaceViewModel PlcMonitoringWorkspace,
     OfflineAnalysisViewModel OfflineAnalysis,
     ExperimentHistoryViewModel ExperimentHistory,
     ParameterSetLibraryViewModel ParameterSetLibrary,

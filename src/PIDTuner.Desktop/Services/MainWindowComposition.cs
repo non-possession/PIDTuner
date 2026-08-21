@@ -131,6 +131,14 @@ internal static class MainWindowComposition
             debug,
             liveMonitor,
             configurationEditor);
+        var monitoringWorkspace = new PlcMonitoringWorkspaceViewModel(
+            configurationEditor,
+            liveMonitor,
+            liveWorkspace,
+            trendMode,
+            trendWorkspace,
+            recordingWorkspace,
+            diagnosticsWorkspace);
         var offlineAnalysis = new OfflineAnalysisViewModel(new AnalysisResultExportWorkflow());
         var fieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
         var exampleWorkspaceWorkflow = new ExampleWorkspaceWorkflow(
@@ -162,6 +170,7 @@ internal static class MainWindowComposition
             configurationEditor,
             connectionWorkspace,
             diagnosticsWorkspace,
+            monitoringWorkspace,
             offlineAnalysis,
             experimentHistory,
             parameterSetLibrary,

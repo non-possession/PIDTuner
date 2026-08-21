@@ -113,3 +113,9 @@ MainVM 仅保留文件对话框入口、子模块命令委托、跨模块事件�
 `MainWindowComposition` 负责组装完整的主窗口对象图，包括基础设施 Adapter、应用服务、采集与持久化模块、子 ViewModel 和工作区之间的依赖。`MainWindowDependencies` 是该对象图交给 MainVM 的内部载体。
 
 MainVM 构造函数仅接收已组装对象、连接用于 View/图表 Adapter 的事件并建立命令入口；不得创建采集引擎、历史写入器、Recorder、Repository Coordinator 或计算本地存储路径。
+
+## PLC 监控协调约束
+
+`PlcMonitoringWorkspaceViewModel` 是 PLC 运行期跨工作区操作的统一入口。它负责获取配置快照、启停采集、协调回放互斥、在停止采集时关闭诊断、刷新后恢复实时模式，以及触发必要的趋势重置。
+
+MainVM 不得根据 `LiveMonitor.IsMonitoring` 分支，不得直接构建 PLC 配置，也不得组合 Live、Trend、Recording 和 Diagnostics 工作区的调用顺序。

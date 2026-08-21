@@ -72,6 +72,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcConfigurationEditor = dependencies.PlcConfigurationEditor;
         PlcConnectionWorkspace = dependencies.PlcConnectionWorkspace;
         PlcDiagnosticsWorkspace = dependencies.PlcDiagnosticsWorkspace;
+        PlcMonitoringWorkspace = dependencies.PlcMonitoringWorkspace;
         OfflineAnalysis = dependencies.OfflineAnalysis;
         ExperimentHistory = dependencies.ExperimentHistory;
         ParameterSetLibrary = dependencies.ParameterSetLibrary;
@@ -92,6 +93,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcTrendWorkspace.NotificationRequested += ApplyOperationResult;
         PlcRecordingWorkspace.NotificationRequested += ApplyOperationResult;
         PlcDiagnosticsWorkspace.NotificationRequested += ApplyOperationResult;
+        PlcMonitoringWorkspace.TrendResetRequested += () => PlcTrendResetRequested?.Invoke();
+        PlcMonitoringWorkspace.NotificationRequested += ApplyOperationResult;
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -167,6 +170,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public PlcConnectionWorkspaceViewModel PlcConnectionWorkspace { get; }
 
     public PlcDiagnosticsWorkspaceViewModel PlcDiagnosticsWorkspace { get; }
+
+    public PlcMonitoringWorkspaceViewModel PlcMonitoringWorkspace { get; }
 
     public OfflineAnalysisViewModel OfflineAnalysis { get; }
 
@@ -322,45 +327,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task RefreshPlcMonitorAsync()
     {
-        var result = await PlcLiveWorkspace.RefreshAsync(
-            PlcConfigurationEditor.BuildConfiguration(),
-            PlcTrendMode.IsHistoricalMode,
-            CancellationToken.None);
-        if (result.ShouldUseLiveMode)
-        {
-            PlcTrendMode.UseLiveMode();
-        }
-
-        if (result.ShouldResetTrend)
-        {
-            PlcTrendResetRequested?.Invoke();
-        }
-
-        if (result.Notification is not null)
-        {
-            ApplyOperationResult(result.Notification);
-        }
-    }
-
-    private async Task StopLiveMonitoringAsync()
-    {
-        await PlcLiveWorkspace.StopAsync(CancellationToken.None);
-        await StopPlcLiveDiagnosticsAsync("实时监控已停止，诊断写入已关闭。");
+        await PlcMonitoringWorkspace.RefreshAsync(CancellationToken.None);
     }
 
     public async Task TogglePlcMonitoringAsync()
     {
-        if (LiveMonitor.IsMonitoring)
-        {
-            await StopLiveMonitoringAsync();
-            return;
-        }
-
-        PlcRecordingWorkspace.StopReplay();
-        await PlcLiveWorkspace.StartAsync(
-            PlcConfigurationEditor.BuildConfiguration(),
-            resetHistory: true,
-            CancellationToken.None);
+        await PlcMonitoringWorkspace.ToggleMonitoringAsync(CancellationToken.None);
     }
 
     public async Task TogglePlcLiveDiagnosticsAsync()
@@ -368,16 +340,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         await PlcDiagnosticsWorkspace.ToggleAsync(CancellationToken.None);
     }
 
-    private async Task StopPlcLiveDiagnosticsAsync(string reason)
-    {
-        await PlcDiagnosticsWorkspace.StopAsync(reason, CancellationToken.None);
-    }
-
     public async Task RecordPlcOneSecondAsync()
     {
-        await PlcRecordingWorkspace.RecordOneSecondAsync(
-            PlcConfigurationEditor.BuildConfiguration(),
-            CancellationToken.None);
+        await PlcMonitoringWorkspace.RecordOneSecondAsync(CancellationToken.None);
     }
 
     public async Task LoadPlcRecordingAsync()
@@ -398,9 +363,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ShowPlcLiveTrendAsync()
     {
-        await PlcTrendWorkspace.ShowLiveAsync(
-            PlcConfigurationEditor.BuildConfiguration(),
-            CancellationToken.None);
+        await PlcMonitoringWorkspace.ShowLiveTrendAsync(CancellationToken.None);
     }
 
     public void UsePlcLiveTrendMode() => PlcTrendWorkspace.UseLiveMode();
