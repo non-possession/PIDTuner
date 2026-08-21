@@ -39,6 +39,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - PLC communication status belongs to `PlcConfigurationEditorViewModel`.
 - PLC configuration construction, validation, loading, saving, and communication checks belong to `PlcConfigurationEditorViewModel`.
 - Live monitor and acquisition diagnostics status belong to `PlcLiveMonitorViewModel`.
+- Offline analysis import, result state, and result export belong to `OfflineAnalysisViewModel`.
 - Field-profile construction, validation, loading, and saving belong to `FieldProfileEditorViewModel`.
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.

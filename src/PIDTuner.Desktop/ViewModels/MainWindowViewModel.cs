@@ -21,7 +21,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly AnalysisResultExportWorkflow _analysisResultExportWorkflow = new();
     private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
     private readonly PlcSnapshotSessionFactory _plcSnapshotSessionFactory;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
@@ -131,7 +130,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
             PlcProjectConfiguration.CreateDefault(),
             new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
-        OfflineAnalysis = new OfflineAnalysisViewModel();
+        OfflineAnalysis = new OfflineAnalysisViewModel(new AnalysisResultExportWorkflow());
         FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
         ExperimentHistory = new ExperimentHistoryViewModel();
         _experimentWorkspace = new ExperimentWorkspaceViewModel(
@@ -1130,9 +1129,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExportAnalysisResultAsync()
     {
-        if (OfflineAnalysis.LastAnalysisWindow is null
-            || OfflineAnalysis.LastMetrics is null
-            || OfflineAnalysis.LastAssessment is null)
+        if (!OfflineAnalysis.CanExportLastResult)
         {
             Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
             return;
@@ -1146,13 +1143,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await _analysisResultExportWorkflow.ExportAsync(
-                fileName,
-                OfflineAnalysis.LastAnalysisWindow,
-                OfflineAnalysis.LastMetrics,
-                OfflineAnalysis.LastAssessment,
-                CancellationToken.None);
-            Notify("分析结果已导出", Path.GetFullPath(fileName), "Success");
+            var savedPath = await OfflineAnalysis.ExportLastResultAsync(fileName, CancellationToken.None);
+            if (savedPath is null)
+            {
+                Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
+                return;
+            }
+
+            Notify("分析结果已导出", savedPath, "Success");
         }
         catch (Exception exception)
         {

@@ -1554,6 +1554,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("BuildProfileFromGrid()", StringComparison.Ordinal), "main view model field profile validation");
     AssertEqual(false, source.Contains("_plcConfigurationWorkflow", StringComparison.Ordinal), "main view model plc configuration workflow ownership");
     AssertEqual(false, source.Contains("BuildPlcConfigurationFromForm", StringComparison.Ordinal), "main view model plc configuration construction wrapper");
+    AssertEqual(false, source.Contains("_analysisResultExportWorkflow", StringComparison.Ordinal), "main view model analysis export workflow ownership");
+    AssertEqual(false, source.Contains("OfflineAnalysis.LastMetrics", StringComparison.Ordinal), "main view model analysis export state inspection");
     return Task.CompletedTask;
 }
 

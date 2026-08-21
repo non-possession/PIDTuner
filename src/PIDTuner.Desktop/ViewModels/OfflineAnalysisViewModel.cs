@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using PIDTuner.Application.Services;
 using PIDTuner.Application.UseCases;
+using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Analysis;
 using PIDTuner.Domain.Configuration;
 using PIDTuner.Domain.Models;
@@ -17,6 +18,7 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
 {
+    private readonly AnalysisResultExportWorkflow? _exportWorkflow;
     private readonly PidResponseAssessmentService _assessmentService = new();
     private readonly PidTuningRecommendationService _recommendationService = new();
     private readonly PidTrendSeriesBuilder _trendSeriesBuilder = new();
@@ -46,6 +48,11 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     private PointCollection _processValuePoints = new();
     private PointCollection _manipulatedValuePoints = new();
 
+    public OfflineAnalysisViewModel(AnalysisResultExportWorkflow? exportWorkflow = null)
+    {
+        _exportWorkflow = exportWorkflow;
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public AnalysisWindow? LastAnalysisWindow { get; private set; }
@@ -59,6 +66,9 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
     public Guid? LastTestSessionId { get; private set; }
 
     public string LastSourceFileName { get; private set; } = string.Empty;
+
+    public bool CanExportLastResult =>
+        LastAnalysisWindow is not null && LastMetrics is not null && LastAssessment is not null;
 
     public string SampleCount
     {
@@ -218,6 +228,27 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
         }
 
         return new OfflineCsvAnalysisResult(Path.GetFileName(fileName), result.Samples.Count);
+    }
+
+    public async Task<string?> ExportLastResultAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var window = LastAnalysisWindow;
+        var metrics = LastMetrics;
+        var assessment = LastAssessment;
+        if (window is null || metrics is null || assessment is null)
+        {
+            return null;
+        }
+
+        var workflow = _exportWorkflow
+            ?? throw new InvalidOperationException("Analysis result export workflow is not configured.");
+        await workflow.ExportAsync(
+            fileName,
+            window,
+            metrics,
+            assessment,
+            cancellationToken);
+        return Path.GetFullPath(fileName);
     }
 
     public PidResponseMetrics AnalyzeSamples(
