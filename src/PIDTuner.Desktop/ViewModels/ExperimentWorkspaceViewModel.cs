@@ -161,7 +161,7 @@ public sealed class ExperimentWorkspaceViewModel(
         }
         catch (Exception exception)
         {
-            return ExperimentWorkspaceOperationResult.Error("建议审核记录加载失败", exception.Message);
+            return ExperimentWorkspaceOperationResult.Error("建议审查记录加载失败", exception.Message);
         }
     }
 
@@ -172,7 +172,7 @@ public sealed class ExperimentWorkspaceViewModel(
         var selected = analysis.SelectedTuningRecommendation;
         if (selected is null)
         {
-            return ExperimentWorkspaceOperationResult.Warning("无法记录建议审核", "请先选择一条参数调整建议。");
+            return ExperimentWorkspaceOperationResult.Warning("无法记录建议审查", "请先选择一条参数调整建议。");
         }
 
         try
@@ -188,12 +188,12 @@ public sealed class ExperimentWorkspaceViewModel(
             await LoadRecommendationReviewsAsync(cancellationToken);
             var decisionText = decision == PidRecommendationReviewDecision.Accepted ? "接受" : "暂缓";
             return ExperimentWorkspaceOperationResult.Success(
-                "建议审核已记录",
+                "建议审查已记录",
                 $"{decisionText}：{review.Parameter} {review.Adjustment}");
         }
         catch (Exception exception)
         {
-            return ExperimentWorkspaceOperationResult.Error("建议审核记录失败", exception.Message);
+            return ExperimentWorkspaceOperationResult.Error("建议审查记录失败", exception.Message);
         }
     }
 

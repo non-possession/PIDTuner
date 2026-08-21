@@ -1529,6 +1529,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("ApplyNextPlcReplayFrame", StringComparison.Ordinal), "main view model replay tick implementation");
     AssertEqual(false, source.Contains("_plcLiveDiagnosticsTimer", StringComparison.Ordinal), "main view model diagnostics timer ownership");
     AssertEqual(false, source.Contains("StopExpiredPlcLiveDiagnosticsAsync", StringComparison.Ordinal), "main view model diagnostics expiration polling");
+    AssertEqual(false, source.Contains("_experimentSessionCoordinator", StringComparison.Ordinal), "main view model experiment repository orchestration");
+    AssertEqual(false, source.Contains("AnalyzeHistorySessionAsync", StringComparison.Ordinal), "main view model history comparison analysis");
     return Task.CompletedTask;
 }
 

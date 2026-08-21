@@ -27,7 +27,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
-    private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
@@ -99,7 +98,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             resolvedPidSampleRepository,
             resolvedRecommendationReviewRepository,
             resolvedTestSessionStorageDirectory);
-        _experimentSessionCoordinator = experimentSessionCoordinator;
         _plcConfigurationWorkflow = new PlcConfigurationWorkflow(
             plcProjectConfigurationStore,
             resolvedPlcConnectivityProbe);
@@ -1245,66 +1243,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task OpenHistorySessionAsync()
     {
-        var selectedHistorySession = ExperimentHistory.SelectedHistorySession;
-        if (selectedHistorySession is null)
-        {
-            Notify("无法打开历史记录", "请先选择一条历史记录。", "Warning");
-            return;
-        }
-
-        try
-        {
-            var samples = await _experimentSessionCoordinator.LoadSessionSamplesAsync(
-                selectedHistorySession,
-                CancellationToken.None);
-            if (samples.Count == 0)
-            {
-                Notify("历史记录无样本", "该试验记录没有可加载的采样数据。", "Warning");
-                return;
-            }
-
-            var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
-            ApplyAnalysisResult(
-                selectedHistorySession.Name,
-                samples,
-                window,
-                OfflineAnalysis.AnalyzeSamples(samples, window));
-            Notify("历史记录已打开", $"{selectedHistorySession.Name}，样本 {samples.Count} 条。", "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("历史记录打开失败", exception.Message, "Error");
-        }
+        ApplyExperimentWorkspaceOperation(
+            await _experimentWorkspace.OpenSelectedSessionAsync(CancellationToken.None));
     }
 
     public async Task ExportHistorySamplesAsync()
     {
-        var selectedHistorySession = ExperimentHistory.SelectedHistorySession;
-        if (selectedHistorySession is null)
-        {
-            Notify("无法导出历史采样", "请先选择一条历史记录。", "Warning");
-            return;
-        }
-
         var fileName = _openFileDialogService.PickHistorySamplesSaveFile();
         if (string.IsNullOrWhiteSpace(fileName))
         {
             return;
         }
 
-        try
-        {
-            var result = await _experimentSessionCoordinator.ExportHistorySamplesAsync(
-                selectedHistorySession,
+        ApplyExperimentWorkspaceOperation(
+            await _experimentWorkspace.ExportSelectedSamplesAsync(
                 FieldProfileEditor.Profile,
                 fileName,
-                CancellationToken.None);
-            Notify(result.Title, result.Message, result.Kind);
-        }
-        catch (Exception exception)
-        {
-            Notify("历史采样导出失败", exception.Message, "Error");
-        }
+                CancellationToken.None));
     }
 
     public async Task ExportVisiblePlcTrendAsync(PlcTrendVisibleExport export)
@@ -1348,54 +1303,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task SetHistoryBaselineAsync()
     {
-        if (ExperimentHistory.SelectedHistorySession is null)
-        {
-            Notify("无法设置对比基准", "请先选择一条历史记录。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        ExperimentHistory.SetBaselineToSelected();
-        Notify("历史对比基准已设置", ExperimentHistory.HistoryComparisonStatus, "Info");
+        ApplyExperimentWorkspaceOperation(_experimentWorkspace.SetSelectedAsBaseline());
         return Task.CompletedTask;
     }
 
     public async Task CompareHistorySessionAsync()
     {
-        var baselineHistorySession = ExperimentHistory.BaselineHistorySession;
-        if (baselineHistorySession is null)
-        {
-            Notify("无法对比历史记录", "请先选择一条记录并设为基准。", "Warning");
-            return;
-        }
-
-        var selectedHistorySession = ExperimentHistory.SelectedHistorySession;
-        if (selectedHistorySession is null)
-        {
-            Notify("无法对比历史记录", "请先选择要对比的历史记录。", "Warning");
-            return;
-        }
-
-        if (selectedHistorySession.Id == baselineHistorySession.Id)
-        {
-            Notify("无法对比历史记录", "请选择不同于基准的历史记录。", "Warning");
-            return;
-        }
-
-        try
-        {
-            var baseline = await AnalyzeHistorySessionAsync(baselineHistorySession);
-            var candidate = await AnalyzeHistorySessionAsync(selectedHistorySession);
-            ExperimentHistory.SetComparisonResult(
-                baseline.Metrics,
-                candidate.Metrics,
-                baselineHistorySession.Name,
-                selectedHistorySession.Name);
-            Notify("历史记录对比已完成", ExperimentHistory.HistoryComparisonStatus, "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("历史记录对比失败", exception.Message, "Error");
-        }
+        ApplyExperimentWorkspaceOperation(
+            await _experimentWorkspace.CompareSelectedSessionAsync(CancellationToken.None));
     }
 
     public async Task AcceptRecommendationAsync()
@@ -1410,14 +1325,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LoadRecommendationReviewsAsync()
     {
-        try
+        var result = await _experimentWorkspace.LoadRecommendationReviewsAsync(CancellationToken.None);
+        if (result is not null)
         {
-            var reviews = await _experimentSessionCoordinator.LoadRecommendationReviewsAsync(CancellationToken.None);
-            ExperimentHistory.SetRecommendationReviews(reviews);
-        }
-        catch (Exception exception)
-        {
-            Notify("建议审查记录加载失败", exception.Message, "Error");
+            ApplyExperimentWorkspaceOperation(result);
         }
     }
 
@@ -1443,20 +1354,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task LoadHistoryAsync(bool showNotification)
     {
-        try
+        var result = await _experimentWorkspace.LoadHistoryAsync(
+            showNotification,
+            CancellationToken.None);
+        if (result is not null)
         {
-            var items = await _experimentSessionCoordinator.LoadHistoryAsync(CancellationToken.None);
-            ExperimentHistory.SetHistorySessions(items);
-
-            if (showNotification)
-            {
-                Notify("历史记录已刷新", ExperimentHistory.HistoryStatus, "Info");
-            }
-        }
-        catch (Exception exception)
-        {
-            ExperimentHistory.MarkHistoryLoadFailed();
-            Notify("历史记录加载失败", exception.Message, "Error");
+            ApplyExperimentWorkspaceOperation(result);
         }
     }
 
@@ -1484,31 +1387,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ReviewRecommendationAsync(PidRecommendationReviewDecision decision)
     {
-        var selectedTuningRecommendation = OfflineAnalysis.SelectedTuningRecommendation;
-        if (selectedTuningRecommendation is null)
-        {
-            Notify("无法记录建议审查", "请先选择一条参数调整建议。", "Warning");
-            return;
-        }
-
-        try
-        {
-            var review = await _experimentSessionCoordinator.SaveRecommendationReviewAsync(
-                selectedTuningRecommendation,
-                OfflineAnalysis.LastTestSessionId,
-                OfflineAnalysis.LastSourceFileName,
+        ApplyExperimentWorkspaceOperation(
+            await _experimentWorkspace.ReviewSelectedRecommendationAsync(
                 decision,
-                ExperimentHistory.RecommendationReviewNote.Trim(),
-                CancellationToken.None);
-            ExperimentHistory.ClearRecommendationReviewNote();
-            await LoadRecommendationReviewsAsync();
-            var decisionText = decision == PidRecommendationReviewDecision.Accepted ? "采用" : "暂缓";
-            Notify("建议审查已记录", $"{decisionText}：{review.Parameter} {review.Adjustment}", "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("建议审查记录失败", exception.Message, "Error");
-        }
+                CancellationToken.None));
     }
 
     private async Task LoadParameterSetsAsync(bool showNotification)
@@ -1527,19 +1409,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ParameterSetLibrary.MarkLoadFailed();
             Notify("参数方案加载失败", exception.Message, "Error");
         }
-    }
-
-    private async Task<(IReadOnlyList<PidSample> Samples, PidResponseMetrics Metrics)> AnalyzeHistorySessionAsync(
-        TestSessionListItemViewModel session)
-    {
-        var samples = await _experimentSessionCoordinator.LoadSessionSamplesAsync(session, CancellationToken.None);
-        if (samples.Count == 0)
-        {
-            throw new InvalidOperationException($"{session.Name} 没有可对比的采样数据。");
-        }
-
-        var window = new AnalysisWindow(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
-        return (samples, OfflineAnalysis.AnalyzeSamples(samples, window));
     }
 
     private async Task ExportAnalysisResultAsync()
@@ -1669,6 +1538,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         Notification.Dismiss();
         return Task.CompletedTask;
+    }
+
+    private void ApplyExperimentWorkspaceOperation(ExperimentWorkspaceOperationResult result)
+    {
+        Notify(result.Title, result.Message, result.Kind);
     }
 
     private void Notify(string title, string message, string kind)
