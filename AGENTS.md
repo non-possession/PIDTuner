@@ -35,6 +35,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Visible trend CSV encoding and serialization belong to `PlcTrendVisibleExportWorkflow`.
 - Visible trend export workflow access belongs to `PlcTrendExportViewModel`.
 - PLC recording JSON read/write and validation belong to `PlcOneSecondRecorder`.
+- PLC recording, recording-load initialization, and replay result application belong to `PlcRecordingWorkspaceViewModel`.
 - PLC replay timing and step orchestration belong to `PlcReplayController`.
 - PLC diagnostics expiration timing belongs to `PlcDiagnosticsController`.
 - PLC live refresh timing belongs to `PlcLiveMonitoringController`.

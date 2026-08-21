@@ -11,22 +11,20 @@ public sealed class PlcTrendWorkspaceViewModel
     private readonly PlcLiveMonitorViewModel _liveMonitor;
     private readonly PlcLiveWorkspaceViewModel _liveWorkspace;
     private readonly PlcDebugViewModel _debug;
-    private readonly Action _stopReplay;
+    private Action _stopReplay = static () => { };
 
     public PlcTrendWorkspaceViewModel(
         PlcTrendModeViewModel mode,
         HistoricalTrendViewModel historicalTrend,
         PlcLiveMonitorViewModel liveMonitor,
         PlcLiveWorkspaceViewModel liveWorkspace,
-        PlcDebugViewModel debug,
-        Action stopReplay)
+        PlcDebugViewModel debug)
     {
         _mode = mode;
         _historicalTrend = historicalTrend;
         _liveMonitor = liveMonitor;
         _liveWorkspace = liveWorkspace;
         _debug = debug;
-        _stopReplay = stopReplay;
 
         _mode.PropertyChanged += Mode_PropertyChanged;
         Workbench.ViewportRequested += (start, end) => ViewportRequested?.Invoke(start, end);
@@ -48,6 +46,9 @@ public sealed class PlcTrendWorkspaceViewModel
     public event Action<TrendWorkspaceNotification>? NotificationRequested;
 
     public HistoricalTrendWorkbenchViewModel Workbench => _historicalTrend.Workbench;
+
+    public void SetReplayStopAction(Action stopReplay) =>
+        _stopReplay = stopReplay ?? throw new ArgumentNullException(nameof(stopReplay));
 
     public async Task ShowLiveAsync(
         PlcProjectConfiguration configuration,
@@ -146,6 +147,8 @@ public sealed class PlcTrendWorkspaceViewModel
     public void ResetRightYRange() => ApplyHistoricalAction(_historicalTrend.ResetRightYRange());
 
     public void ShowLoadedReplayFrames() => ShowFrames(_debug.LoadedReplayFrames);
+
+    public void ResetTrend() => TrendResetRequested?.Invoke();
 
     public void ShowFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
     {

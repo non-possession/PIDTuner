@@ -21,9 +21,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
-    private readonly PlcReplayController _plcReplayController;
     private readonly PlcDiagnosticsController _plcDiagnosticsController;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
@@ -65,7 +63,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             testSessionStorageDirectory ?? MainWindowComposition.ResolvePath("local", "test-sessions"));
         var resolvedPlcRecordingStorageDirectory = Path.GetFullPath(
             plcRecordingStorageDirectory ?? MainWindowComposition.ResolvePath("local", "plc-recordings"));
-        _plcOneSecondRecorder = new PlcOneSecondRecorder(
+        var plcOneSecondRecorder = new PlcOneSecondRecorder(
             plcSnapshotSessionFactory.OpenAsync,
             resolvedPlcRecordingStorageDirectory);
         var resolvedTestSessionRepository = testSessionRepository
@@ -105,21 +103,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             () => !PlcTrendMode.IsHistoricalMode);
         PlcLiveWorkspace.SnapshotsApplied += (snapshots, trendTimestamp) =>
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
-        _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcTrendWorkspace = new PlcTrendWorkspaceViewModel(
             PlcTrendMode,
             HistoricalTrend,
             LiveMonitor,
             PlcLiveWorkspace,
-            Debug,
-            _plcReplayController.Stop);
+            Debug);
         PlcTrendWorkspace.TrendResetRequested += () => PlcTrendResetRequested?.Invoke();
         PlcTrendWorkspace.FramesApplied += frames => PlcSnapshotFramesApplied?.Invoke(frames);
         PlcTrendWorkspace.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         PlcTrendWorkspace.LeftYRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
         PlcTrendWorkspace.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
         PlcTrendWorkspace.NotificationRequested += result => Notify(result.Title, result.Message, result.Kind);
+        PlcRecordingWorkspace = new PlcRecordingWorkspaceViewModel(
+            plcOneSecondRecorder,
+            Debug,
+            LiveMonitor,
+            PlcLiveWorkspace,
+            HistoricalTrend,
+            PlcTrendWorkspace);
+        PlcTrendWorkspace.SetReplayStopAction(PlcRecordingWorkspace.StopReplay);
+        PlcRecordingWorkspace.NotificationRequested += result => Notify(result.Title, result.Message, result.Kind);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
             PlcProjectConfiguration.CreateDefault(),
             new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
@@ -216,6 +221,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public PlcTrendExportViewModel TrendExport { get; }
 
     public PlcTrendWorkspaceViewModel PlcTrendWorkspace { get; }
+
+    public PlcRecordingWorkspaceViewModel PlcRecordingWorkspace { get; }
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench => HistoricalTrend.Workbench;
 
@@ -436,7 +443,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        StopPlcReplay();
+        PlcRecordingWorkspace.StopReplay();
         await EnsurePlcMonitoringAsync(PlcConfigurationEditor.BuildConfiguration(), resetHistory: true);
     }
 
@@ -487,39 +494,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task RecordPlcOneSecondAsync()
     {
-        try
-        {
-            StopPlcReplay();
-            var configuration = PlcConfigurationEditor.BuildConfiguration();
-            LiveMonitor.MonitorStatus = "正在记录 1s 点位数据。";
-            LiveMonitor.AcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
-            var result = await _plcOneSecondRecorder.RecordAsync(
-                configuration,
-                snapshots => PlcLiveWorkspace.ApplySnapshots(snapshots, storeLiveHistory: false),
-                CancellationToken.None);
-            if (!result.IsSuccess)
-            {
-                Notify("无法记录 PLC 数据", "请先启用至少一个可读取点位。", "Warning");
-                return;
-            }
-
-            HistoricalTrend.RememberFrames(result.Frames);
-            LiveMonitor.MonitorStatus = result.MonitorStatus;
-            LiveMonitor.AcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
-            Notify(
-                "PLC 1s 记录完成",
-                string.Join(
-                    Environment.NewLine,
-                    LiveMonitor.MonitorStatus,
-                    result.DiagnosticsStatus,
-                    $"保存位置：{result.RecordingPath}"),
-                "Success");
-        }
-        catch (Exception exception)
-        {
-            LiveMonitor.MonitorStatus = $"1s 记录失败：{exception.Message}";
-            Notify("PLC 1s 记录失败", exception.Message, "Error");
-        }
+        await PlcRecordingWorkspace.RecordOneSecondAsync(
+            PlcConfigurationEditor.BuildConfiguration(),
+            CancellationToken.None);
     }
 
     public async Task LoadPlcRecordingAsync()
@@ -535,48 +512,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var loadResult = await _plcOneSecondRecorder.LoadAsync(
-                fileName,
-                CancellationToken.None);
-            if (!loadResult.IsSuccess)
-            {
-                Notify("PLC 记录加载失败", "记录文件没有可回放的帧。", "Warning");
-                return;
-            }
-
-            var recording = loadResult.Recording!;
-            StopPlcReplay();
-            HistoricalTrend.ClearLiveFrames();
-            Debug.LoadReplay(recording.Frames, recording.IntervalMilliseconds);
-            HistoricalTrend.RememberFrames(recording.Frames);
-            HistoricalTrendWorkbench.SetRangeTextFromFrames(recording.Frames);
-
-            LiveMonitor.ClearTags();
-            PlcTrendResetRequested?.Invoke();
-            if (showFullHistory)
-            {
-                PlcTrendWorkspace.ShowLoadedReplayFrames();
-            }
-            else
-            {
-                PlcTrendMode.UseLiveMode();
-                ApplyPlcReplayOperation(Debug.ApplyReplayFrame(0, advance: true, "已定位"));
-            }
-
-            LiveMonitor.MonitorStatus =
-                $"已加载 PLC 记录：{recording.FrameCount} 帧，{recording.SnapshotCount} 条快照，周期 {Debug.SourceReplayIntervalMilliseconds} ms。";
-            Debug.UpdateReplayStatus("已加载");
-            Notify(
-                "PLC 记录已加载",
-                string.Join(Environment.NewLine, LiveMonitor.MonitorStatus, $"文件位置：{Path.GetFullPath(fileName)}"),
-                "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("PLC 记录加载失败", exception.Message, "Error");
-        }
+        await PlcRecordingWorkspace.LoadAsync(fileName, showFullHistory, CancellationToken.None);
     }
 
     public async Task ShowPlcLiveTrendAsync()
@@ -652,76 +588,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task TogglePlcReplayAsync()
     {
-        _plcReplayController.Toggle();
+        PlcRecordingWorkspace.ToggleReplay();
         return Task.CompletedTask;
     }
 
     public Task StepPlcReplayBackwardAsync()
     {
-        _plcReplayController.StepBackward();
+        PlcRecordingWorkspace.StepBackward();
         return Task.CompletedTask;
     }
 
     public Task StepPlcReplayForwardAsync()
     {
-        _plcReplayController.StepForward();
+        PlcRecordingWorkspace.StepForward();
         return Task.CompletedTask;
     }
 
     public Task SetPlcReplaySpeedAsync(double speedMultiplier)
     {
-        _plcReplayController.SetSpeed(speedMultiplier);
+        PlcRecordingWorkspace.SetSpeed(speedMultiplier);
         return Task.CompletedTask;
-    }
-
-    private void ApplyPlcReplayOperation(PlcReplayOperationResult result)
-    {
-        if (result.ResetTrend)
-        {
-            LiveMonitor.ClearTags();
-            PlcTrendResetRequested?.Invoke();
-        }
-
-        if (result.FramesToApply is not null)
-        {
-            foreach (var frame in result.FramesToApply)
-            {
-                PlcLiveWorkspace.ApplySnapshots(frame, storeLiveHistory: false);
-            }
-        }
-
-        if (result.FrameToApply is not null)
-        {
-            PlcLiveWorkspace.ApplySnapshots(result.FrameToApply, storeLiveHistory: false);
-        }
-
-        if (!string.IsNullOrWhiteSpace(result.MonitorStatus))
-        {
-            LiveMonitor.MonitorStatus = result.MonitorStatus;
-        }
-
-        if (!string.IsNullOrWhiteSpace(result.NotificationTitle) &&
-            !string.IsNullOrWhiteSpace(result.NotificationMessage) &&
-            !string.IsNullOrWhiteSpace(result.NotificationKind))
-        {
-            Notify(result.NotificationTitle, result.NotificationMessage, result.NotificationKind);
-        }
-    }
-
-    private bool EnsurePlcReplayLoaded()
-    {
-        if (Debug.HasReplayFrames)
-        {
-            return true;
-        }
-
-        Notify("无法控制 PLC 回放", "请先打开一个 PLC 记录 JSON 文件。", "Warning");
-        return false;
-    }
-
-    private void StopPlcReplay()
-    {
-        _plcReplayController.Stop();
     }
 
     public async Task LoadPlcConfigurationAsync()

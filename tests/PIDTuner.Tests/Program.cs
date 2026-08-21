@@ -1571,6 +1571,10 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("ApplyHistoricalTrendAction", StringComparison.Ordinal), "main view model historical action interpretation");
     AssertEqual(false, source.Contains("ShowLoadedPlcHistoricalTrend", StringComparison.Ordinal), "main view model historical frame presentation");
     AssertEqual(false, source.Contains("ShowPlcHistoricalTrendFromStore", StringComparison.Ordinal), "main view model historical query coordination");
+    AssertEqual(false, source.Contains("_plcOneSecondRecorder", StringComparison.Ordinal), "main view model recorder ownership");
+    AssertEqual(false, source.Contains("_plcReplayController", StringComparison.Ordinal), "main view model replay controller ownership");
+    AssertEqual(false, source.Contains("ApplyPlcReplayOperation", StringComparison.Ordinal), "main view model replay result interpretation");
+    AssertEqual(false, source.Contains("EnsurePlcReplayLoaded", StringComparison.Ordinal), "main view model replay validation");
     return Task.CompletedTask;
 }
 
