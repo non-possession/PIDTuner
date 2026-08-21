@@ -107,6 +107,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
         _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
+        PlcTrendWorkspace = new PlcTrendWorkspaceViewModel(
+            PlcTrendMode,
+            HistoricalTrend,
+            LiveMonitor,
+            PlcLiveWorkspace,
+            Debug,
+            _plcReplayController.Stop);
+        PlcTrendWorkspace.TrendResetRequested += () => PlcTrendResetRequested?.Invoke();
+        PlcTrendWorkspace.FramesApplied += frames => PlcSnapshotFramesApplied?.Invoke(frames);
+        PlcTrendWorkspace.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
+        PlcTrendWorkspace.LeftYRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
+        PlcTrendWorkspace.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
+        PlcTrendWorkspace.NotificationRequested += result => Notify(result.Title, result.Message, result.Kind);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
             PlcProjectConfiguration.CreateDefault(),
             new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
@@ -120,18 +133,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ParameterSetLibrary = new ParameterSetLibraryViewModel(
             resolvedParameterSetRepository,
             new PidParameterSetExtractor());
-        PlcTrendMode.PropertyChanged += PlcTrendMode_PropertyChanged;
-        HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
-        HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
-        HistoricalTrendWorkbench.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
-        HistoricalTrendWorkbench.StatusRequested += (message, replayPhase) =>
-        {
-            LiveMonitor.MonitorStatus = message;
-            if (!string.IsNullOrWhiteSpace(replayPhase))
-            {
-                Debug.UpdateReplayStatus(replayPhase);
-            }
-        };
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -213,6 +214,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public HistoricalTrendViewModel HistoricalTrend { get; }
 
     public PlcTrendExportViewModel TrendExport { get; }
+
+    public PlcTrendWorkspaceViewModel PlcTrendWorkspace { get; }
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench => HistoricalTrend.Workbench;
 
@@ -348,11 +351,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify("示例加载失败", exception.Message, "Error");
         }
-    }
-
-    private void PlcTrendMode_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        LiveMonitor.IsLiveTrendPaused = PlcTrendMode.IsLiveScrollingPaused;
     }
 
     public async Task SavePlcConfigurationAsync()
@@ -559,7 +557,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcTrendResetRequested?.Invoke();
             if (showFullHistory)
             {
-                ShowLoadedPlcHistoricalTrend();
+                PlcTrendWorkspace.ShowLoadedReplayFrames();
             }
             else
             {
@@ -583,153 +581,73 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ShowPlcLiveTrendAsync()
     {
-        if (!LiveMonitor.IsMonitoring)
-        {
-        await EnsurePlcMonitoringAsync(PlcConfigurationEditor.BuildConfiguration(), resetHistory: false);
-        }
-
-        StopPlcReplay();
-        UsePlcLiveTrendMode();
-        PlcTrendResetRequested?.Invoke();
-        PlcLiveWorkspace.DrainNow();
+        await PlcTrendWorkspace.ShowLiveAsync(
+            PlcConfigurationEditor.BuildConfiguration(),
+            CancellationToken.None);
     }
 
-    public void UsePlcLiveTrendMode()
-    {
-        PlcTrendMode.UseLiveMode();
-        HistoricalTrendWorkbench.Clear();
-    }
+    public void UsePlcLiveTrendMode() => PlcTrendWorkspace.UseLiveMode();
 
     public Task TogglePlcLiveTrendPauseAsync()
     {
-        if (PlcTrendMode.IsHistoricalMode)
-        {
-            return Task.CompletedTask;
-        }
-
-        PlcTrendMode.ToggleLiveScrollingPause();
+        PlcTrendWorkspace.ToggleLivePause();
         return Task.CompletedTask;
     }
 
     public Task SetPlcSingleAxisLayoutAsync()
     {
-        HistoricalTrendWorkbench.UseSingleAxisLayout();
+        PlcTrendWorkspace.UseSingleAxisLayout();
         return Task.CompletedTask;
     }
 
     public Task SetPlcDualAxisLayoutAsync()
     {
-        HistoricalTrendWorkbench.UseDualAxisLayout();
-        LiveMonitor.EnsureVisibleAxisGroups();
+        PlcTrendWorkspace.UseDualAxisLayout();
         return Task.CompletedTask;
     }
 
     public async Task SetPlcHistoricalTrendWindowAsync(TimeSpan window)
     {
-        var end = HistoricalTrendWorkbench.HasDataset
-            ? HistoricalTrendWorkbench.RangeEndValue
-            : DateTimeOffset.Now;
-        var frames = await HistoricalTrend.LoadWindowAsync(
-            end,
-            window,
-            HistoricalTrend.CurrentFrames,
-            CancellationToken.None);
-        if (frames.Count > 0)
-        {
-            HistoricalTrend.RememberFrames(frames);
-            PlcSnapshotFramesApplied?.Invoke(frames);
-        }
-
-        await SetPlcHistoricalTrendWindowFromLoadedDataAsync(window);
-    }
-
-    private Task SetPlcHistoricalTrendWindowFromLoadedDataAsync(TimeSpan window)
-    {
-        ApplyHistoricalTrendAction(HistoricalTrend.SetVisibleWindow(window));
-        return Task.CompletedTask;
+        await PlcTrendWorkspace.SetHistoricalWindowAsync(window, CancellationToken.None);
     }
 
     public async Task ShowPlcHistoricalTrendAsync()
     {
-        await ShowPlcHistoricalTrendFromStoreAsync(TimeSpan.FromSeconds(30));
+        await PlcTrendWorkspace.ShowHistoricalAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
     }
 
     public async Task ShowPlcHistoricalTrendAsync(TimeSpan visibleWindow)
     {
-        await ShowPlcHistoricalTrendFromStoreAsync(visibleWindow);
-    }
-
-    private async Task ShowPlcHistoricalTrendFromStoreAsync(TimeSpan visibleWindow)
-    {
-        StopPlcReplay();
-        var end = DateTimeOffset.Now;
-        var frames = await HistoricalTrend.LoadWindowAsync(
-            end,
-            visibleWindow,
-            Debug.LoadedReplayFrames,
-            CancellationToken.None);
-        if (frames.Count == 0)
-        {
-            PlcTrendMode.UseHistoricalMode();
-            return;
-        }
-
-        HistoricalTrend.RememberFrames(frames);
-        PlcTrendResetRequested?.Invoke();
-        ShowLoadedPlcHistoricalTrend(frames);
-        HistoricalTrend.SetWindowEndingAt(end, visibleWindow);
+        await PlcTrendWorkspace.ShowHistoricalAsync(visibleWindow, CancellationToken.None);
     }
 
     public async Task ApplyPlcHistoricalRangeAsync()
     {
-        var result = await HistoricalTrend.ApplySelectedRangeAsync(CancellationToken.None);
-        if (result.Frames.Count > 0)
-        {
-            HistoricalTrend.RememberFrames(result.Frames);
-            PlcSnapshotFramesApplied?.Invoke(result.Frames);
-        }
-
-        ApplyHistoricalTrendAction(result.Action);
+        await PlcTrendWorkspace.ApplyHistoricalRangeAsync(CancellationToken.None);
     }
 
     public Task ResetPlcHistoricalRangeAsync()
     {
-        ApplyHistoricalTrendAction(HistoricalTrend.ResetTimeRange(HistoricalTrend.CurrentFrames.Count));
+        PlcTrendWorkspace.ResetHistoricalRange();
         return Task.CompletedTask;
     }
 
     public Task ApplyPlcTrendYRangeAsync()
     {
-        ApplyHistoricalTrendAction(HistoricalTrend.ApplyLeftYRange());
+        PlcTrendWorkspace.ApplyLeftYRange();
         return Task.CompletedTask;
     }
 
     public Task ResetPlcTrendYRangeAsync()
     {
-        ApplyHistoricalTrendAction(HistoricalTrend.ResetLeftYRange());
+        PlcTrendWorkspace.ResetLeftYRange();
         return Task.CompletedTask;
     }
 
     public Task ResetPlcTrendRightYRangeAsync()
     {
-        ApplyHistoricalTrendAction(HistoricalTrend.ResetRightYRange());
+        PlcTrendWorkspace.ResetRightYRange();
         return Task.CompletedTask;
-    }
-
-    private void ApplyHistoricalTrendAction(HistoricalTrendActionResult result)
-    {
-        if (!result.IsSuccess)
-        {
-            Notify(result.ErrorTitle!, result.ErrorMessage!, "Warning");
-            return;
-        }
-
-        PlcTrendMode.UseHistoricalMode();
-        LiveMonitor.MonitorStatus = result.Status!;
-        if (!string.IsNullOrWhiteSpace(result.ReplayPhase))
-        {
-            Debug.UpdateReplayStatus(result.ReplayPhase);
-        }
     }
 
     public Task TogglePlcReplayAsync()
@@ -788,30 +706,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Notify(result.NotificationTitle, result.NotificationMessage, result.NotificationKind);
         }
-    }
-
-    private void ShowLoadedPlcHistoricalTrend()
-    {
-        ShowLoadedPlcHistoricalTrend(Debug.LoadedReplayFrames);
-    }
-
-    private void ShowLoadedPlcHistoricalTrend(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames)
-    {
-        if (frames.Count == 0)
-        {
-            return;
-        }
-
-        PlcTrendMode.MarkHistoricalModeDisplayed();
-        HistoricalTrend.LoadFrames(frames);
-        for (var index = 0; index < frames.Count; index++)
-        {
-            PlcLiveWorkspace.ApplySnapshots(frames[index], applyTrend: false, storeLiveHistory: false);
-        }
-
-        PlcSnapshotFramesApplied?.Invoke(frames);
-        Debug.MarkHistoricalReplayDisplayed();
-        LiveMonitor.MonitorStatus = $"历史趋势已显示：{frames.Count} 帧。";
     }
 
     private bool EnsurePlcReplayLoaded()
