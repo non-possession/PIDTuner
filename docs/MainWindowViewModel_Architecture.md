@@ -107,3 +107,9 @@ MainVM 中重复的前置校验、`try/catch` 和用户消息构造，应逐步�
 - P6：PLC 连接、诊断生命周期和用户操作结果分别归属专用工作区，并统一使用 `WorkspaceOperationResult`。
 
 MainVM 仅保留文件对话框入口、子模块命令委托、跨模块事件转发和全局通知展示。架构测试禁止重新引入业务异常处理、导出校验、PLC 控制器所有权和配置内部流程。
+
+## Composition Root 约束
+
+`MainWindowComposition` 负责组装完整的主窗口对象图，包括基础设施 Adapter、应用服务、采集与持久化模块、子 ViewModel 和工作区之间的依赖。`MainWindowDependencies` 是该对象图交给 MainVM 的内部载体。
+
+MainVM 构造函数仅接收已组装对象、连接用于 View/图表 Adapter 的事件并建立命令入口；不得创建采集引擎、历史写入器、Recorder、Repository Coordinator 或计算本地存储路径。

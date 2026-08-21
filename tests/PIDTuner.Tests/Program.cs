@@ -1587,6 +1587,11 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("export.Points.Count", StringComparison.Ordinal), "main view model trend export validation");
     AssertEqual(false, source.Contains("OfflineAnalysis.CanExportLastResult", StringComparison.Ordinal), "main view model analysis export validation");
     AssertEqual(false, source.Contains("AnalyzeCsvFileAsync(fileName", StringComparison.Ordinal), "main view model offline analysis implementation");
+    AssertEqual(false, source.Contains("new PlcAcquisitionEngine", StringComparison.Ordinal), "main view model acquisition composition");
+    AssertEqual(false, source.Contains("new PlcHistoricalAcquisitionWriter", StringComparison.Ordinal), "main view model historical writer composition");
+    AssertEqual(false, source.Contains("new PlcOneSecondRecorder", StringComparison.Ordinal), "main view model recorder composition");
+    AssertEqual(false, source.Contains("new ExperimentSessionCoordinator", StringComparison.Ordinal), "main view model experiment composition");
+    AssertEqual(false, source.Contains("Path.GetFullPath", StringComparison.Ordinal), "main view model storage path composition");
     return Task.CompletedTask;
 }
 

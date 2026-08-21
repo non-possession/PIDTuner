@@ -54,6 +54,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Example file discovery, validation, and ordered loading belong to `ExampleWorkspaceWorkflow`.
 - User-facing operation outcomes use `WorkspaceOperationResult`; MainVM only presents the returned result.
 - Infrastructure adapters are created only in composition modules.
+- The complete Main-window object graph is assembled by `MainWindowComposition`; MainVM receives an already assembled `MainWindowDependencies` graph.
 - Views contain visual interaction logic only; persistence and domain workflows do not belong in code-behind.
 
 The detailed MainVM architecture sub-constraints and migration completion criteria in

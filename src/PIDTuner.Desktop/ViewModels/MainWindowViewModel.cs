@@ -1,12 +1,10 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
 using PIDTuner.Application.Interfaces;
-using PIDTuner.Application.Services;
 using PIDTuner.Desktop.Commands;
 using PIDTuner.Desktop.Services;
 using PIDTuner.Domain.Analysis;
@@ -26,16 +24,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
     public MainWindowViewModel()
-        : this(
-            new WindowsOpenFileDialogService(),
-            MainWindowComposition.CreateFieldProfileStore(),
-            MainWindowComposition.CreatePlcConfigurationStore(),
-            MainWindowComposition.CreatePlcConnectivityProbe(),
-            MainWindowComposition.CreatePlcTagSnapshotReader(),
-            MainWindowComposition.CreateTestSessionRepository(MainWindowComposition.ResolvePath("local", "test-sessions")),
-            MainWindowComposition.CreatePidSampleRepository(MainWindowComposition.ResolvePath("local", "test-sessions")),
-            MainWindowComposition.CreateRecommendationReviewRepository(MainWindowComposition.ResolvePath("local", "recommendation-reviews")),
-            MainWindowComposition.CreateParameterSetRepository(MainWindowComposition.ResolvePath("local", "parameter-sets")))
+        : this(MainWindowComposition.CreateDefault())
     {
     }
 
@@ -53,104 +42,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IPlcHistoricalTrendStore? plcHistoricalTrendStore = null,
         string? testSessionStorageDirectory = null,
         string? plcRecordingStorageDirectory = null)
+        : this(MainWindowComposition.Create(
+            openFileDialogService,
+            fieldProfileStore,
+            plcProjectConfigurationStore,
+            plcConnectivityProbe,
+            plcTagSnapshotReader,
+            testSessionRepository,
+            pidSampleRepository,
+            recommendationReviewRepository,
+            parameterSetRepository,
+            plcLiveDiagnosticsStore,
+            plcHistoricalTrendStore,
+            testSessionStorageDirectory,
+            plcRecordingStorageDirectory))
     {
-        _openFileDialogService = openFileDialogService;
-        var resolvedPlcConnectivityProbe = plcConnectivityProbe
-            ?? MainWindowComposition.CreatePlcConnectivityProbe();
-        var plcSnapshotSessionFactory = new PlcSnapshotSessionFactory(
-            plcTagSnapshotReader ?? MainWindowComposition.CreatePlcTagSnapshotReader());
-        var resolvedTestSessionStorageDirectory = Path.GetFullPath(
-            testSessionStorageDirectory ?? MainWindowComposition.ResolvePath("local", "test-sessions"));
-        var resolvedPlcRecordingStorageDirectory = Path.GetFullPath(
-            plcRecordingStorageDirectory ?? MainWindowComposition.ResolvePath("local", "plc-recordings"));
-        var plcOneSecondRecorder = new PlcOneSecondRecorder(
-            plcSnapshotSessionFactory.OpenAsync,
-            resolvedPlcRecordingStorageDirectory);
-        var resolvedTestSessionRepository = testSessionRepository
-            ?? MainWindowComposition.CreateTestSessionRepository(resolvedTestSessionStorageDirectory);
-        var resolvedPidSampleRepository = pidSampleRepository
-            ?? MainWindowComposition.CreatePidSampleRepository(resolvedTestSessionStorageDirectory);
-        var resolvedRecommendationReviewRepository = recommendationReviewRepository
-            ?? MainWindowComposition.CreateRecommendationReviewRepository(
-                MainWindowComposition.ResolvePath("local", "recommendation-reviews"));
-        var resolvedParameterSetRepository = parameterSetRepository
-            ?? MainWindowComposition.CreateParameterSetRepository(
-                MainWindowComposition.ResolvePath("local", "parameter-sets"));
-        var experimentSessionCoordinator = new ExperimentSessionCoordinator(
-            resolvedTestSessionRepository,
-            resolvedPidSampleRepository,
-            resolvedRecommendationReviewRepository,
-            resolvedTestSessionStorageDirectory);
-        var liveDiagnosticsStore = plcLiveDiagnosticsStore
-            ?? MainWindowComposition.CreateLiveDiagnosticsStore(
-                MainWindowComposition.ResolvePath("local", "plc-diagnostics", "plc-live-diagnostics.sqlite"));
-        var historicalTrendStore = plcHistoricalTrendStore
-            ?? MainWindowComposition.CreateHistoricalTrendStore(
-                MainWindowComposition.ResolvePath("local", "plc-history", "plc-history.sqlite"));
-        var historicalWriter = new PlcHistoricalAcquisitionWriter(historicalTrendStore);
-        HistoricalTrend = new HistoricalTrendViewModel(
-            new PlcHistoricalTrendCoordinator(historicalTrendStore));
-        TrendExport = new PlcTrendExportViewModel(new PlcTrendVisibleExportWorkflow());
-        LiveMonitor = new PlcLiveMonitorViewModel(
-            new PlcAcquisitionEngine(plcSnapshotSessionFactory.OpenAsync, historicalWriter.Enqueue),
-            historicalWriter);
-        Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
-        PlcLiveWorkspace = new PlcLiveWorkspaceViewModel(
-            LiveMonitor,
-            HistoricalTrend,
-            Debug,
-            plcSnapshotSessionFactory,
-            () => !PlcTrendMode.IsHistoricalMode);
+    }
+
+    private MainWindowViewModel(MainWindowDependencies dependencies)
+    {
+        _openFileDialogService = dependencies.OpenFileDialogService;
+        _exampleWorkspaceWorkflow = dependencies.ExampleWorkspaceWorkflow;
+        _experimentWorkspace = dependencies.ExperimentWorkspace;
+        PlcTrendMode = dependencies.PlcTrendMode;
+        Notification = dependencies.Notification;
+        LiveMonitor = dependencies.LiveMonitor;
+        PlcLiveWorkspace = dependencies.PlcLiveWorkspace;
+        Debug = dependencies.Debug;
+        PlcConfigurationEditor = dependencies.PlcConfigurationEditor;
+        PlcConnectionWorkspace = dependencies.PlcConnectionWorkspace;
+        PlcDiagnosticsWorkspace = dependencies.PlcDiagnosticsWorkspace;
+        OfflineAnalysis = dependencies.OfflineAnalysis;
+        ExperimentHistory = dependencies.ExperimentHistory;
+        ParameterSetLibrary = dependencies.ParameterSetLibrary;
+        ParameterSetWorkspace = dependencies.ParameterSetWorkspace;
+        HistoricalTrend = dependencies.HistoricalTrend;
+        TrendExport = dependencies.TrendExport;
+        PlcTrendWorkspace = dependencies.PlcTrendWorkspace;
+        PlcRecordingWorkspace = dependencies.PlcRecordingWorkspace;
+        FieldProfileEditor = dependencies.FieldProfileEditor;
+
         PlcLiveWorkspace.SnapshotsApplied += (snapshots, trendTimestamp) =>
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
-        PlcTrendWorkspace = new PlcTrendWorkspaceViewModel(
-            PlcTrendMode,
-            HistoricalTrend,
-            LiveMonitor,
-            PlcLiveWorkspace,
-            Debug);
         PlcTrendWorkspace.TrendResetRequested += () => PlcTrendResetRequested?.Invoke();
         PlcTrendWorkspace.FramesApplied += frames => PlcSnapshotFramesApplied?.Invoke(frames);
         PlcTrendWorkspace.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         PlcTrendWorkspace.LeftYRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
         PlcTrendWorkspace.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
         PlcTrendWorkspace.NotificationRequested += ApplyOperationResult;
-        PlcRecordingWorkspace = new PlcRecordingWorkspaceViewModel(
-            plcOneSecondRecorder,
-            Debug,
-            LiveMonitor,
-            PlcLiveWorkspace,
-            HistoricalTrend,
-            PlcTrendWorkspace);
-        PlcTrendWorkspace.SetReplayStopAction(PlcRecordingWorkspace.StopReplay);
         PlcRecordingWorkspace.NotificationRequested += ApplyOperationResult;
-        PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
-            PlcProjectConfiguration.CreateDefault(),
-            new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
-        PlcConnectionWorkspace = new PlcConnectionWorkspaceViewModel(
-            PlcConfigurationEditor,
-            LiveMonitor,
-            PlcLiveWorkspace);
-        PlcDiagnosticsWorkspace = new PlcDiagnosticsWorkspaceViewModel(
-            Debug,
-            LiveMonitor,
-            PlcConfigurationEditor);
         PlcDiagnosticsWorkspace.NotificationRequested += ApplyOperationResult;
-        OfflineAnalysis = new OfflineAnalysisViewModel(new AnalysisResultExportWorkflow());
-        FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
-        _exampleWorkspaceWorkflow = new ExampleWorkspaceWorkflow(
-            MainWindowComposition.RepositoryRoot,
-            FieldProfileEditor,
-            OfflineAnalysis);
-        ExperimentHistory = new ExperimentHistoryViewModel();
-        _experimentWorkspace = new ExperimentWorkspaceViewModel(
-            experimentSessionCoordinator,
-            OfflineAnalysis,
-            ExperimentHistory);
-        ParameterSetLibrary = new ParameterSetLibraryViewModel(
-            resolvedParameterSetRepository,
-            new PidParameterSetExtractor());
-        ParameterSetWorkspace = new ParameterSetWorkspaceViewModel(ParameterSetLibrary, OfflineAnalysis);
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -247,9 +188,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public FieldProfileEditorViewModel FieldProfileEditor { get; }
 
-    public PlcTrendModeViewModel PlcTrendMode { get; } = new();
+    public PlcTrendModeViewModel PlcTrendMode { get; }
 
-    public NotificationViewModel Notification { get; } = new();
+    public NotificationViewModel Notification { get; }
 
     public IReadOnlyList<string> AvailablePlcDataTypes { get; } =
         Enum.GetNames<PlcDataType>();
