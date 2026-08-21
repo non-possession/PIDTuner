@@ -26,7 +26,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcSnapshotSessionFactory _plcSnapshotSessionFactory;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
-    private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
     private readonly PlcReplayController _plcReplayController;
     private readonly PlcDiagnosticsController _plcDiagnosticsController;
@@ -108,9 +107,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             resolvedPidSampleRepository,
             resolvedRecommendationReviewRepository,
             resolvedTestSessionStorageDirectory);
-        _plcConfigurationWorkflow = new PlcConfigurationWorkflow(
-            plcProjectConfigurationStore,
-            resolvedPlcConnectivityProbe);
         var liveDiagnosticsStore = plcLiveDiagnosticsStore
             ?? MainWindowComposition.CreateLiveDiagnosticsStore(
                 MainWindowComposition.ResolvePath("local", "plc-diagnostics", "plc-live-diagnostics.sqlite"));
@@ -132,7 +128,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
         _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
-        PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
+        PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
+            PlcProjectConfiguration.CreateDefault(),
+            new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
         OfflineAnalysis = new OfflineAnalysisViewModel();
         FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
         ExperimentHistory = new ExperimentHistoryViewModel();
@@ -386,9 +384,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var configuration = BuildPlcConfigurationFromForm();
-            var savedPath = await _plcConfigurationWorkflow.SaveAsync(configuration, fileName, CancellationToken.None);
-            PlcConfigurationEditor.MarkSaved();
+            var savedPath = await PlcConfigurationEditor.SaveToFileAsync(fileName, CancellationToken.None);
             Notify("PLC 配置已保存", savedPath, "Success");
         }
         catch (Exception exception)
@@ -406,10 +402,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            var configuration = BuildPlcConfigurationFromForm();
-            var result = await _plcConfigurationWorkflow.CheckCommunicationAsync(configuration, CancellationToken.None);
-            PlcCommunicationStatus = result.PendingStatus;
-            PlcCommunicationStatus = result.Status;
+            var configuration = PlcConfigurationEditor.BuildConfiguration();
+            var result = await PlcConfigurationEditor.CheckCommunicationAsync(CancellationToken.None);
             Notify(result.Title, PlcCommunicationStatus, result.Kind);
             if (result.IsReachable && startMonitoringOnSuccess)
             {
@@ -443,7 +437,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
 
             var snapshots = await _plcSnapshotSessionFactory.ReadOnceAsync(
-                BuildPlcConfigurationFromForm(),
+                PlcConfigurationEditor.BuildConfiguration(),
                 CancellationToken.None);
             ApplyPlcMonitorSnapshots(snapshots);
             PlcMonitorStatus = snapshots.Count == 0
@@ -517,7 +511,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         StopPlcReplay();
-        await EnsurePlcMonitoringAsync(BuildPlcConfigurationFromForm(), resetHistory: true);
+            await EnsurePlcMonitoringAsync(PlcConfigurationEditor.BuildConfiguration(), resetHistory: true);
     }
 
     private async Task EnsurePlcMonitoringAsync(
@@ -557,7 +551,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         await _plcDiagnosticsController.StartAsync(
-            BuildPlcConfigurationFromForm(),
+                PlcConfigurationEditor.BuildConfiguration(),
             TimeSpan.FromMinutes(Debug.DiagnosticsDurationMinutes),
             CancellationToken.None);
     }
@@ -582,7 +576,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             StopPlcReplay();
-            var configuration = BuildPlcConfigurationFromForm();
+            var configuration = PlcConfigurationEditor.BuildConfiguration();
             PlcMonitorStatus = "正在记录 1s 点位数据。";
             PlcAcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
             var result = await _plcOneSecondRecorder.RecordAsync(
@@ -677,7 +671,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         if (!LiveMonitor.IsMonitoring)
         {
-            await EnsurePlcMonitoringAsync(BuildPlcConfigurationFromForm(), resetHistory: false);
+        await EnsurePlcMonitoringAsync(PlcConfigurationEditor.BuildConfiguration(), resetHistory: false);
         }
 
         StopPlcReplay();
@@ -933,9 +927,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var configuration = await _plcConfigurationWorkflow.LoadAsync(fileName, CancellationToken.None);
-            ApplyPlcConfiguration(configuration);
-            Notify("PLC 配置已加载", Path.GetFileName(fileName), "Success");
+            var loadedFileName = await PlcConfigurationEditor.LoadFromFileAsync(fileName, CancellationToken.None);
+            LiveMonitor.ClearTags();
+            PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
+            Notify("PLC 配置已加载", loadedFileName, "Success");
             await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: true);
         }
         catch (Exception exception)
@@ -1261,18 +1256,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         StatusMessage = $"{title}：{message}";
         Notification.Show(title, message, kind);
-    }
-
-    private void ApplyPlcConfiguration(PlcProjectConfiguration configuration)
-    {
-        PlcConfigurationEditor.ApplyConfiguration(configuration);
-        LiveMonitor.ClearTags();
-        PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
-    }
-
-    private PlcProjectConfiguration BuildPlcConfigurationFromForm()
-    {
-        return PlcConfigurationEditor.BuildConfiguration();
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

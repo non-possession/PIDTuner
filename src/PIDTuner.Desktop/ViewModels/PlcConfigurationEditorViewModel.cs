@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using PIDTuner.Domain.Configuration;
 
@@ -7,6 +8,7 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
 {
+    private readonly PlcConfigurationWorkflow? _workflow;
     private PlcProjectConfiguration _configuration;
     private string _configurationName = string.Empty;
     private string _protocol = string.Empty;
@@ -21,8 +23,11 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
     private ObservableCollection<TagDefinitionViewModel> _tagDefinitions = [];
     private TagDefinitionViewModel? _selectedTagDefinition;
 
-    public PlcConfigurationEditorViewModel(PlcProjectConfiguration configuration)
+    public PlcConfigurationEditorViewModel(
+        PlcProjectConfiguration configuration,
+        PlcConfigurationWorkflow? workflow = null)
     {
+        _workflow = workflow;
         _configuration = configuration;
         ApplyConfiguration(configuration, resetStatus: false);
     }
@@ -105,6 +110,29 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
 
     public int TagCount => TagDefinitions.Count;
 
+    public async Task<string> LoadFromFileAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var workflow = RequireWorkflow();
+        ApplyConfiguration(await workflow.LoadAsync(fileName, cancellationToken));
+        return Path.GetFileName(fileName);
+    }
+
+    public async Task<string> SaveToFileAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var workflow = RequireWorkflow();
+        var savedPath = await workflow.SaveAsync(BuildConfiguration(), fileName, cancellationToken);
+        MarkSaved();
+        return savedPath;
+    }
+
+    public async Task<PlcCommunicationCheckResult> CheckCommunicationAsync(CancellationToken cancellationToken)
+    {
+        var result = await RequireWorkflow().CheckCommunicationAsync(BuildConfiguration(), cancellationToken);
+        CommunicationStatus = result.PendingStatus;
+        CommunicationStatus = result.Status;
+        return result;
+    }
+
     public void ApplyConfiguration(PlcProjectConfiguration configuration, bool resetStatus = true)
     {
         _configuration = configuration;
@@ -186,6 +214,9 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
             ? configuration.MinimumSamplingMilliseconds
             : PlcProjectConfiguration.DefaultMinimumSamplingMilliseconds;
     }
+
+    private PlcConfigurationWorkflow RequireWorkflow() =>
+        _workflow ?? throw new InvalidOperationException("PLC configuration workflow is not configured.");
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {

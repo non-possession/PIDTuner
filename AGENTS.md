@@ -37,6 +37,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - PLC session capability detection and single-read fallback belong to `PlcSnapshotSessionFactory`.
 - Debug settings and status bind directly through `PlcDebugViewModel`; do not recreate MainVM proxy properties.
 - PLC communication status belongs to `PlcConfigurationEditorViewModel`.
+- PLC configuration construction, validation, loading, saving, and communication checks belong to `PlcConfigurationEditorViewModel`.
 - Live monitor and acquisition diagnostics status belong to `PlcLiveMonitorViewModel`.
 - Field-profile construction, validation, loading, and saving belong to `FieldProfileEditorViewModel`.
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
