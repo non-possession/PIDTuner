@@ -260,7 +260,7 @@ public partial class MainWindow : Window
         _plcTrendChartAdapter.UiRefreshInterval =
             TimeSpan.FromMilliseconds(MainWindowViewModel.LiveMonitorUiRefreshMilliseconds);
         _plcTrendChartAdapter.LiveSamplingInterval =
-            TimeSpan.FromMilliseconds(_viewModel.CurrentPlcAcquisitionIntervalMilliseconds);
+                TimeSpan.FromMilliseconds(_viewModel.LiveMonitor.CurrentAcquisitionIntervalMilliseconds);
     }
 
     private void ApplyPlcTrendChartState()

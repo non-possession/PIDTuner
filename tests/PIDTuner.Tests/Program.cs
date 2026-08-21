@@ -1540,6 +1540,10 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("public int PlcDiagnosticsDurationMinutes", StringComparison.Ordinal), "main view model diagnostics duration proxy");
     AssertEqual(false, source.Contains("public string PlcReplayStatus", StringComparison.Ordinal), "main view model replay status proxy");
     AssertEqual(false, source.Contains("Debug_PropertyChanged", StringComparison.Ordinal), "main view model debug property forwarding");
+    AssertEqual(false, source.Contains("public bool IsPlcMonitoring", StringComparison.Ordinal), "main view model live monitoring proxy");
+    AssertEqual(false, source.Contains("public bool IsPlcHistoricalTrendMode", StringComparison.Ordinal), "main view model trend mode proxy");
+    AssertEqual(false, source.Contains("public string NotificationTitle", StringComparison.Ordinal), "main view model notification proxy");
+    AssertEqual(false, source.Contains("Notification_PropertyChanged", StringComparison.Ordinal), "main view model notification property forwarding");
     return Task.CompletedTask;
 }
 
@@ -1583,7 +1587,7 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     await viewModel.ShowPlcHistoricalTrendAsync(TimeSpan.FromSeconds(10));
 
     AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live snapshots switch to historical trend mode");
-    AssertEqual(true, viewModel.IsPlcMonitoring, "historical trend keeps acquisition running");
+    AssertEqual(true, viewModel.LiveMonitor.IsMonitoring, "historical trend keeps acquisition running");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.HasDataset, "live snapshots create historical dataset");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsViewportEnabled, "live snapshots enable x viewport slider");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsYSliderEnabled, "live snapshots enable y slider");
@@ -1631,7 +1635,7 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live historical preset keeps trend mode");
     AssertContains("历史趋势窗口", viewModel.PlcMonitorStatus);
     await viewModel.ShowPlcLiveTrendAsync();
-    AssertEqual(true, viewModel.IsPlcMonitoring, "live trend resumes without stopping acquisition");
+    AssertEqual(true, viewModel.LiveMonitor.IsMonitoring, "live trend resumes without stopping acquisition");
     await viewModel.TogglePlcMonitoringAsync();
 }
 

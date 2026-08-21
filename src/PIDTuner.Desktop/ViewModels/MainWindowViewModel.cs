@@ -111,7 +111,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LiveMonitor = new PlcLiveMonitorViewModel(
             new PlcAcquisitionEngine(_plcSnapshotSessionFactory.OpenAsync, historicalWriter.Enqueue),
             historicalWriter);
-        LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
         _plcLiveMonitoringController = new PlcLiveMonitoringController(
             LiveMonitor,
             ApplyBufferedLiveMonitorFrames);
@@ -136,7 +135,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new PidParameterSetExtractor());
         ParameterSetLibrary.PropertyChanged += ParameterSetLibrary_PropertyChanged;
         PlcTrendMode.PropertyChanged += PlcTrendMode_PropertyChanged;
-        Notification.PropertyChanged += Notification_PropertyChanged;
         HistoricalTrend.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
@@ -265,64 +263,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _plcAcquisitionDiagnosticsStatus, value);
     }
 
-    public string PlcTrendModeStatus
-    {
-        get => PlcTrendMode.Status;
-        private set => _ = value;
-    }
-
-    public bool IsPlcHistoricalTrendMode
-    {
-        get => PlcTrendMode.IsHistoricalMode;
-        private set => _ = value;
-    }
-
-    public bool IsPlcLiveTrendMode => PlcTrendMode.IsLiveMode;
-
-    public bool IsPlcLiveTrendPaused
-    {
-        get => PlcTrendMode.IsLiveScrollingPaused;
-        private set => _ = value;
-    }
-
-    public string PlcLiveTrendPauseButtonText => PlcTrendMode.PauseButtonText;
-
-    public int CurrentPlcAcquisitionIntervalMilliseconds
-    {
-        get => LiveMonitor.CurrentAcquisitionIntervalMilliseconds;
-        private set => LiveMonitor.CurrentAcquisitionIntervalMilliseconds = value;
-    }
-
-    public bool IsPlcMonitoring
-    {
-        get => LiveMonitor.IsMonitoring;
-        private set => LiveMonitor.IsMonitoring = value;
-    }
-
-    public string NotificationTitle
-    {
-        get => Notification.Title;
-        private set => _ = value;
-    }
-
-    public string NotificationMessage
-    {
-        get => Notification.Message;
-        private set => _ = value;
-    }
-
-    public string NotificationKind
-    {
-        get => Notification.Kind;
-        private set => _ = value;
-    }
-
-    public bool IsNotificationVisible
-    {
-        get => Notification.IsVisible;
-        private set => _ = value;
-    }
-
     public ICommand ImportCsvCommand { get; }
 
     public ICommand LoadPlcConfigurationCommand { get; }
@@ -446,65 +386,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HistoricalTrendWorkbench));
     }
 
-    private void LiveMonitor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        switch (e.PropertyName)
-        {
-            case nameof(PlcLiveMonitorViewModel.IsMonitoring):
-                OnPropertyChanged(nameof(IsPlcMonitoring));
-                break;
-            case nameof(PlcLiveMonitorViewModel.CurrentAcquisitionIntervalMilliseconds):
-                OnPropertyChanged(nameof(CurrentPlcAcquisitionIntervalMilliseconds));
-                break;
-            case nameof(PlcLiveMonitorViewModel.IsLiveTrendPaused):
-                OnPropertyChanged(nameof(IsPlcLiveTrendPaused));
-                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
-                break;
-        }
-    }
-
     private void PlcTrendMode_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         LiveMonitor.IsLiveTrendPaused = PlcTrendMode.IsLiveScrollingPaused;
-        OnPropertyChanged(nameof(PlcTrendMode));
-        switch (e.PropertyName)
-        {
-            case nameof(PlcTrendModeViewModel.IsHistoricalMode):
-                OnPropertyChanged(nameof(IsPlcHistoricalTrendMode));
-                break;
-            case nameof(PlcTrendModeViewModel.IsLiveMode):
-                OnPropertyChanged(nameof(IsPlcLiveTrendMode));
-                break;
-            case nameof(PlcTrendModeViewModel.IsLiveScrollingPaused):
-                OnPropertyChanged(nameof(IsPlcLiveTrendPaused));
-                break;
-            case nameof(PlcTrendModeViewModel.PauseButtonText):
-                OnPropertyChanged(nameof(PlcLiveTrendPauseButtonText));
-                break;
-            case nameof(PlcTrendModeViewModel.Status):
-                OnPropertyChanged(nameof(PlcTrendModeStatus));
-                break;
-        }
-    }
-
-    private void Notification_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(Notification));
-        switch (e.PropertyName)
-        {
-            case nameof(NotificationViewModel.Title):
-                OnPropertyChanged(nameof(NotificationTitle));
-                break;
-            case nameof(NotificationViewModel.Message):
-                OnPropertyChanged(nameof(NotificationMessage));
-                break;
-            case nameof(NotificationViewModel.Kind):
-                OnPropertyChanged(nameof(NotificationKind));
-                break;
-            case nameof(NotificationViewModel.IsVisible):
-                OnPropertyChanged(nameof(IsNotificationVisible));
-                break;
-        }
     }
 
     private void PlcConfigurationEditor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -580,14 +464,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            if (IsPlcHistoricalTrendMode)
+            if (PlcTrendMode.IsHistoricalMode)
             {
                 PlcTrendMode.UseLiveMode();
                 LiveMonitor.ClearTags();
                 PlcTrendResetRequested?.Invoke();
             }
 
-            if (IsPlcMonitoring)
+            if (LiveMonitor.IsMonitoring)
             {
                 _plcLiveMonitoringController.DrainNow();
                 return;
@@ -622,7 +506,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             HistoricalTrend.ObserveSnapshots(
                 snapshots,
                 trendTimestamp,
-                CurrentPlcAcquisitionIntervalMilliseconds);
+                LiveMonitor.CurrentAcquisitionIntervalMilliseconds);
         }
     }
 
@@ -633,7 +517,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ApplyPlcMonitorSnapshots(
                 frame.Snapshots,
                 frame.Diagnostics.PlannedTimestampUtc,
-                applyTrend: !IsPlcHistoricalTrendMode);
+                applyTrend: !PlcTrendMode.IsHistoricalMode);
             EnqueuePlcLiveDiagnosticsFrame(frame);
         }
 
@@ -660,7 +544,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task TogglePlcMonitoringAsync()
     {
-        if (IsPlcMonitoring)
+        if (LiveMonitor.IsMonitoring)
         {
             await StopLiveMonitoringAsync();
             PlcMonitorStatus = "点位监控已停止。";
@@ -675,7 +559,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcProjectConfiguration configuration,
         bool resetHistory)
     {
-        if (IsPlcMonitoring)
+        if (LiveMonitor.IsMonitoring)
         {
             return;
         }
@@ -701,7 +585,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (!IsPlcMonitoring)
+        if (!LiveMonitor.IsMonitoring)
         {
             Notify("无法启动实时诊断", "请先启动实时监控。", "Warning");
             return;
@@ -826,7 +710,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ShowPlcLiveTrendAsync()
     {
-        if (!IsPlcMonitoring)
+        if (!LiveMonitor.IsMonitoring)
         {
             await EnsurePlcMonitoringAsync(BuildPlcConfigurationFromForm(), resetHistory: false);
         }
@@ -845,7 +729,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task TogglePlcLiveTrendPauseAsync()
     {
-        if (IsPlcHistoricalTrendMode)
+        if (PlcTrendMode.IsHistoricalMode)
         {
             return Task.CompletedTask;
         }
