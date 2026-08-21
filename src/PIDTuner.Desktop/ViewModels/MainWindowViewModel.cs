@@ -21,7 +21,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
     private readonly PlcSnapshotSessionFactory _plcSnapshotSessionFactory;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
@@ -115,6 +114,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var historicalWriter = new PlcHistoricalAcquisitionWriter(historicalTrendStore);
         HistoricalTrend = new HistoricalTrendViewModel(
             new PlcHistoricalTrendCoordinator(historicalTrendStore));
+        TrendExport = new PlcTrendExportViewModel(new PlcTrendVisibleExportWorkflow());
         LiveMonitor = new PlcLiveMonitorViewModel(
             new PlcAcquisitionEngine(_plcSnapshotSessionFactory.OpenAsync, historicalWriter.Enqueue),
             historicalWriter);
@@ -229,6 +229,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ParameterSetLibraryViewModel ParameterSetLibrary { get; }
 
     public HistoricalTrendViewModel HistoricalTrend { get; }
+
+    public PlcTrendExportViewModel TrendExport { get; }
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench => HistoricalTrend.Workbench;
 
@@ -1017,7 +1019,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            await _plcTrendVisibleExportWorkflow.ExportAsync(
+            var result = await TrendExport.ExportVisibleAsync(
                 fileName,
                 export,
                 CancellationToken.None);
@@ -1026,9 +1028,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "可见趋势已导出",
                 string.Join(
                     Environment.NewLine,
-                    $"行数：{export.Points.Count}",
-                    $"范围：{export.VisibleStart:yyyy-MM-dd HH:mm:ss.fff} - {export.VisibleEnd:yyyy-MM-dd HH:mm:ss.fff}",
-                    $"路径：{Path.GetFullPath(fileName)}"),
+                    $"行数：{result.PointCount}",
+                    $"范围：{result.VisibleStart:yyyy-MM-dd HH:mm:ss.fff} - {result.VisibleEnd:yyyy-MM-dd HH:mm:ss.fff}",
+                    $"路径：{result.AbsolutePath}"),
                 "Success");
         }
         catch (Exception exception)

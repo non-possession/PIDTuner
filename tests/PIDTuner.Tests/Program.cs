@@ -1556,6 +1556,7 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("BuildPlcConfigurationFromForm", StringComparison.Ordinal), "main view model plc configuration construction wrapper");
     AssertEqual(false, source.Contains("_analysisResultExportWorkflow", StringComparison.Ordinal), "main view model analysis export workflow ownership");
     AssertEqual(false, source.Contains("OfflineAnalysis.LastMetrics", StringComparison.Ordinal), "main view model analysis export state inspection");
+    AssertEqual(false, source.Contains("_plcTrendVisibleExportWorkflow", StringComparison.Ordinal), "main view model trend export workflow ownership");
     return Task.CompletedTask;
 }
 
