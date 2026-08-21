@@ -1544,6 +1544,9 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("public bool IsPlcHistoricalTrendMode", StringComparison.Ordinal), "main view model trend mode proxy");
     AssertEqual(false, source.Contains("public string NotificationTitle", StringComparison.Ordinal), "main view model notification proxy");
     AssertEqual(false, source.Contains("Notification_PropertyChanged", StringComparison.Ordinal), "main view model notification property forwarding");
+    AssertEqual(false, source.Contains("PlcConfigurationEditor_PropertyChanged", StringComparison.Ordinal), "main view model configuration property forwarding");
+    AssertEqual(false, source.Contains("OfflineAnalysis_PropertyChanged", StringComparison.Ordinal), "main view model analysis property forwarding");
+    AssertEqual(false, source.Contains("ExperimentHistory_PropertyChanged", StringComparison.Ordinal), "main view model experiment history property forwarding");
     return Task.CompletedTask;
 }
 

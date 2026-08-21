@@ -121,21 +121,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
-        PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         OfflineAnalysis = new OfflineAnalysisViewModel();
-        OfflineAnalysis.PropertyChanged += OfflineAnalysis_PropertyChanged;
         ExperimentHistory = new ExperimentHistoryViewModel();
         _experimentWorkspace = new ExperimentWorkspaceViewModel(
             experimentSessionCoordinator,
             OfflineAnalysis,
             ExperimentHistory);
-        ExperimentHistory.PropertyChanged += ExperimentHistory_PropertyChanged;
         ParameterSetLibrary = new ParameterSetLibraryViewModel(
             resolvedParameterSetRepository,
             new PidParameterSetExtractor());
-        ParameterSetLibrary.PropertyChanged += ParameterSetLibrary_PropertyChanged;
         PlcTrendMode.PropertyChanged += PlcTrendMode_PropertyChanged;
-        HistoricalTrend.PropertyChanged += HistoricalTrendWorkbench_PropertyChanged;
         HistoricalTrendWorkbench.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         HistoricalTrendWorkbench.YRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
         HistoricalTrendWorkbench.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
@@ -381,34 +376,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private void HistoricalTrendWorkbench_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(HistoricalTrendWorkbench));
-    }
-
     private void PlcTrendMode_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         LiveMonitor.IsLiveTrendPaused = PlcTrendMode.IsLiveScrollingPaused;
-    }
-
-    private void PlcConfigurationEditor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(PlcConfigurationEditor));
-    }
-
-    private void OfflineAnalysis_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(OfflineAnalysis));
-    }
-
-    private void ExperimentHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(ExperimentHistory));
-    }
-
-    private void ParameterSetLibrary_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(ParameterSetLibrary));
     }
 
     public async Task SavePlcConfigurationAsync()
