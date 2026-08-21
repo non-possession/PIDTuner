@@ -28,6 +28,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentSessionCoordinator _experimentSessionCoordinator;
+    private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
     private readonly PlcReplayController _plcReplayController;
@@ -93,11 +94,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var resolvedParameterSetRepository = parameterSetRepository
             ?? MainWindowComposition.CreateParameterSetRepository(
                 Path.Combine(FindRepositoryRoot(), "local", "parameter-sets"));
-        _experimentSessionCoordinator = new ExperimentSessionCoordinator(
+        var experimentSessionCoordinator = new ExperimentSessionCoordinator(
             resolvedTestSessionRepository,
             resolvedPidSampleRepository,
             resolvedRecommendationReviewRepository,
             resolvedTestSessionStorageDirectory);
+        _experimentSessionCoordinator = experimentSessionCoordinator;
         _plcConfigurationWorkflow = new PlcConfigurationWorkflow(
             plcProjectConfigurationStore,
             resolvedPlcConnectivityProbe);
@@ -131,6 +133,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcConfigurationEditor.PropertyChanged += PlcConfigurationEditor_PropertyChanged;
         OfflineAnalysis = new OfflineAnalysisViewModel();
         OfflineAnalysis.PropertyChanged += OfflineAnalysis_PropertyChanged;
+        ExperimentHistory = new ExperimentHistoryViewModel();
+        _experimentWorkspace = new ExperimentWorkspaceViewModel(
+            experimentSessionCoordinator,
+            OfflineAnalysis,
+            ExperimentHistory);
         ExperimentHistory.PropertyChanged += ExperimentHistory_PropertyChanged;
         ParameterSetLibrary = new ParameterSetLibraryViewModel(
             resolvedParameterSetRepository,
@@ -223,7 +230,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public OfflineAnalysisViewModel OfflineAnalysis { get; }
 
-    public ExperimentHistoryViewModel ExperimentHistory { get; } = new();
+    public ExperimentHistoryViewModel ExperimentHistory { get; }
 
     public ParameterSetLibraryViewModel ParameterSetLibrary { get; }
 
@@ -1220,18 +1227,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            var result = await _experimentSessionCoordinator.SaveOfflineSessionAsync(
-                OfflineAnalysis.LastAnalysisWindow,
-                OfflineAnalysis.LastSamples,
-                OfflineAnalysis.LastSourceFileName,
+            var result = await _experimentWorkspace.SaveSessionAsync(
                 FieldProfileEditor.Profile.ProfileName,
                 CancellationToken.None);
-            if (result.SessionId.HasValue)
-            {
-                OfflineAnalysis.MarkSavedSession(result.SessionId.Value);
-                await LoadHistoryAsync(showNotification: false);
-            }
-
             Notify(result.Title, result.Message, result.Kind);
         }
         catch (Exception exception)
