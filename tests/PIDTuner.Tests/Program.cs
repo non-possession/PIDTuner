@@ -1560,6 +1560,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("_analysisResultExportWorkflow", StringComparison.Ordinal), "main view model analysis export workflow ownership");
     AssertEqual(false, source.Contains("OfflineAnalysis.LastMetrics", StringComparison.Ordinal), "main view model analysis export state inspection");
     AssertEqual(false, source.Contains("_plcTrendVisibleExportWorkflow", StringComparison.Ordinal), "main view model trend export workflow ownership");
+    AssertEqual(false, source.Contains("_lastPlcRecordingFrames", StringComparison.Ordinal), "main view model historical frame ownership");
+    AssertEqual(false, source.Contains("LastPlcRecordingFrames", StringComparison.Ordinal), "main view model historical frame proxy");
     return Task.CompletedTask;
 }
 
@@ -1608,7 +1610,7 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsViewportEnabled, "live snapshots enable x viewport slider");
     AssertEqual(true, viewModel.HistoricalTrendWorkbench.IsYSliderEnabled, "live snapshots enable y slider");
     AssertEqual(1, batchAppliedCount, "live snapshots publish one historical frame batch");
-    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 3, "live snapshots are retained as historical frames");
+    AssertEqual(true, viewModel.HistoricalTrend.CurrentFrames.Count >= 3, "live snapshots are retained as historical frames");
     AssertEqual(0, diagnosticsStore.StartCount, "live acquisition does not start diagnostics");
     AssertEqual(1, historicalStore.StartCount, "live acquisition starts historical sqlite session");
     AssertEqual(true, historicalStore.LastSession!.EnqueueCount > 0, "live acquisition frames enqueue to historical sqlite session");
@@ -1826,8 +1828,8 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
 
     await viewModel.RecordPlcOneSecondAsync();
 
-    AssertEqual(true, viewModel.LastPlcRecordingFrames.Count >= 18, "recorded frame count");
-    AssertEqual(true, viewModel.LastPlcRecordingFrames.All(frame => frame.Count == 2), "recorded frame tag count");
+    AssertEqual(true, viewModel.HistoricalTrend.CurrentFrames.Count >= 18, "recorded frame count");
+    AssertEqual(true, viewModel.HistoricalTrend.CurrentFrames.All(frame => frame.Count == 2), "recorded frame tag count");
     AssertEqual(1, reader.OpenSessionCount, "plc reader session open count");
     AssertEqual(true, reader.SessionReadCount >= 18, "plc session read count");
     AssertEqual("PLC 1s 记录完成", viewModel.Notification.Title, "plc recording notification title");
@@ -1900,7 +1902,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     await loader.LoadPlcRecordingAsync();
 
-    AssertEqual(true, loader.LastPlcRecordingFrames.Count > 0, "loaded plc recording frame count");
+    AssertEqual(true, loader.HistoricalTrend.CurrentFrames.Count > 0, "loaded plc recording frame count");
     AssertEqual(true, loader.LiveMonitor.Tags.Count > 0, "loaded plc monitor tag count");
     AssertEqual(1, resetCount, "loaded plc trend reset count");
     AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
@@ -1921,7 +1923,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.ShowPlcHistoricalTrendAsync();
     AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical plc trend mode");
     AssertContains("历史", loader.PlcTrendMode.Status);
-    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
+    AssertContains(loader.HistoricalTrend.CurrentFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
     AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsViewportEnabled, "historical viewport slider enabled");
@@ -1976,7 +1978,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertClose(preservedLower, loader.HistoricalTrendWorkbench.YLower, 0.0001d, "historical selected series keeps y brush");
 
     viewportRequestCount = 0;
-    var selectedHistoricalFrame = loader.LastPlcRecordingFrames.First(frame => frame.Count > 0);
+    var selectedHistoricalFrame = loader.HistoricalTrend.CurrentFrames.First(frame => frame.Count > 0);
     var selectedHistoricalTimestamp = selectedHistoricalFrame[0].Timestamp;
     loader.HistoricalTrendWorkbench.RangeStartText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
     loader.HistoricalTrendWorkbench.RangeEndText = selectedHistoricalTimestamp.ToString("O", CultureInfo.InvariantCulture);
@@ -1988,7 +1990,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     await loader.ResetPlcHistoricalRangeAsync();
     AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
-    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
+    AssertContains(loader.HistoricalTrend.CurrentFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
     await loader.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
     AssertEqual(3, viewportRequestCount, "historical preset requests viewport update");
     AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical preset keeps trend mode");
@@ -1997,7 +1999,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         requestedViewportEnd - requestedViewportStart <= TimeSpan.FromSeconds(10),
         "historical preset clamps visible duration");
 
-    var historicalTimestamps = loader.LastPlcRecordingFrames
+    var historicalTimestamps = loader.HistoricalTrend.CurrentFrames
         .Where(frame => frame.Count > 0)
         .Select(frame => frame.Min(snapshot => snapshot.Timestamp))
         .Order()
@@ -2016,7 +2018,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
         requestedViewportStart,
         "historical start slider timestamp");
 
-    var historicalValues = loader.LastPlcRecordingFrames
+    var historicalValues = loader.HistoricalTrend.CurrentFrames
         .SelectMany(frame => frame)
         .Select(snapshot => snapshot.Value)
         .OfType<double>()

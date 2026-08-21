@@ -28,7 +28,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcReplayController _plcReplayController;
     private readonly PlcDiagnosticsController _plcDiagnosticsController;
     private readonly PlcLiveMonitoringController _plcLiveMonitoringController;
-    private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
     public MainWindowViewModel()
@@ -289,8 +288,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand SetPlcReplaySpeedDoubleCommand { get; }
 
     public ICommand SetPlcReplaySpeedFiveCommand { get; }
-
-    public IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> LastPlcRecordingFrames => _lastPlcRecordingFrames;
 
     public ICommand LoadFieldProfileCommand { get; }
 
@@ -572,8 +569,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            _lastPlcRecordingFrames = result.Frames;
-            OnPropertyChanged(nameof(LastPlcRecordingFrames));
+            HistoricalTrend.RememberFrames(result.Frames);
             LiveMonitor.MonitorStatus = result.MonitorStatus;
             LiveMonitor.AcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
             Notify(
@@ -620,8 +616,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StopPlcReplay();
             HistoricalTrend.ClearLiveFrames();
             Debug.LoadReplay(recording.Frames, recording.IntervalMilliseconds);
-            _lastPlcRecordingFrames = recording.Frames;
-            OnPropertyChanged(nameof(LastPlcRecordingFrames));
+            HistoricalTrend.RememberFrames(recording.Frames);
             HistoricalTrendWorkbench.SetRangeTextFromFrames(recording.Frames);
 
             LiveMonitor.ClearTags();
@@ -701,11 +696,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var frames = await HistoricalTrend.LoadWindowAsync(
             end,
             window,
-            _lastPlcRecordingFrames,
+            HistoricalTrend.CurrentFrames,
             CancellationToken.None);
         if (frames.Count > 0)
         {
-            _lastPlcRecordingFrames = frames;
+            HistoricalTrend.RememberFrames(frames);
             PlcSnapshotFramesApplied?.Invoke(frames);
         }
 
@@ -743,8 +738,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        _lastPlcRecordingFrames = frames;
-        OnPropertyChanged(nameof(LastPlcRecordingFrames));
+        HistoricalTrend.RememberFrames(frames);
         PlcTrendResetRequested?.Invoke();
         ShowLoadedPlcHistoricalTrend(frames);
         HistoricalTrend.SetWindowEndingAt(end, visibleWindow);
@@ -755,7 +749,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var result = await HistoricalTrend.ApplySelectedRangeAsync(CancellationToken.None);
         if (result.Frames.Count > 0)
         {
-            _lastPlcRecordingFrames = result.Frames;
+            HistoricalTrend.RememberFrames(result.Frames);
             PlcSnapshotFramesApplied?.Invoke(result.Frames);
         }
 
@@ -764,7 +758,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task ResetPlcHistoricalRangeAsync()
     {
-        ApplyHistoricalTrendAction(HistoricalTrend.ResetTimeRange(LastPlcRecordingFrames.Count));
+        ApplyHistoricalTrendAction(HistoricalTrend.ResetTimeRange(HistoricalTrend.CurrentFrames.Count));
         return Task.CompletedTask;
     }
 

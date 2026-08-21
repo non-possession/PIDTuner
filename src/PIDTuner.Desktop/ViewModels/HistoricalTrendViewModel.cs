@@ -16,6 +16,9 @@ public sealed class HistoricalTrendViewModel
 
     public HistoricalTrendWorkbenchViewModel Workbench { get; }
 
+    public IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> CurrentFrames { get; private set; } =
+        Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
+
     public event PropertyChangedEventHandler? PropertyChanged
     {
         add => Workbench.PropertyChanged += value;
@@ -70,9 +73,13 @@ public sealed class HistoricalTrendViewModel
     {
         if (frames.Count > 0)
         {
+            CurrentFrames = frames;
             Workbench.LoadFrames(frames);
         }
     }
+
+    public void RememberFrames(IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> frames) =>
+        CurrentFrames = frames;
 
     public HistoricalTrendActionResult SetVisibleWindow(TimeSpan window)
     {

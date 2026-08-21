@@ -27,6 +27,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 
 - PLC live acquisition state belongs to `PlcLiveMonitorViewModel` and its supporting modules.
 - Historical trend state belongs to `HistoricalTrendViewModel` / `HistoricalTrendWorkbenchViewModel`.
+- The current historical frame set belongs to `HistoricalTrendViewModel`; MainVM must not retain a duplicate frame list.
 - Historical persistence lifecycle belongs to `PlcHistoricalAcquisitionWriter`.
 - Historical query, frame retention, and merge policy belong to `PlcHistoricalTrendCoordinator`.
 - Visible trend CSV encoding and serialization belong to `PlcTrendVisibleExportWorkflow`.
