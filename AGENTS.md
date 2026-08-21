@@ -38,6 +38,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Debug settings and status bind directly through `PlcDebugViewModel`; do not recreate MainVM proxy properties.
 - PLC communication status belongs to `PlcConfigurationEditorViewModel`.
 - Live monitor and acquisition diagnostics status belong to `PlcLiveMonitorViewModel`.
+- Field-profile construction, validation, loading, and saving belong to `FieldProfileEditorViewModel`.
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.
 - Infrastructure adapters are created only in composition modules.

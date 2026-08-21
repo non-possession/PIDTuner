@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using PIDTuner.Domain.Configuration;
 
@@ -7,13 +8,15 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class FieldProfileEditorViewModel : INotifyPropertyChanged
 {
+    private readonly FieldProfileWorkflow? _workflow;
     private PidSampleFieldProfile _profile = PidSampleFieldProfile.CreateDefault();
     private string _currentProfile = "default-pid-sample-fields (10 字段)";
     private ObservableCollection<PidSampleFieldDefinitionViewModel> _fieldDefinitions = [];
     private PidSampleFieldDefinitionViewModel? _selectedFieldDefinition;
 
-    public FieldProfileEditorViewModel()
+    public FieldProfileEditorViewModel(FieldProfileWorkflow? workflow = null)
     {
+        _workflow = workflow;
         RefreshFieldDefinitions();
     }
 
@@ -59,6 +62,20 @@ public sealed class FieldProfileEditorViewModel : INotifyPropertyChanged
     public void LoadProfile(PidSampleFieldProfile profile)
     {
         Profile = profile;
+    }
+
+    public async Task<string> LoadFromFileAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var workflow = RequireWorkflow();
+        LoadProfile(await workflow.LoadAsync(fileName, cancellationToken));
+        return Path.GetFileName(fileName);
+    }
+
+    public async Task<string> SaveToFileAsync(string fileName, CancellationToken cancellationToken)
+    {
+        var workflow = RequireWorkflow();
+        await workflow.SaveAsync(BuildProfileFromGrid(), fileName, cancellationToken);
+        return Path.GetFullPath(fileName);
     }
 
     public void AddField()
@@ -107,6 +124,9 @@ public sealed class FieldProfileEditorViewModel : INotifyPropertyChanged
         FieldDefinitions = new ObservableCollection<PidSampleFieldDefinitionViewModel>(
             Profile.Fields.Select(field => new PidSampleFieldDefinitionViewModel(field)));
     }
+
+    private FieldProfileWorkflow RequireWorkflow() =>
+        _workflow ?? throw new InvalidOperationException("Field profile file workflow is not configured.");
 
     private static string FormatProfile(PidSampleFieldProfile profile)
     {

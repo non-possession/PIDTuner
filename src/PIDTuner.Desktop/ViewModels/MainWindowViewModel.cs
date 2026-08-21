@@ -21,7 +21,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
-    private readonly FieldProfileWorkflow _fieldProfileWorkflow;
     private readonly AnalysisResultExportWorkflow _analysisResultExportWorkflow = new();
     private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
     private readonly PlcSnapshotSessionFactory _plcSnapshotSessionFactory;
@@ -83,7 +82,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         string? plcRecordingStorageDirectory = null)
     {
         _openFileDialogService = openFileDialogService;
-        _fieldProfileWorkflow = new FieldProfileWorkflow(fieldProfileStore);
         var resolvedPlcConnectivityProbe = plcConnectivityProbe
             ?? MainWindowComposition.CreatePlcConnectivityProbe();
         _plcSnapshotSessionFactory = new PlcSnapshotSessionFactory(
@@ -136,6 +134,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
         OfflineAnalysis = new OfflineAnalysisViewModel();
+        FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
         ExperimentHistory = new ExperimentHistoryViewModel();
         _experimentWorkspace = new ExperimentWorkspaceViewModel(
             experimentSessionCoordinator,
@@ -236,7 +235,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public HistoricalTrendWorkbenchViewModel HistoricalTrendWorkbench => HistoricalTrend.Workbench;
 
-    public FieldProfileEditorViewModel FieldProfileEditor { get; } = new();
+    public FieldProfileEditorViewModel FieldProfileEditor { get; }
 
     public PlcTrendModeViewModel PlcTrendMode { get; } = new();
 
@@ -362,7 +361,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            FieldProfileEditor.LoadProfile(await _fieldProfileWorkflow.LoadAsync(fieldProfilePath, CancellationToken.None));
+            await FieldProfileEditor.LoadFromFileAsync(fieldProfilePath, CancellationToken.None);
 
             await AnalyzeCsvFileAsync(csvPath);
         }
@@ -1195,9 +1194,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var fieldProfile = FieldProfileEditor.BuildProfileFromGrid();
-            await _fieldProfileWorkflow.SaveAsync(fieldProfile, fileName, CancellationToken.None);
-            Notify("字段配置已保存", Path.GetFullPath(fileName), "Success");
+            var savedPath = await FieldProfileEditor.SaveToFileAsync(fileName, CancellationToken.None);
+            Notify("字段配置已保存", savedPath, "Success");
         }
         catch (Exception exception)
         {
@@ -1215,8 +1213,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            FieldProfileEditor.LoadProfile(await _fieldProfileWorkflow.LoadAsync(fileName, CancellationToken.None));
-            Notify("字段配置已加载", Path.GetFileName(fileName), "Success");
+            var loadedFileName = await FieldProfileEditor.LoadFromFileAsync(fileName, CancellationToken.None);
+            Notify("字段配置已加载", loadedFileName, "Success");
         }
         catch (Exception exception)
         {
