@@ -50,10 +50,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             MainWindowComposition.CreatePlcConfigurationStore(),
             MainWindowComposition.CreatePlcConnectivityProbe(),
             MainWindowComposition.CreatePlcTagSnapshotReader(),
-            MainWindowComposition.CreateTestSessionRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
-            MainWindowComposition.CreatePidSampleRepository(Path.Combine(FindRepositoryRoot(), "local", "test-sessions")),
-            MainWindowComposition.CreateRecommendationReviewRepository(Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews")),
-            MainWindowComposition.CreateParameterSetRepository(Path.Combine(FindRepositoryRoot(), "local", "parameter-sets")))
+            MainWindowComposition.CreateTestSessionRepository(MainWindowComposition.ResolvePath("local", "test-sessions")),
+            MainWindowComposition.CreatePidSampleRepository(MainWindowComposition.ResolvePath("local", "test-sessions")),
+            MainWindowComposition.CreateRecommendationReviewRepository(MainWindowComposition.ResolvePath("local", "recommendation-reviews")),
+            MainWindowComposition.CreateParameterSetRepository(MainWindowComposition.ResolvePath("local", "parameter-sets")))
     {
     }
 
@@ -79,9 +79,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcTagSnapshotReader = plcTagSnapshotReader
             ?? MainWindowComposition.CreatePlcTagSnapshotReader();
         var resolvedTestSessionStorageDirectory = Path.GetFullPath(
-            testSessionStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "test-sessions"));
+            testSessionStorageDirectory ?? MainWindowComposition.ResolvePath("local", "test-sessions"));
         var resolvedPlcRecordingStorageDirectory = Path.GetFullPath(
-            plcRecordingStorageDirectory ?? Path.Combine(FindRepositoryRoot(), "local", "plc-recordings"));
+            plcRecordingStorageDirectory ?? MainWindowComposition.ResolvePath("local", "plc-recordings"));
         _plcOneSecondRecorder = new PlcOneSecondRecorder(OpenPlcSnapshotSessionAsync, resolvedPlcRecordingStorageDirectory);
         var resolvedTestSessionRepository = testSessionRepository
             ?? MainWindowComposition.CreateTestSessionRepository(resolvedTestSessionStorageDirectory);
@@ -89,10 +89,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ?? MainWindowComposition.CreatePidSampleRepository(resolvedTestSessionStorageDirectory);
         var resolvedRecommendationReviewRepository = recommendationReviewRepository
             ?? MainWindowComposition.CreateRecommendationReviewRepository(
-                Path.Combine(FindRepositoryRoot(), "local", "recommendation-reviews"));
+                MainWindowComposition.ResolvePath("local", "recommendation-reviews"));
         var resolvedParameterSetRepository = parameterSetRepository
             ?? MainWindowComposition.CreateParameterSetRepository(
-                Path.Combine(FindRepositoryRoot(), "local", "parameter-sets"));
+                MainWindowComposition.ResolvePath("local", "parameter-sets"));
         var experimentSessionCoordinator = new ExperimentSessionCoordinator(
             resolvedTestSessionRepository,
             resolvedPidSampleRepository,
@@ -102,17 +102,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             plcProjectConfigurationStore,
             resolvedPlcConnectivityProbe);
         var liveDiagnosticsStore = plcLiveDiagnosticsStore
-            ?? MainWindowComposition.CreateLiveDiagnosticsStore(Path.Combine(
-                FindRepositoryRoot(),
-                "local",
-                "plc-diagnostics",
-                "plc-live-diagnostics.sqlite"));
+            ?? MainWindowComposition.CreateLiveDiagnosticsStore(
+                MainWindowComposition.ResolvePath("local", "plc-diagnostics", "plc-live-diagnostics.sqlite"));
         var historicalTrendStore = plcHistoricalTrendStore
-            ?? MainWindowComposition.CreateHistoricalTrendStore(Path.Combine(
-                FindRepositoryRoot(),
-                "local",
-                "plc-history",
-                "plc-history.sqlite"));
+            ?? MainWindowComposition.CreateHistoricalTrendStore(
+                MainWindowComposition.ResolvePath("local", "plc-history", "plc-history.sqlite"));
         var historicalWriter = new PlcHistoricalAcquisitionWriter(historicalTrendStore);
         HistoricalTrend = new HistoricalTrendViewModel(
             new PlcHistoricalTrendCoordinator(historicalTrendStore));
@@ -465,7 +459,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LoadExampleAsync()
     {
-        var repositoryRoot = FindRepositoryRoot();
+        var repositoryRoot = MainWindowComposition.RepositoryRoot;
         var fieldProfilePath = Path.Combine(repositoryRoot, "config", "pid-sample-fields.example.json");
         var csvPath = Path.Combine(repositoryRoot, "samples", "offline-step-response.csv");
 
@@ -1330,26 +1324,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             ApplyExperimentWorkspaceOperation(result);
         }
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(Environment.CurrentDirectory);
-
-        while (directory is not null)
-        {
-            var configPath = Path.Combine(directory.FullName, "config", "pid-sample-fields.example.json");
-            var samplePath = Path.Combine(directory.FullName, "samples", "offline-step-response.csv");
-
-            if (File.Exists(configPath) && File.Exists(samplePath))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return Environment.CurrentDirectory;
     }
 
     private async Task LoadHistoryAsync(bool showNotification)

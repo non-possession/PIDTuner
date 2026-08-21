@@ -1531,6 +1531,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("StopExpiredPlcLiveDiagnosticsAsync", StringComparison.Ordinal), "main view model diagnostics expiration polling");
     AssertEqual(false, source.Contains("_experimentSessionCoordinator", StringComparison.Ordinal), "main view model experiment repository orchestration");
     AssertEqual(false, source.Contains("AnalyzeHistorySessionAsync", StringComparison.Ordinal), "main view model history comparison analysis");
+    AssertEqual(false, source.Contains("FindRepositoryRoot", StringComparison.Ordinal), "main view model repository discovery");
+    AssertEqual(false, source.Contains("DirectoryInfo", StringComparison.Ordinal), "main view model filesystem traversal");
     return Task.CompletedTask;
 }
 
