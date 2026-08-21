@@ -203,6 +203,17 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
         return true;
     }
 
+    public WorkspaceOperationResult AddTagOperation()
+    {
+        AddTag();
+        return WorkspaceOperationResult.Info("点位已新增", "请编辑点位信息后保存 PLC 配置。");
+    }
+
+    public WorkspaceOperationResult RemoveSelectedTagOperation() =>
+        RemoveSelectedTag()
+            ? WorkspaceOperationResult.Info("点位已删除", "请保存 PLC 配置以保留修改。")
+            : WorkspaceOperationResult.Warning("无法删除点位", "请先选择要删除的点位。");
+
     public void MarkSaved()
     {
         Status = $"已保存 {TagDefinitions.Count} 个点位。";

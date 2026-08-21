@@ -38,6 +38,8 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - PLC recording, recording-load initialization, and replay result application belong to `PlcRecordingWorkspaceViewModel`.
 - PLC replay timing and step orchestration belong to `PlcReplayController`.
 - PLC diagnostics expiration timing belongs to `PlcDiagnosticsController`.
+- PLC diagnostics start/stop coordination and user-facing results belong to `PlcDiagnosticsWorkspaceViewModel`.
+- PLC configuration file operations, communication checks, and monitor startup coordination belong to `PlcConnectionWorkspaceViewModel`.
 - PLC live refresh timing belongs to `PlcLiveMonitoringController`.
 - PLC session capability detection and single-read fallback belong to `PlcSnapshotSessionFactory`.
 - Debug settings and status bind directly through `PlcDebugViewModel`; do not recreate MainVM proxy properties.
@@ -50,6 +52,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Parameter-set input assembly and persistence coordination belong to `ParameterSetWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.
 - Example file discovery, validation, and ordered loading belong to `ExampleWorkspaceWorkflow`.
+- User-facing operation outcomes use `WorkspaceOperationResult`; MainVM only presents the returned result.
 - Infrastructure adapters are created only in composition modules.
 - Views contain visual interaction logic only; persistence and domain workflows do not belong in code-behind.
 

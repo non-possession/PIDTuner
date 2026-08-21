@@ -32,7 +32,7 @@ public sealed class PlcRecordingWorkspaceViewModel
         _replayController = new PlcReplayController(debug, ApplyReplayOperation);
     }
 
-    public event Action<RecordingWorkspaceNotification>? NotificationRequested;
+    public event Action<WorkspaceOperationResult>? NotificationRequested;
 
     public async Task RecordOneSecondAsync(
         PlcProjectConfiguration configuration,
@@ -164,7 +164,5 @@ public sealed class PlcRecordingWorkspaceViewModel
     }
 
     private void Notify(string title, string message, string kind) =>
-        NotificationRequested?.Invoke(new RecordingWorkspaceNotification(title, message, kind));
+        NotificationRequested?.Invoke(new WorkspaceOperationResult(title, message, kind));
 }
-
-public sealed record RecordingWorkspaceNotification(string Title, string Message, string Kind);

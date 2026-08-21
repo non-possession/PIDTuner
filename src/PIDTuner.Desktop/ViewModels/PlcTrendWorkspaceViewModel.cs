@@ -43,7 +43,7 @@ public sealed class PlcTrendWorkspaceViewModel
 
     public event Action<double?, double?>? RightYRangeRequested;
 
-    public event Action<TrendWorkspaceNotification>? NotificationRequested;
+    public event Action<WorkspaceOperationResult>? NotificationRequested;
 
     public HistoricalTrendWorkbenchViewModel Workbench => _historicalTrend.Workbench;
 
@@ -174,7 +174,7 @@ public sealed class PlcTrendWorkspaceViewModel
         if (!result.IsSuccess)
         {
             NotificationRequested?.Invoke(
-                new TrendWorkspaceNotification(result.ErrorTitle!, result.ErrorMessage!, "Warning"));
+                WorkspaceOperationResult.Warning(result.ErrorTitle!, result.ErrorMessage!));
             return;
         }
 
@@ -200,5 +200,3 @@ public sealed class PlcTrendWorkspaceViewModel
         _liveMonitor.IsLiveTrendPaused = _mode.IsLiveScrollingPaused;
     }
 }
-
-public sealed record TrendWorkspaceNotification(string Title, string Message, string Kind);

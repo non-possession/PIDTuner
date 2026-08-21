@@ -4,7 +4,7 @@ public sealed class ParameterSetWorkspaceViewModel(
     ParameterSetLibraryViewModel library,
     OfflineAnalysisViewModel analysis)
 {
-    public async Task<ParameterSetWorkspaceOperationResult> SaveLatestAsync(
+    public async Task<WorkspaceOperationResult> SaveLatestAsync(
         CancellationToken cancellationToken)
     {
         try
@@ -18,11 +18,11 @@ public sealed class ParameterSetWorkspaceViewModel(
         }
         catch (Exception exception)
         {
-            return ParameterSetWorkspaceOperationResult.Error("参数方案保存失败", exception.Message);
+            return WorkspaceOperationResult.Error("参数方案保存失败", exception.Message);
         }
     }
 
-    public async Task<ParameterSetWorkspaceOperationResult?> LoadAsync(
+    public async Task<WorkspaceOperationResult?> LoadAsync(
         bool notifySuccess,
         CancellationToken cancellationToken)
     {
@@ -30,22 +30,13 @@ public sealed class ParameterSetWorkspaceViewModel(
         {
             await library.LoadAsync(cancellationToken);
             return notifySuccess
-                ? ParameterSetWorkspaceOperationResult.Info("参数方案已刷新", library.Status)
+                ? WorkspaceOperationResult.Info("参数方案已刷新", library.Status)
                 : null;
         }
         catch (Exception exception)
         {
             library.MarkLoadFailed();
-            return ParameterSetWorkspaceOperationResult.Error("参数方案加载失败", exception.Message);
+            return WorkspaceOperationResult.Error("参数方案加载失败", exception.Message);
         }
     }
-}
-
-public sealed record ParameterSetWorkspaceOperationResult(string Title, string Message, string Kind)
-{
-    public static ParameterSetWorkspaceOperationResult Info(string title, string message) =>
-        new(title, message, "Info");
-
-    public static ParameterSetWorkspaceOperationResult Error(string title, string message) =>
-        new(title, message, "Error");
 }

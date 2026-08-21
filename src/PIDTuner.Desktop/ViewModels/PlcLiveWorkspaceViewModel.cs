@@ -144,6 +144,13 @@ public sealed record PlcLiveWorkspaceOperationResult(
     string? NotificationMessage,
     string? NotificationKind)
 {
+    public WorkspaceOperationResult? Notification =>
+        string.IsNullOrWhiteSpace(NotificationTitle)
+        || string.IsNullOrWhiteSpace(NotificationMessage)
+        || string.IsNullOrWhiteSpace(NotificationKind)
+            ? null
+            : new WorkspaceOperationResult(NotificationTitle, NotificationMessage, NotificationKind);
+
     public static PlcLiveWorkspaceOperationResult Error(string title, string message) =>
         new(false, false, title, message, "Error");
 }

@@ -23,7 +23,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOpenFileDialogService _openFileDialogService;
     private readonly ExampleWorkspaceWorkflow _exampleWorkspaceWorkflow;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
-    private readonly PlcDiagnosticsController _plcDiagnosticsController;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
     public MainWindowViewModel()
@@ -104,7 +103,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             () => !PlcTrendMode.IsHistoricalMode);
         PlcLiveWorkspace.SnapshotsApplied += (snapshots, trendTimestamp) =>
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
-        _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcTrendWorkspace = new PlcTrendWorkspaceViewModel(
             PlcTrendMode,
             HistoricalTrend,
@@ -116,7 +114,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PlcTrendWorkspace.ViewportRequested += (start, end) => PlcHistoricalViewportRequested?.Invoke(start, end);
         PlcTrendWorkspace.LeftYRangeRequested += (min, max) => PlcTrendYRangeRequested?.Invoke(min, max);
         PlcTrendWorkspace.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
-        PlcTrendWorkspace.NotificationRequested += result => Notify(result.Title, result.Message, result.Kind);
+        PlcTrendWorkspace.NotificationRequested += ApplyOperationResult;
         PlcRecordingWorkspace = new PlcRecordingWorkspaceViewModel(
             plcOneSecondRecorder,
             Debug,
@@ -125,10 +123,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             HistoricalTrend,
             PlcTrendWorkspace);
         PlcTrendWorkspace.SetReplayStopAction(PlcRecordingWorkspace.StopReplay);
-        PlcRecordingWorkspace.NotificationRequested += result => Notify(result.Title, result.Message, result.Kind);
+        PlcRecordingWorkspace.NotificationRequested += ApplyOperationResult;
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(
             PlcProjectConfiguration.CreateDefault(),
             new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
+        PlcConnectionWorkspace = new PlcConnectionWorkspaceViewModel(
+            PlcConfigurationEditor,
+            LiveMonitor,
+            PlcLiveWorkspace);
+        PlcDiagnosticsWorkspace = new PlcDiagnosticsWorkspaceViewModel(
+            Debug,
+            LiveMonitor,
+            PlcConfigurationEditor);
+        PlcDiagnosticsWorkspace.NotificationRequested += ApplyOperationResult;
         OfflineAnalysis = new OfflineAnalysisViewModel(new AnalysisResultExportWorkflow());
         FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
         _exampleWorkspaceWorkflow = new ExampleWorkspaceWorkflow(
@@ -215,6 +222,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public PlcDebugViewModel Debug { get; }
 
     public PlcConfigurationEditorViewModel PlcConfigurationEditor { get; }
+
+    public PlcConnectionWorkspaceViewModel PlcConnectionWorkspace { get; }
+
+    public PlcDiagnosticsWorkspaceViewModel PlcDiagnosticsWorkspace { get; }
 
     public OfflineAnalysisViewModel OfflineAnalysis { get; }
 
@@ -346,8 +357,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LoadExampleAsync()
     {
-        var result = await _exampleWorkspaceWorkflow.LoadAsync(CancellationToken.None);
-        Notify(result.Title, result.Message, result.Kind);
+        ApplyOperationResult(await _exampleWorkspaceWorkflow.LoadAsync(CancellationToken.None));
     }
 
     public async Task SavePlcConfigurationAsync()
@@ -358,41 +368,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var savedPath = await PlcConfigurationEditor.SaveToFileAsync(fileName, CancellationToken.None);
-            Notify("PLC 配置已保存", savedPath, "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("PLC 配置保存失败", exception.Message, "Error");
-        }
+        ApplyOperationResult(await PlcConnectionWorkspace.SaveAsync(fileName, CancellationToken.None));
     }
 
     public async Task CheckPlcCommunicationAsync()
     {
-        _ = await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: false);
-    }
-
-    private async Task<bool> CheckPlcCommunicationInternalAsync(bool startMonitoringOnSuccess)
-    {
-        try
-        {
-            var configuration = PlcConfigurationEditor.BuildConfiguration();
-            var result = await PlcConfigurationEditor.CheckCommunicationAsync(CancellationToken.None);
-            Notify(result.Title, PlcConfigurationEditor.CommunicationStatus, result.Kind);
-            if (result.IsReachable && startMonitoringOnSuccess)
-            {
-                await EnsurePlcMonitoringAsync(configuration, resetHistory: true);
-            }
-
-            return result.IsReachable;
-        }
-        catch (Exception exception)
-        {
-            Notify("PLC 通信检查失败", exception.Message, "Error");
-            return false;
-        }
+        ApplyOperationResult(
+            await PlcConnectionWorkspace.CheckCommunicationAsync(
+                startMonitoringOnSuccess: false,
+                CancellationToken.None));
     }
 
     public async Task RefreshPlcMonitorAsync()
@@ -411,11 +395,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             PlcTrendResetRequested?.Invoke();
         }
 
-        if (!string.IsNullOrWhiteSpace(result.NotificationTitle)
-            && !string.IsNullOrWhiteSpace(result.NotificationMessage)
-            && !string.IsNullOrWhiteSpace(result.NotificationKind))
+        if (result.Notification is not null)
         {
-            Notify(result.NotificationTitle, result.NotificationMessage, result.NotificationKind);
+            ApplyOperationResult(result.Notification);
         }
     }
 
@@ -434,52 +416,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         PlcRecordingWorkspace.StopReplay();
-        await EnsurePlcMonitoringAsync(PlcConfigurationEditor.BuildConfiguration(), resetHistory: true);
-    }
-
-    private async Task EnsurePlcMonitoringAsync(
-        PlcProjectConfiguration configuration,
-        bool resetHistory)
-    {
         await PlcLiveWorkspace.StartAsync(
-            configuration,
-            resetHistory,
+            PlcConfigurationEditor.BuildConfiguration(),
+            resetHistory: true,
             CancellationToken.None);
     }
 
     public async Task TogglePlcLiveDiagnosticsAsync()
     {
-        if (Debug.IsDiagnosticsRunning)
-        {
-            await StopPlcLiveDiagnosticsAsync("诊断已手动停止。");
-            return;
-        }
-
-        if (!LiveMonitor.IsMonitoring)
-        {
-            Notify("无法启动实时诊断", "请先启动实时监控。", "Warning");
-            return;
-        }
-
-        await _plcDiagnosticsController.StartAsync(
-                PlcConfigurationEditor.BuildConfiguration(),
-            TimeSpan.FromMinutes(Debug.DiagnosticsDurationMinutes),
-            CancellationToken.None);
+        await PlcDiagnosticsWorkspace.ToggleAsync(CancellationToken.None);
     }
 
     private async Task StopPlcLiveDiagnosticsAsync(string reason)
     {
-        await _plcDiagnosticsController.StopAsync(reason, CancellationToken.None);
-    }
-
-    private void ApplyPlcDiagnosticsOperation(PlcDiagnosticsOperationResult result)
-    {
-        if (!string.IsNullOrWhiteSpace(result.NotificationTitle)
-            && !string.IsNullOrWhiteSpace(result.NotificationMessage)
-            && !string.IsNullOrWhiteSpace(result.NotificationKind))
-        {
-            Notify(result.NotificationTitle, result.NotificationMessage, result.NotificationKind);
-        }
+        await PlcDiagnosticsWorkspace.StopAsync(reason, CancellationToken.None);
     }
 
     public async Task RecordPlcOneSecondAsync()
@@ -608,52 +558,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var loadedFileName = await PlcConfigurationEditor.LoadFromFileAsync(fileName, CancellationToken.None);
-            LiveMonitor.ClearTags();
-            LiveMonitor.MonitorStatus = "PLC 配置已更新，等待刷新点位。";
-            Notify("PLC 配置已加载", loadedFileName, "Success");
-            await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: true);
-        }
-        catch (Exception exception)
-        {
-            Notify("PLC 配置加载失败", exception.Message, "Error");
-        }
+        ApplyOperationResult(await PlcConnectionWorkspace.LoadAsync(fileName, CancellationToken.None));
     }
 
     private Task AddTagAsync()
     {
-        PlcConfigurationEditor.AddTag();
-        Notify("点位已新增", "请编辑点位信息后保存 PLC 配置。", "Info");
+        ApplyOperationResult(PlcConfigurationEditor.AddTagOperation());
         return Task.CompletedTask;
     }
 
     private Task RemoveTagAsync()
     {
-        if (!PlcConfigurationEditor.RemoveSelectedTag())
-        {
-            Notify("无法删除点位", "请先选择要删除的点位。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        Notify("点位已删除", "请保存 PLC 配置以保留修改。", "Info");
+        ApplyOperationResult(PlcConfigurationEditor.RemoveSelectedTagOperation());
         return Task.CompletedTask;
     }
 
     public async Task SaveTestSessionAsync()
     {
-        try
-        {
-            var result = await _experimentWorkspace.SaveSessionAsync(
+        ApplyOperationResult(
+            await _experimentWorkspace.SaveSessionAsync(
                 FieldProfileEditor.Profile.ProfileName,
-                CancellationToken.None);
-            Notify(result.Title, result.Message, result.Kind);
-        }
-        catch (Exception exception)
-        {
-            Notify("试验记录保存失败", exception.Message, "Error");
-        }
+                CancellationToken.None));
     }
 
     public async Task LoadHistoryAsync()
@@ -663,7 +588,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task OpenHistorySessionAsync()
     {
-        ApplyExperimentWorkspaceOperation(
+        ApplyOperationResult(
             await _experimentWorkspace.OpenSelectedSessionAsync(CancellationToken.None));
     }
 
@@ -675,7 +600,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        ApplyExperimentWorkspaceOperation(
+        ApplyOperationResult(
             await _experimentWorkspace.ExportSelectedSamplesAsync(
                 FieldProfileEditor.Profile,
                 fileName,
@@ -684,12 +609,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ExportVisiblePlcTrendAsync(PlcTrendVisibleExport export)
     {
-        if (export.Points.Count == 0)
+        var validation = TrendExport.ValidateVisibleExport(export);
+        if (validation is not null)
         {
-            Notify(
-                "无法导出可见趋势",
-                "当前趋势画布没有可导出的可见数据点。",
-                "Warning");
+            ApplyOperationResult(validation);
             return;
         }
 
@@ -699,37 +622,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var result = await TrendExport.ExportVisibleAsync(
+        ApplyOperationResult(
+            await TrendExport.ExportVisibleResultAsync(
                 fileName,
                 export,
-                CancellationToken.None);
-
-            Notify(
-                "可见趋势已导出",
-                string.Join(
-                    Environment.NewLine,
-                    $"行数：{result.PointCount}",
-                    $"范围：{result.VisibleStart:yyyy-MM-dd HH:mm:ss.fff} - {result.VisibleEnd:yyyy-MM-dd HH:mm:ss.fff}",
-                    $"路径：{result.AbsolutePath}"),
-                "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("可见趋势导出失败", exception.Message, "Error");
-        }
+                CancellationToken.None));
     }
 
     public Task SetHistoryBaselineAsync()
     {
-        ApplyExperimentWorkspaceOperation(_experimentWorkspace.SetSelectedAsBaseline());
+        ApplyOperationResult(_experimentWorkspace.SetSelectedAsBaseline());
         return Task.CompletedTask;
     }
 
     public async Task CompareHistorySessionAsync()
     {
-        ApplyExperimentWorkspaceOperation(
+        ApplyOperationResult(
             await _experimentWorkspace.CompareSelectedSessionAsync(CancellationToken.None));
     }
 
@@ -748,7 +656,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var result = await _experimentWorkspace.LoadRecommendationReviewsAsync(CancellationToken.None);
         if (result is not null)
         {
-            ApplyExperimentWorkspaceOperation(result);
+            ApplyOperationResult(result);
         }
     }
 
@@ -759,14 +667,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CancellationToken.None);
         if (result is not null)
         {
-            ApplyExperimentWorkspaceOperation(result);
+            ApplyOperationResult(result);
         }
     }
 
     public async Task SaveParameterSetAsync()
     {
-        var result = await ParameterSetWorkspace.SaveLatestAsync(CancellationToken.None);
-        Notify(result.Title, result.Message, result.Kind);
+        ApplyOperationResult(await ParameterSetWorkspace.SaveLatestAsync(CancellationToken.None));
     }
 
     public async Task LoadParameterSetsAsync()
@@ -776,7 +683,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ReviewRecommendationAsync(PidRecommendationReviewDecision decision)
     {
-        ApplyExperimentWorkspaceOperation(
+        ApplyOperationResult(
             await _experimentWorkspace.ReviewSelectedRecommendationAsync(
                 decision,
                 CancellationToken.None));
@@ -787,15 +694,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var result = await ParameterSetWorkspace.LoadAsync(showNotification, CancellationToken.None);
         if (result is not null)
         {
-            Notify(result.Title, result.Message, result.Kind);
+            ApplyOperationResult(result);
         }
     }
 
     private async Task ExportAnalysisResultAsync()
     {
-        if (!OfflineAnalysis.CanExportLastResult)
+        var validation = OfflineAnalysis.ValidateLastResultExport();
+        if (validation is not null)
         {
-            Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
+            ApplyOperationResult(validation);
             return;
         }
 
@@ -805,39 +713,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var savedPath = await OfflineAnalysis.ExportLastResultAsync(fileName, CancellationToken.None);
-            if (savedPath is null)
-            {
-                Notify("无法导出分析结果", "请先导入 CSV 并完成一次分析。", "Warning");
-                return;
-            }
-
-            Notify("分析结果已导出", savedPath, "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("分析结果导出失败", exception.Message, "Error");
-        }
+        ApplyOperationResult(
+            await OfflineAnalysis.ExportLastResultOperationAsync(fileName, CancellationToken.None));
     }
 
     private Task AddFieldAsync()
     {
-        FieldProfileEditor.AddField();
-        Notify("字段已新增", "请编辑字段信息后保存字段配置。", "Info");
+        ApplyOperationResult(FieldProfileEditor.AddFieldOperation());
         return Task.CompletedTask;
     }
 
     private Task RemoveFieldAsync()
     {
-        if (!FieldProfileEditor.RemoveSelectedField())
-        {
-            Notify("无法删除字段", "请先选择要删除的字段。", "Warning");
-            return Task.CompletedTask;
-        }
-
-        Notify("字段已删除", "请保存字段配置以保留修改。", "Info");
+        ApplyOperationResult(FieldProfileEditor.RemoveSelectedFieldOperation());
         return Task.CompletedTask;
     }
 
@@ -849,15 +737,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var savedPath = await FieldProfileEditor.SaveToFileAsync(fileName, CancellationToken.None);
-            Notify("字段配置已保存", savedPath, "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("字段配置保存失败", exception.Message, "Error");
-        }
+        ApplyOperationResult(
+            await FieldProfileEditor.SaveOperationAsync(fileName, CancellationToken.None));
     }
 
     private async Task LoadFieldProfileAsync()
@@ -868,15 +749,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            var loadedFileName = await FieldProfileEditor.LoadFromFileAsync(fileName, CancellationToken.None);
-            Notify("字段配置已加载", loadedFileName, "Success");
-        }
-        catch (Exception exception)
-        {
-            Notify("字段配置加载失败", exception.Message, "Error");
-        }
+        ApplyOperationResult(
+            await FieldProfileEditor.LoadOperationAsync(fileName, CancellationToken.None));
     }
 
     private async Task ImportCsvAsync()
@@ -887,20 +761,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        try
-        {
-            await AnalyzeCsvFileAsync(fileName);
-        }
-        catch (Exception exception)
-        {
-            Notify("离线分析失败", exception.Message, "Error");
-        }
-    }
-
-    private async Task AnalyzeCsvFileAsync(string fileName)
-    {
-        var result = await OfflineAnalysis.AnalyzeCsvFileAsync(fileName, FieldProfileEditor.Profile, CancellationToken.None);
-        Notify("离线分析已完成", $"{result.SourceFileName}，样本 {result.SampleCount} 条。", "Success");
+        ApplyOperationResult(
+            await OfflineAnalysis.AnalyzeCsvFileOperationAsync(
+                fileName,
+                FieldProfileEditor.Profile,
+                CancellationToken.None));
     }
 
     private Task DismissNotificationAsync()
@@ -909,7 +774,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return Task.CompletedTask;
     }
 
-    private void ApplyExperimentWorkspaceOperation(ExperimentWorkspaceOperationResult result)
+    private void ApplyOperationResult(IWorkspaceOperationResult result)
     {
         Notify(result.Title, result.Message, result.Kind);
     }

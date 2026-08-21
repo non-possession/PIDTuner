@@ -218,7 +218,7 @@ public sealed class ExperimentWorkspaceViewModel(
         new(samples.Min(sample => sample.Timestamp), samples.Max(sample => sample.Timestamp));
 }
 
-public sealed record ExperimentWorkspaceOperationResult(string Title, string Message, string Kind)
+public sealed record ExperimentWorkspaceOperationResult(string Title, string Message, string Kind) : IWorkspaceOperationResult
 {
     public static ExperimentWorkspaceOperationResult Success(string title, string message) =>
         new(title, message, "Success");

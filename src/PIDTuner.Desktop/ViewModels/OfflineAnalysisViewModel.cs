@@ -230,6 +230,31 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
         return new OfflineCsvAnalysisResult(Path.GetFileName(fileName), result.Samples.Count);
     }
 
+    public async Task<WorkspaceOperationResult> AnalyzeCsvFileOperationAsync(
+        string fileName,
+        PidSampleFieldProfile fieldProfile,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await AnalyzeCsvFileAsync(fileName, fieldProfile, cancellationToken);
+            return WorkspaceOperationResult.Success(
+                "离线分析已完成",
+                $"{result.SourceFileName}：读取 {result.SampleCount} 条样本");
+        }
+        catch (Exception exception)
+        {
+            return WorkspaceOperationResult.Error("离线分析失败", exception.Message);
+        }
+    }
+
+    public WorkspaceOperationResult? ValidateLastResultExport() =>
+        CanExportLastResult
+            ? null
+            : WorkspaceOperationResult.Warning(
+                "无法导出分析结果",
+                "请先导入 CSV 并完成一次分析。");
+
     public async Task<string?> ExportLastResultAsync(string fileName, CancellationToken cancellationToken)
     {
         var window = LastAnalysisWindow;
@@ -249,6 +274,31 @@ public sealed class OfflineAnalysisViewModel : INotifyPropertyChanged
             assessment,
             cancellationToken);
         return Path.GetFullPath(fileName);
+    }
+
+    public async Task<WorkspaceOperationResult> ExportLastResultOperationAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateLastResultExport();
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        try
+        {
+            var savedPath = await ExportLastResultAsync(fileName, cancellationToken);
+            return savedPath is null
+                ? WorkspaceOperationResult.Warning(
+                    "无法导出分析结果",
+                    "请先导入 CSV 并完成一次分析。")
+                : WorkspaceOperationResult.Success("分析结果已导出", savedPath);
+        }
+        catch (Exception exception)
+        {
+            return WorkspaceOperationResult.Error("分析结果导出失败", exception.Message);
+        }
     }
 
     public PidResponseMetrics AnalyzeSamples(

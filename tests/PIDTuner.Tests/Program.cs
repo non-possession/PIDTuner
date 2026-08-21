@@ -1580,6 +1580,13 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("pid-sample-fields.example.json", StringComparison.Ordinal), "main view model example path knowledge");
     AssertEqual(false, source.Contains("offline-step-response.csv", StringComparison.Ordinal), "main view model example csv path knowledge");
     AssertEqual(false, source.Contains("File.Exists", StringComparison.Ordinal), "main view model example file validation");
+    AssertEqual(false, source.Contains("_plcDiagnosticsController", StringComparison.Ordinal), "main view model diagnostics controller ownership");
+    AssertEqual(false, source.Contains("ApplyPlcDiagnosticsOperation", StringComparison.Ordinal), "main view model diagnostics result interpretation");
+    AssertEqual(false, source.Contains("CheckPlcCommunicationInternalAsync", StringComparison.Ordinal), "main view model plc connection workflow");
+    AssertEqual(false, source.Contains("        try", StringComparison.Ordinal), "main view model business exception handling");
+    AssertEqual(false, source.Contains("export.Points.Count", StringComparison.Ordinal), "main view model trend export validation");
+    AssertEqual(false, source.Contains("OfflineAnalysis.CanExportLastResult", StringComparison.Ordinal), "main view model analysis export validation");
+    AssertEqual(false, source.Contains("AnalyzeCsvFileAsync(fileName", StringComparison.Ordinal), "main view model offline analysis implementation");
     return Task.CompletedTask;
 }
 
@@ -1614,7 +1621,9 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
     viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
     await viewModel.TogglePlcMonitoringAsync();
-    await WaitUntilAsync(() => reader.SessionReadCount >= 3);
+    await WaitUntilAsync(() =>
+        reader.SessionReadCount >= 3
+        && historicalStore.LastSession?.EnqueueCount >= 3);
     AssertEqual(
         true,
         historicalStore.LastSession!.EnqueueCount >= 3,

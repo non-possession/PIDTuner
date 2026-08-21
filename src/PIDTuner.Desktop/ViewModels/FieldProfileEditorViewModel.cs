@@ -78,6 +78,47 @@ public sealed class FieldProfileEditorViewModel : INotifyPropertyChanged
         return Path.GetFullPath(fileName);
     }
 
+    public async Task<WorkspaceOperationResult> LoadOperationAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var loadedFileName = await LoadFromFileAsync(fileName, cancellationToken);
+            return WorkspaceOperationResult.Success("字段配置已加载", loadedFileName);
+        }
+        catch (Exception exception)
+        {
+            return WorkspaceOperationResult.Error("字段配置加载失败", exception.Message);
+        }
+    }
+
+    public async Task<WorkspaceOperationResult> SaveOperationAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var savedPath = await SaveToFileAsync(fileName, cancellationToken);
+            return WorkspaceOperationResult.Success("字段配置已保存", savedPath);
+        }
+        catch (Exception exception)
+        {
+            return WorkspaceOperationResult.Error("字段配置保存失败", exception.Message);
+        }
+    }
+
+    public WorkspaceOperationResult AddFieldOperation()
+    {
+        AddField();
+        return WorkspaceOperationResult.Info("字段已新增", "请编辑字段信息后保存字段配置。");
+    }
+
+    public WorkspaceOperationResult RemoveSelectedFieldOperation() =>
+        RemoveSelectedField()
+            ? WorkspaceOperationResult.Info("字段已删除", "请保存字段配置以保留修改。")
+            : WorkspaceOperationResult.Warning("无法删除字段", "请先选择要删除的字段。");
+
     public void AddField()
     {
         var index = FieldDefinitions.Count + 1;

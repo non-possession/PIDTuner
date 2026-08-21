@@ -94,3 +94,16 @@ MainVM 中重复的前置校验、`try/catch` 和用户消息构造，应逐步�
 - 每一步迁移完成后，完整构建和回归测试必须通过。
 
 代码行数下降是职责迁移后的结果，而不是验收标准。MainVM 最终约 700 至 900 行仅作为规划估算，职责边界和控制脉络的清晰度优先。
+
+## P1-P6 完成检查点
+
+截至 2026-08-21，既定六项迁移已完成：
+
+- P1：实时采集会话、刷新和帧分发归属 `PlcLiveWorkspaceViewModel`。
+- P2：实时/历史模式、范围和坐标轴动作归属 `PlcTrendWorkspaceViewModel`。
+- P3：一秒记录、文件加载和回放归属 `PlcRecordingWorkspaceViewModel`。
+- P4：参数集输入组装和持久化协调归属 `ParameterSetWorkspaceViewModel`。
+- P5：示例定位、校验和有序加载归属 `ExampleWorkspaceWorkflow`。
+- P6：PLC 连接、诊断生命周期和用户操作结果分别归属专用工作区，并统一使用 `WorkspaceOperationResult`。
+
+MainVM 仅保留文件对话框入口、子模块命令委托、跨模块事件转发和全局通知展示。架构测试禁止重新引入业务异常处理、导出校验、PLC 控制器所有权和配置内部流程。
