@@ -20,6 +20,8 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
     private bool _isMonitoring;
     private bool _isLiveTrendPaused;
     private int _currentAcquisitionIntervalMilliseconds;
+    private string _monitorStatus = "尚未刷新点位。";
+    private string _acquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
     private PlcTagMonitorViewModel? _selectedTag;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -42,6 +44,18 @@ public sealed class PlcLiveMonitorViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<PlcTagMonitorViewModel> RightAxisTags =>
         Tags.Where(tag => tag.IsTrendVisible && tag.AxisGroup == "Y2").ToArray();
+
+    public string MonitorStatus
+    {
+        get => _monitorStatus;
+        set => SetProperty(ref _monitorStatus, value);
+    }
+
+    public string AcquisitionDiagnosticsStatus
+    {
+        get => _acquisitionDiagnosticsStatus;
+        set => SetProperty(ref _acquisitionDiagnosticsStatus, value);
+    }
 
     public PlcTagMonitorViewModel? SelectedTag
     {

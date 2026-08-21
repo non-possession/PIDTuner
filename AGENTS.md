@@ -36,6 +36,8 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - PLC live refresh timing belongs to `PlcLiveMonitoringController`.
 - PLC session capability detection and single-read fallback belong to `PlcSnapshotSessionFactory`.
 - Debug settings and status bind directly through `PlcDebugViewModel`; do not recreate MainVM proxy properties.
+- PLC communication status belongs to `PlcConfigurationEditorViewModel`.
+- Live monitor and acquisition diagnostics status belong to `PlcLiveMonitorViewModel`.
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.
 - Infrastructure adapters are created only in composition modules.

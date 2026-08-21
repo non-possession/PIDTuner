@@ -35,9 +35,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
-    private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
-    private string _plcMonitorStatus = "尚未刷新点位。";
-    private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
+    public string PlcCommunicationStatus
+    {
+        get => PlcConfigurationEditor.CommunicationStatus;
+        set => PlcConfigurationEditor.CommunicationStatus = value;
+    }
+
+    public string PlcMonitorStatus
+    {
+        get => LiveMonitor.MonitorStatus;
+        set => LiveMonitor.MonitorStatus = value;
+    }
+
+    public string PlcAcquisitionDiagnosticsStatus
+    {
+        get => LiveMonitor.AcquisitionDiagnosticsStatus;
+        set => LiveMonitor.AcquisitionDiagnosticsStatus = value;
+    }
 
     public MainWindowViewModel()
         : this(
@@ -238,24 +252,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
-    }
-
-    public string PlcCommunicationStatus
-    {
-        get => _plcCommunicationStatus;
-        private set => SetProperty(ref _plcCommunicationStatus, value);
-    }
-
-    public string PlcMonitorStatus
-    {
-        get => _plcMonitorStatus;
-        private set => SetProperty(ref _plcMonitorStatus, value);
-    }
-
-    public string PlcAcquisitionDiagnosticsStatus
-    {
-        get => _plcAcquisitionDiagnosticsStatus;
-        private set => SetProperty(ref _plcAcquisitionDiagnosticsStatus, value);
     }
 
     public ICommand ImportCsvCommand { get; }

@@ -1323,8 +1323,8 @@ static async Task MainViewModelChecksPlcCommunicationThroughInjectedProbe()
     await viewModel.CheckPlcCommunicationAsync();
 
     AssertEqual("PLC 通信检查通过", viewModel.Notification.Title, "plc communication notification title");
-    AssertContains("127.0.0.1", viewModel.PlcCommunicationStatus);
-    AssertContains("Ping 成功", viewModel.PlcCommunicationStatus);
+    AssertContains("127.0.0.1", viewModel.PlcConfigurationEditor.CommunicationStatus);
+    AssertContains("Ping 成功", viewModel.PlcConfigurationEditor.CommunicationStatus);
 }
 
 static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
@@ -1349,7 +1349,7 @@ static async Task MainViewModelRefreshesPlcMonitorSnapshotsAndTrends()
     viewModel.PlcConfigurationEditor.TagDefinitions[0].Address = editedAddress;
     await viewModel.RefreshPlcMonitorAsync();
     AssertEqual(editedAddress, viewModel.LiveMonitor.Tags[0].Address, "monitor address after configuration edit");
-    AssertContains("已刷新", viewModel.PlcMonitorStatus);
+    AssertContains("已刷新", viewModel.LiveMonitor.MonitorStatus);
 }
 
 static async Task SqlitePlcHistoricalStoreQueriesPlannedTimeFrames()
@@ -1547,6 +1547,9 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("PlcConfigurationEditor_PropertyChanged", StringComparison.Ordinal), "main view model configuration property forwarding");
     AssertEqual(false, source.Contains("OfflineAnalysis_PropertyChanged", StringComparison.Ordinal), "main view model analysis property forwarding");
     AssertEqual(false, source.Contains("ExperimentHistory_PropertyChanged", StringComparison.Ordinal), "main view model experiment history property forwarding");
+    AssertEqual(false, source.Contains("_plcCommunicationStatus", StringComparison.Ordinal), "main view model communication status ownership");
+    AssertEqual(false, source.Contains("_plcMonitorStatus", StringComparison.Ordinal), "main view model monitor status ownership");
+    AssertEqual(false, source.Contains("_plcAcquisitionDiagnosticsStatus", StringComparison.Ordinal), "main view model acquisition status ownership");
     return Task.CompletedTask;
 }
 
@@ -1636,7 +1639,7 @@ static async Task MainViewModelShowsLiveSnapshotsAsHistoricalTrend()
     await viewModel.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
     AssertEqual(true, viewportRequestCount >= 3, "live historical preset requests viewport update");
     AssertEqual(true, viewModel.PlcTrendMode.IsHistoricalMode, "live historical preset keeps trend mode");
-    AssertContains("历史趋势窗口", viewModel.PlcMonitorStatus);
+    AssertContains("历史趋势窗口", viewModel.LiveMonitor.MonitorStatus);
     await viewModel.ShowPlcLiveTrendAsync();
     AssertEqual(true, viewModel.LiveMonitor.IsMonitoring, "live trend resumes without stopping acquisition");
     await viewModel.TogglePlcMonitoringAsync();
@@ -1667,7 +1670,7 @@ static async Task MainViewModelReusesPlcSessionWhileLiveMonitoring()
     AssertEqual(true, reader.SessionReadCount >= 3, "live monitor session read count");
     AssertEqual(0, reader.ReadCount, "live monitor single read count");
     AssertEqual(true, lastTrendTimestamp.HasValue, "live monitor planned trend timestamp");
-    AssertContains("SQLite 写入已关闭", viewModel.PlcAcquisitionDiagnosticsStatus);
+    AssertContains("SQLite 写入已关闭", viewModel.LiveMonitor.AcquisitionDiagnosticsStatus);
 }
 
 static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()

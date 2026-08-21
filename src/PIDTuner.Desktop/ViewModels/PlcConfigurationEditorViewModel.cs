@@ -17,6 +17,7 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
     private int _defaultSamplingMilliseconds;
     private int _minimumSamplingMilliseconds;
     private string _status = "PLC 配置尚未保存。";
+    private string _communicationStatus = "尚未检查 PLC 通信。";
     private ObservableCollection<TagDefinitionViewModel> _tagDefinitions = [];
     private TagDefinitionViewModel? _selectedTagDefinition;
 
@@ -80,6 +81,12 @@ public sealed class PlcConfigurationEditorViewModel : INotifyPropertyChanged
     {
         get => _status;
         private set => SetProperty(ref _status, value);
+    }
+
+    public string CommunicationStatus
+    {
+        get => _communicationStatus;
+        set => SetProperty(ref _communicationStatus, value);
     }
 
     public ObservableCollection<TagDefinitionViewModel> TagDefinitions
