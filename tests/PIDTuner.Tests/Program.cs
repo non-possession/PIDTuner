@@ -1562,6 +1562,11 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("_plcTrendVisibleExportWorkflow", StringComparison.Ordinal), "main view model trend export workflow ownership");
     AssertEqual(false, source.Contains("_lastPlcRecordingFrames", StringComparison.Ordinal), "main view model historical frame ownership");
     AssertEqual(false, source.Contains("LastPlcRecordingFrames", StringComparison.Ordinal), "main view model historical frame proxy");
+    AssertEqual(false, source.Contains("_plcLiveMonitoringController", StringComparison.Ordinal), "main view model live monitoring controller ownership");
+    AssertEqual(false, source.Contains("_plcSnapshotSessionFactory", StringComparison.Ordinal), "main view model snapshot session ownership");
+    AssertEqual(false, source.Contains("_plcMonitorSnapshotPresenter", StringComparison.Ordinal), "main view model snapshot presenter ownership");
+    AssertEqual(false, source.Contains("ApplyBufferedLiveMonitorFrames", StringComparison.Ordinal), "main view model live frame distribution");
+    AssertEqual(false, source.Contains("ApplyPlcMonitorSnapshots", StringComparison.Ordinal), "main view model snapshot presentation");
     return Task.CompletedTask;
 }
 

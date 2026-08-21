@@ -26,6 +26,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 ## Module Placement
 
 - PLC live acquisition state belongs to `PlcLiveMonitorViewModel` and its supporting modules.
+- PLC refresh, acquisition lifecycle coordination, and live frame distribution belong to `PlcLiveWorkspaceViewModel`.
 - Historical trend state belongs to `HistoricalTrendViewModel` / `HistoricalTrendWorkbenchViewModel`.
 - The current historical frame set belongs to `HistoricalTrendViewModel`; MainVM must not retain a duplicate frame list.
 - Historical persistence lifecycle belongs to `PlcHistoricalAcquisitionWriter`.
