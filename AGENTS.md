@@ -48,6 +48,69 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Infrastructure adapters are created only in composition modules.
 - Views contain visual interaction logic only; persistence and domain workflows do not belong in code-behind.
 
+## MainVM Migration Roadmap
+
+Migrate the remaining business behavior in this order. Preserve existing public behavior and commit each architecture change independently.
+
+### P1: PLC Live Workspace
+
+Create a `PlcLiveWorkspaceViewModel` (or an equivalently focused module) to own:
+
+- PLC refresh and one-shot snapshot reads.
+- Live acquisition start/stop coordination.
+- Distribution of acquisition frames to monitor rows, diagnostics, and historical buffering.
+- Live acquisition status and failure-result construction.
+
+`MainWindowViewModel` may forward resulting chart events and global notifications, but must not iterate acquisition frames or coordinate acquisition resources itself.
+
+### P2: PLC Trend Workspace
+
+Create a `PlcTrendWorkspaceViewModel` to coordinate:
+
+- Live/historical mode transitions.
+- Historical-window loading and visible-range operations.
+- Single-axis/dual-axis state transitions.
+- Historical frame publication to the historical chart adapter.
+- Pause, reset, and mode-specific chart behavior.
+
+The live and historical chart adapters remain separate. Shared plotting contracts and export models may be reused by both.
+
+### P3: PLC Recording And Replay
+
+Move the remaining one-second recording and recording-load workflow out of MainVM. The owning debug/recording workspace must coordinate:
+
+- Recording start, completion, validation, and result status.
+- JSON recording load and replay initialization.
+- Replay frame/batch application requests.
+- Transitions between replay, live trend, and historical trend state.
+
+`PlcOneSecondRecorder`, `PlcReplayController`, and `PlcDebugViewModel` remain focused supporting modules; MainVM must not reconstruct their business results.
+
+### P4: Parameter-Set Coordination
+
+Move construction of parameter-set save inputs out of MainVM. A parameter-set or experiment workspace must obtain the latest samples, session identity, and source metadata through an explicit operation contract.
+
+### P5: Example Loading
+
+Move repository-path discovery, example-file validation, and ordered example loading into an `ExampleWorkspaceWorkflow`. MainVM may trigger the workflow and display its result only.
+
+### P6: Operation Results
+
+Continue replacing repeated validation, `try/catch`, and user-message formatting in MainVM with typed child-operation results. File-dialog selection and final global-notification display may remain in MainVM.
+
+## MainVM Completion Criteria
+
+The MainVM refactor is complete when:
+
+- MainVM retains no PLC acquisition, recording, replay, historical-query, export, or parameter-set business state.
+- MainVM does not iterate, filter, merge, retain, or interpret PLC frames.
+- Command handlers primarily select files, call one child operation, bridge an event, or display one operation result.
+- Cross-module transitions are expressed through named workspace operations instead of sequences of child mutations in MainVM.
+- Architecture tests reject reintroduction of migrated fields, workflow dependencies, proxy properties, and frame-processing calls.
+- Full build and regression tests pass after every migration step.
+
+Reducing line count is an expected consequence, not the acceptance criterion. A final size around 700-900 lines is a planning estimate; responsibility boundaries and readable control flow take precedence.
+
 ## Verification
 
 - Every behavior change must include focused regression coverage.
