@@ -1575,6 +1575,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("_plcReplayController", StringComparison.Ordinal), "main view model replay controller ownership");
     AssertEqual(false, source.Contains("ApplyPlcReplayOperation", StringComparison.Ordinal), "main view model replay result interpretation");
     AssertEqual(false, source.Contains("EnsurePlcReplayLoaded", StringComparison.Ordinal), "main view model replay validation");
+    AssertEqual(false, source.Contains("OfflineAnalysis.LastSamples", StringComparison.Ordinal), "main view model parameter set sample assembly");
+    AssertEqual(false, source.Contains("ParameterSetLibrary.SaveAsync", StringComparison.Ordinal), "main view model parameter set persistence");
     return Task.CompletedTask;
 }
 

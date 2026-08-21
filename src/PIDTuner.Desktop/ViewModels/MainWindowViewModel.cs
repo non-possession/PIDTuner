@@ -138,6 +138,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ParameterSetLibrary = new ParameterSetLibraryViewModel(
             resolvedParameterSetRepository,
             new PidParameterSetExtractor());
+        ParameterSetWorkspace = new ParameterSetWorkspaceViewModel(ParameterSetLibrary, OfflineAnalysis);
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -215,6 +216,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ExperimentHistoryViewModel ExperimentHistory { get; }
 
     public ParameterSetLibraryViewModel ParameterSetLibrary { get; }
+
+    public ParameterSetWorkspaceViewModel ParameterSetWorkspace { get; }
 
     public HistoricalTrendViewModel HistoricalTrend { get; }
 
@@ -775,19 +778,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task SaveParameterSetAsync()
     {
-        try
-        {
-            var result = await ParameterSetLibrary.SaveAsync(
-                OfflineAnalysis.LastSamples,
-                OfflineAnalysis.LastTestSessionId == Guid.Empty ? null : OfflineAnalysis.LastTestSessionId,
-                OfflineAnalysis.LastSourceFileName,
-                CancellationToken.None);
-            Notify(result.Title, result.Message, result.Kind);
-        }
-        catch (Exception exception)
-        {
-            Notify("参数方案保存失败", exception.Message, "Error");
-        }
+        var result = await ParameterSetWorkspace.SaveLatestAsync(CancellationToken.None);
+        Notify(result.Title, result.Message, result.Kind);
     }
 
     public async Task LoadParameterSetsAsync()
@@ -805,19 +797,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task LoadParameterSetsAsync(bool showNotification)
     {
-        try
+        var result = await ParameterSetWorkspace.LoadAsync(showNotification, CancellationToken.None);
+        if (result is not null)
         {
-            await ParameterSetLibrary.LoadAsync(CancellationToken.None);
-
-            if (showNotification)
-            {
-                Notify("参数方案已刷新", ParameterSetLibrary.Status, "Info");
-            }
-        }
-        catch (Exception exception)
-        {
-            ParameterSetLibrary.MarkLoadFailed();
-            Notify("参数方案加载失败", exception.Message, "Error");
+            Notify(result.Title, result.Message, result.Kind);
         }
     }
 

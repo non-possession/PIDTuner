@@ -47,6 +47,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Offline analysis import, result state, and result export belong to `OfflineAnalysisViewModel`.
 - Field-profile construction, validation, loading, and saving belong to `FieldProfileEditorViewModel`.
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
+- Parameter-set input assembly and persistence coordination belong to `ParameterSetWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.
 - Infrastructure adapters are created only in composition modules.
 - Views contain visual interaction logic only; persistence and domain workflows do not belong in code-behind.
