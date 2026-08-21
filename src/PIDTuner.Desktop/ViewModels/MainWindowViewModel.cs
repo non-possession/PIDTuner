@@ -38,9 +38,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _plcCommunicationStatus = "尚未检查 PLC 通信。";
     private string _plcMonitorStatus = "尚未刷新点位。";
     private string _plcAcquisitionDiagnosticsStatus = "采集诊断：尚未记录。";
-    private const int MaxPlcDiagnosticsDurationMinutes = 30;
-
-    private int _plcDiagnosticsDurationMinutes = 10;
 
     public MainWindowViewModel()
         : this(
@@ -122,7 +119,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _plcMonitorSnapshotPresenter.SnapshotsApplied += (snapshots, trendTimestamp) =>
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
         Debug = new PlcDebugViewModel(LiveMonitor.Tags, liveDiagnosticsStore);
-        Debug.PropertyChanged += Debug_PropertyChanged;
         _plcReplayController = new PlcReplayController(Debug, ApplyPlcReplayOperation);
         _plcDiagnosticsController = new PlcDiagnosticsController(Debug, ApplyPlcDiagnosticsOperation);
         PlcConfigurationEditor = new PlcConfigurationEditorViewModel(PlcProjectConfiguration.CreateDefault());
@@ -269,28 +265,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _plcAcquisitionDiagnosticsStatus, value);
     }
 
-    public string PlcLiveDiagnosticsStatus => Debug.DiagnosticsStatus;
-
-    public int PlcDiagnosticsDurationMinutes
-    {
-        get => _plcDiagnosticsDurationMinutes;
-        set => SetProperty(ref _plcDiagnosticsDurationMinutes, Math.Clamp(value, 1, MaxPlcDiagnosticsDurationMinutes));
-    }
-
-    public bool IsPlcLiveDiagnosticsRunning => Debug.IsDiagnosticsRunning;
-
-    public string PlcLiveDiagnosticsButtonText => Debug.DiagnosticsButtonText;
-
-    public string PlcReplayStatus
-    {
-        get => Debug.ReplayStatus;
-        private set
-        {
-            Debug.ReplayStatus = value;
-            OnPropertyChanged();
-        }
-    }
-
     public string PlcTrendModeStatus
     {
         get => PlcTrendMode.Status;
@@ -319,27 +293,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => LiveMonitor.CurrentAcquisitionIntervalMilliseconds = value;
     }
 
-    public string PlcReplaySpeedText => Debug.ReplaySpeedText;
-
     public bool IsPlcMonitoring
     {
         get => LiveMonitor.IsMonitoring;
         private set => LiveMonitor.IsMonitoring = value;
-    }
-
-    public bool IsPlcReplayRunning
-    {
-        get => Debug.IsReplayRunning;
-        private set
-        {
-            if (value)
-            {
-                return;
-            }
-
-            Debug.StopReplay();
-            OnPropertyChanged();
-        }
     }
 
     public string NotificationTitle
@@ -570,33 +527,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ParameterSetLibrary));
     }
 
-    private void Debug_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        switch (e.PropertyName)
-        {
-            case nameof(PlcDebugViewModel.ReplayStatus):
-                OnPropertyChanged(nameof(PlcReplayStatus));
-                break;
-            case nameof(PlcDebugViewModel.IsReplayRunning):
-                OnPropertyChanged(nameof(IsPlcReplayRunning));
-                break;
-            case nameof(PlcDebugViewModel.ReplaySpeedText):
-            case nameof(PlcDebugViewModel.ReplaySpeedMultiplier):
-                OnPropertyChanged(nameof(PlcReplaySpeedText));
-                break;
-            case nameof(PlcDebugViewModel.DiagnosticsStatus):
-                OnPropertyChanged(nameof(PlcLiveDiagnosticsStatus));
-                break;
-            case nameof(PlcDebugViewModel.IsDiagnosticsRunning):
-                OnPropertyChanged(nameof(IsPlcLiveDiagnosticsRunning));
-                OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
-                break;
-            case nameof(PlcDebugViewModel.DiagnosticsButtonText):
-                OnPropertyChanged(nameof(PlcLiveDiagnosticsButtonText));
-                break;
-        }
-    }
-
     public async Task SavePlcConfigurationAsync()
     {
         var fileName = _openFileDialogService.PickPlcProjectConfigurationSaveFile();
@@ -765,7 +695,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task TogglePlcLiveDiagnosticsAsync()
     {
-        if (IsPlcLiveDiagnosticsRunning)
+        if (Debug.IsDiagnosticsRunning)
         {
             await StopPlcLiveDiagnosticsAsync("诊断已手动停止。");
             return;
@@ -779,7 +709,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         await _plcDiagnosticsController.StartAsync(
             BuildPlcConfigurationFromForm(),
-            TimeSpan.FromMinutes(PlcDiagnosticsDurationMinutes),
+            TimeSpan.FromMinutes(Debug.DiagnosticsDurationMinutes),
             CancellationToken.None);
     }
 
@@ -1466,15 +1396,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         var result = await OfflineAnalysis.AnalyzeCsvFileAsync(fileName, FieldProfileEditor.Profile, CancellationToken.None);
         Notify("离线分析已完成", $"{result.SourceFileName}，样本 {result.SampleCount} 条。", "Success");
-    }
-
-    private void ApplyAnalysisResult(
-        string sourceName,
-        IReadOnlyList<PidSample> samples,
-        AnalysisWindow window,
-        PidResponseMetrics metrics)
-    {
-        OfflineAnalysis.ApplyResult(sourceName, samples, window, metrics);
     }
 
     private Task DismissNotificationAsync()

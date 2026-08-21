@@ -1537,6 +1537,9 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("DrainPresentedFrames", StringComparison.Ordinal), "main view model sample buffer draining");
     AssertEqual(false, source.Contains("IPlcTagSnapshotSessionReader", StringComparison.Ordinal), "main view model plc session capability detection");
     AssertEqual(false, source.Contains("SingleReadSnapshotSession", StringComparison.Ordinal), "main view model plc session fallback");
+    AssertEqual(false, source.Contains("public int PlcDiagnosticsDurationMinutes", StringComparison.Ordinal), "main view model diagnostics duration proxy");
+    AssertEqual(false, source.Contains("public string PlcReplayStatus", StringComparison.Ordinal), "main view model replay status proxy");
+    AssertEqual(false, source.Contains("Debug_PropertyChanged", StringComparison.Ordinal), "main view model debug property forwarding");
     return Task.CompletedTask;
 }
 
@@ -1675,11 +1678,11 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
         plcRecordingStorageDirectory: Path.Combine(directory, "plc-recordings"));
     viewModel.PlcConfigurationEditor.DefaultSamplingMilliseconds = 50;
     viewModel.PlcConfigurationEditor.MinimumSamplingMilliseconds = 50;
-    viewModel.PlcDiagnosticsDurationMinutes = 40;
+    viewModel.Debug.DiagnosticsDurationMinutes = 40;
 
     await viewModel.TogglePlcLiveDiagnosticsAsync();
     AssertEqual(0, diagnosticsStore.StartCount, "diagnostics should not start without monitoring");
-    AssertEqual(30, viewModel.PlcDiagnosticsDurationMinutes, "diagnostics duration clamps to thirty minutes");
+    AssertEqual(30, viewModel.Debug.DiagnosticsDurationMinutes, "diagnostics duration clamps to thirty minutes");
 
     await viewModel.TogglePlcMonitoringAsync();
     await viewModel.TogglePlcLiveDiagnosticsAsync();
@@ -1690,7 +1693,7 @@ static async Task MainViewModelTogglesLiveDiagnosticsWhileMonitoring()
     AssertEqual(1, diagnosticsStore.StartCount, "diagnostics starts only when explicitly requested");
     AssertEqual(true, diagnosticsStore.LastSession is not null, "diagnostics session created");
     AssertEqual(true, diagnosticsStore.LastSession!.StopCount >= 1, "diagnostics session stopped");
-    AssertContains("帧", viewModel.PlcLiveDiagnosticsStatus);
+    AssertContains("帧", viewModel.Debug.DiagnosticsStatus);
 }
 
 static async Task MainViewModelFiltersDiagnosticsFramesBeforeSessionStart()
@@ -1882,16 +1885,16 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     AssertEqual(1, resetCount, "loaded plc trend reset count");
     AssertEqual(true, appliedCount > 0, "loaded plc trend applied count");
     AssertContains(Path.GetFullPath(recordingPath), loader.Notification.Message);
-    AssertContains("第 1/", loader.PlcReplayStatus);
+    AssertContains("第 1/", loader.Debug.ReplayStatus);
 
     await loader.SetPlcReplaySpeedAsync(2d);
-    AssertContains("速度 2x", loader.PlcReplayStatus);
+    AssertContains("速度 2x", loader.Debug.ReplayStatus);
 
     await loader.StepPlcReplayForwardAsync();
-    AssertContains("第 2/", loader.PlcReplayStatus);
+    AssertContains("第 2/", loader.Debug.ReplayStatus);
 
     await loader.StepPlcReplayBackwardAsync();
-    AssertContains("第 1/", loader.PlcReplayStatus);
+    AssertContains("第 1/", loader.Debug.ReplayStatus);
     AssertEqual(true, resetCount >= 2, "backward replay trend reset count");
 
     var appliedCountBeforeHistory = appliedCount;

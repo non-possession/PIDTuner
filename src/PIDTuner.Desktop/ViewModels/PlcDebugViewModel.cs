@@ -9,6 +9,8 @@ namespace PIDTuner.Desktop.ViewModels;
 
 public sealed class PlcDebugViewModel : INotifyPropertyChanged
 {
+    public const int MaxDiagnosticsDurationMinutes = 30;
+
     private string _diagnosticsStatus = "实时诊断：尚未启动。";
     private string _replayStatus = "尚未加载 PLC 记录。";
     private bool _isDiagnosticsRunning;
@@ -18,6 +20,7 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
     private int _replayNextFrameIndex;
     private int _replayDisplayedFrameIndex = -1;
     private int _sourceReplayIntervalMilliseconds = 100;
+    private int _diagnosticsDurationMinutes = 10;
     private readonly IPlcLiveDiagnosticsStore _diagnosticsStore;
     private IPlcLiveDiagnosticsSession? _diagnosticsSession;
 
@@ -109,6 +112,14 @@ public sealed class PlcDebugViewModel : INotifyPropertyChanged
     }
 
     public string DiagnosticsButtonText => IsDiagnosticsRunning ? "停止诊断" : "启动诊断";
+
+    public int DiagnosticsDurationMinutes
+    {
+        get => _diagnosticsDurationMinutes;
+        set => SetProperty(
+            ref _diagnosticsDurationMinutes,
+            Math.Clamp(value, 1, MaxDiagnosticsDurationMinutes));
+    }
 
     public bool IsReplayRunning
     {

@@ -861,12 +861,12 @@
                          VerticalAlignment="Center"
                          Margin="8,0,6,8"
                          Foreground="#374151" />
-              <TextBox Text="{Binding PlcDiagnosticsDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox Text="{Binding Debug.DiagnosticsDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
                        Width="44"
                        Height="28"
                        Margin="0,0,6,8" />
               <Button Command="{Binding TogglePlcLiveDiagnosticsCommand}"
-                      Content="{Binding PlcLiveDiagnosticsButtonText}"
+                                    Content="{Binding Debug.DiagnosticsButtonText}"
                       Width="88"
                       Height="36"
                       Margin="0,0,12,8" />
@@ -878,11 +878,11 @@
                          FontWeight="SemiBold"
                          Foreground="#374151"
                          TextWrapping="Wrap" />
-              <TextBlock Text="{Binding PlcReplayStatus}"
+                            <TextBlock Text="{Binding Debug.ReplayStatus}"
                          Margin="0,6,0,0"
                          Foreground="#374151"
                          TextWrapping="Wrap" />
-              <TextBlock Text="{Binding PlcLiveDiagnosticsStatus}"
+                            <TextBlock Text="{Binding Debug.DiagnosticsStatus}"
                          Margin="0,6,0,0"
                          Foreground="#374151"
                          TextWrapping="Wrap" />
