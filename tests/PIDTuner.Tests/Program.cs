@@ -1533,6 +1533,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("AnalyzeHistorySessionAsync", StringComparison.Ordinal), "main view model history comparison analysis");
     AssertEqual(false, source.Contains("FindRepositoryRoot", StringComparison.Ordinal), "main view model repository discovery");
     AssertEqual(false, source.Contains("DirectoryInfo", StringComparison.Ordinal), "main view model filesystem traversal");
+    AssertEqual(false, source.Contains("_monitorTimer", StringComparison.Ordinal), "main view model live refresh timer ownership");
+    AssertEqual(false, source.Contains("DrainPresentedFrames", StringComparison.Ordinal), "main view model sample buffer draining");
     return Task.CompletedTask;
 }
 

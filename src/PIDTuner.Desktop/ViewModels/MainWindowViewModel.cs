@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using PIDTuner.Application.Interfaces;
 using PIDTuner.Application.Services;
 using PIDTuner.Desktop.Commands;
@@ -32,7 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly PlcMonitorSnapshotPresenter _plcMonitorSnapshotPresenter;
     private readonly PlcReplayController _plcReplayController;
     private readonly PlcDiagnosticsController _plcDiagnosticsController;
-    private readonly DispatcherTimer _monitorTimer = new();
+    private readonly PlcLiveMonitoringController _plcLiveMonitoringController;
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
@@ -114,6 +113,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync, historicalWriter.Enqueue),
             historicalWriter);
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
+        _plcLiveMonitoringController = new PlcLiveMonitoringController(
+            LiveMonitor,
+            ApplyBufferedLiveMonitorFrames);
         _plcMonitorSnapshotPresenter = new PlcMonitorSnapshotPresenter(LiveMonitor.Tags);
         _plcMonitorSnapshotPresenter.SnapshotsApplied += (snapshots, trendTimestamp) =>
             PlcSnapshotsApplied?.Invoke(snapshots, trendTimestamp);
@@ -149,7 +151,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 Debug.UpdateReplayStatus(replayPhase);
             }
         };
-        _monitorTimer.Tick += (_, _) => ApplyBufferedLiveMonitorFrames();
         ImportCsvCommand = new AsyncCommand(ImportCsvAsync);
         LoadPlcConfigurationCommand = new AsyncCommand(LoadPlcConfigurationAsync);
         SavePlcConfigurationCommand = new AsyncCommand(SavePlcConfigurationAsync);
@@ -656,7 +657,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             if (IsPlcMonitoring)
             {
-                ApplyBufferedLiveMonitorFrames();
+                _plcLiveMonitoringController.DrainNow();
                 return;
             }
 
@@ -691,14 +692,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private void ApplyBufferedLiveMonitorFrames()
+    private void ApplyBufferedLiveMonitorFrames(PlcLiveMonitorDrainResult result)
     {
-        var result = LiveMonitor.DrainPresentedFrames();
-        if (result.Frames.Count == 0)
-        {
-            return;
-        }
-
         foreach (var frame in result.Frames)
         {
             ApplyPlcMonitorSnapshots(
@@ -719,8 +714,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task StopLiveMonitoringAsync()
     {
-        _monitorTimer.Stop();
-        var historicalSummary = await LiveMonitor.StopAsync();
+        var historicalSummary = await _plcLiveMonitoringController.StopAsync();
         if (historicalSummary is not null)
         {
             PlcAcquisitionDiagnosticsStatus =
@@ -757,11 +751,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             HistoricalTrend.ClearLiveFrames();
         }
 
-        var result = await LiveMonitor.StartAsync(
+        var result = await _plcLiveMonitoringController.StartAsync(
             configuration,
             CancellationToken.None);
-        _monitorTimer.Interval = result.UiRefreshInterval;
-        _monitorTimer.Start();
         PlcMonitorStatus = result.MonitorStatus;
         PlcAcquisitionDiagnosticsStatus =
             $"历史数据：SQLite 写入中，{result.HistoricalDatabasePath}";
@@ -908,7 +900,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         StopPlcReplay();
         UsePlcLiveTrendMode();
         PlcTrendResetRequested?.Invoke();
-        ApplyBufferedLiveMonitorFrames();
+        _plcLiveMonitoringController.DrainNow();
     }
 
     public void UsePlcLiveTrendMode()
