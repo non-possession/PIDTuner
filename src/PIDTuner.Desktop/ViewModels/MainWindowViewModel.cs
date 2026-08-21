@@ -24,7 +24,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly FieldProfileWorkflow _fieldProfileWorkflow;
     private readonly AnalysisResultExportWorkflow _analysisResultExportWorkflow = new();
     private readonly PlcTrendVisibleExportWorkflow _plcTrendVisibleExportWorkflow = new();
-    private readonly IPlcTagSnapshotReader _plcTagSnapshotReader;
+    private readonly PlcSnapshotSessionFactory _plcSnapshotSessionFactory;
     private readonly PlcOneSecondRecorder _plcOneSecondRecorder;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
     private readonly PlcConfigurationWorkflow _plcConfigurationWorkflow;
@@ -75,13 +75,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _fieldProfileWorkflow = new FieldProfileWorkflow(fieldProfileStore);
         var resolvedPlcConnectivityProbe = plcConnectivityProbe
             ?? MainWindowComposition.CreatePlcConnectivityProbe();
-        _plcTagSnapshotReader = plcTagSnapshotReader
-            ?? MainWindowComposition.CreatePlcTagSnapshotReader();
+        _plcSnapshotSessionFactory = new PlcSnapshotSessionFactory(
+            plcTagSnapshotReader ?? MainWindowComposition.CreatePlcTagSnapshotReader());
         var resolvedTestSessionStorageDirectory = Path.GetFullPath(
             testSessionStorageDirectory ?? MainWindowComposition.ResolvePath("local", "test-sessions"));
         var resolvedPlcRecordingStorageDirectory = Path.GetFullPath(
             plcRecordingStorageDirectory ?? MainWindowComposition.ResolvePath("local", "plc-recordings"));
-        _plcOneSecondRecorder = new PlcOneSecondRecorder(OpenPlcSnapshotSessionAsync, resolvedPlcRecordingStorageDirectory);
+        _plcOneSecondRecorder = new PlcOneSecondRecorder(
+            _plcSnapshotSessionFactory.OpenAsync,
+            resolvedPlcRecordingStorageDirectory);
         var resolvedTestSessionRepository = testSessionRepository
             ?? MainWindowComposition.CreateTestSessionRepository(resolvedTestSessionStorageDirectory);
         var resolvedPidSampleRepository = pidSampleRepository
@@ -110,7 +112,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HistoricalTrend = new HistoricalTrendViewModel(
             new PlcHistoricalTrendCoordinator(historicalTrendStore));
         LiveMonitor = new PlcLiveMonitorViewModel(
-            new PlcAcquisitionEngine(OpenPlcSnapshotSessionAsync, historicalWriter.Enqueue),
+            new PlcAcquisitionEngine(_plcSnapshotSessionFactory.OpenAsync, historicalWriter.Enqueue),
             historicalWriter);
         LiveMonitor.PropertyChanged += LiveMonitor_PropertyChanged;
         _plcLiveMonitoringController = new PlcLiveMonitoringController(
@@ -661,7 +663,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            var snapshots = await _plcTagSnapshotReader.ReadAsync(BuildPlcConfigurationFromForm(), CancellationToken.None);
+            var snapshots = await _plcSnapshotSessionFactory.ReadOnceAsync(
+                BuildPlcConfigurationFromForm(),
+                CancellationToken.None);
             ApplyPlcMonitorSnapshots(snapshots);
             PlcMonitorStatus = snapshots.Count == 0
                 ? "没有启用的监控点位。"
@@ -1138,33 +1142,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void StopPlcReplay()
     {
         _plcReplayController.Stop();
-    }
-
-    private async Task<IPlcTagSnapshotReadSession> OpenPlcSnapshotSessionAsync(
-        PlcProjectConfiguration configuration,
-        CancellationToken cancellationToken)
-    {
-        if (_plcTagSnapshotReader is IPlcTagSnapshotSessionReader sessionReader)
-        {
-            return await sessionReader.OpenSessionAsync(configuration, cancellationToken);
-        }
-
-        return new SingleReadSnapshotSession(_plcTagSnapshotReader, configuration);
-    }
-
-    private sealed class SingleReadSnapshotSession(
-        IPlcTagSnapshotReader reader,
-        PlcProjectConfiguration configuration) : IPlcTagSnapshotReadSession
-    {
-        public Task<IReadOnlyList<PlcTagSnapshot>> ReadAsync(CancellationToken cancellationToken)
-        {
-            return reader.ReadAsync(configuration, cancellationToken);
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
     }
 
     public async Task LoadPlcConfigurationAsync()

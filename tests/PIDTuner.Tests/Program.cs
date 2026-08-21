@@ -1535,6 +1535,8 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("DirectoryInfo", StringComparison.Ordinal), "main view model filesystem traversal");
     AssertEqual(false, source.Contains("_monitorTimer", StringComparison.Ordinal), "main view model live refresh timer ownership");
     AssertEqual(false, source.Contains("DrainPresentedFrames", StringComparison.Ordinal), "main view model sample buffer draining");
+    AssertEqual(false, source.Contains("IPlcTagSnapshotSessionReader", StringComparison.Ordinal), "main view model plc session capability detection");
+    AssertEqual(false, source.Contains("SingleReadSnapshotSession", StringComparison.Ordinal), "main view model plc session fallback");
     return Task.CompletedTask;
 }
 
