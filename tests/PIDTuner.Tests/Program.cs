@@ -1550,6 +1550,9 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("_plcCommunicationStatus", StringComparison.Ordinal), "main view model communication status ownership");
     AssertEqual(false, source.Contains("_plcMonitorStatus", StringComparison.Ordinal), "main view model monitor status ownership");
     AssertEqual(false, source.Contains("_plcAcquisitionDiagnosticsStatus", StringComparison.Ordinal), "main view model acquisition status ownership");
+    AssertEqual(false, source.Contains("public string PlcCommunicationStatus", StringComparison.Ordinal), "main view model communication status proxy");
+    AssertEqual(false, source.Contains("public string PlcMonitorStatus", StringComparison.Ordinal), "main view model monitor status proxy");
+    AssertEqual(false, source.Contains("public string PlcAcquisitionDiagnosticsStatus", StringComparison.Ordinal), "main view model acquisition status proxy");
     AssertEqual(false, source.Contains("_fieldProfileWorkflow", StringComparison.Ordinal), "main view model field profile workflow ownership");
     AssertEqual(false, source.Contains("BuildProfileFromGrid()", StringComparison.Ordinal), "main view model field profile validation");
     AssertEqual(false, source.Contains("_plcConfigurationWorkflow", StringComparison.Ordinal), "main view model plc configuration workflow ownership");
@@ -1828,9 +1831,9 @@ static async Task MainViewModelRecordsOneSecondPlcMonitorFramesAtFastestTagInter
     AssertEqual(1, reader.OpenSessionCount, "plc reader session open count");
     AssertEqual(true, reader.SessionReadCount >= 18, "plc session read count");
     AssertEqual("PLC 1s 记录完成", viewModel.Notification.Title, "plc recording notification title");
-    AssertContains("周期 50 ms", viewModel.PlcMonitorStatus);
-    AssertContains("2 个点位", viewModel.PlcMonitorStatus);
-    AssertContains("诊断：调度延迟", viewModel.PlcAcquisitionDiagnosticsStatus);
+    AssertContains("周期 50 ms", viewModel.LiveMonitor.MonitorStatus);
+    AssertContains("2 个点位", viewModel.LiveMonitor.MonitorStatus);
+    AssertContains("诊断：调度延迟", viewModel.LiveMonitor.AcquisitionDiagnosticsStatus);
     var recordingPath = Directory.GetFiles(Path.Combine(directory, "plc-recordings"), "plc-recording-*.json").Single();
     AssertContains(Path.GetFullPath(recordingPath), viewModel.Notification.Message);
     AssertContains("诊断：调度延迟", viewModel.Notification.Message);
@@ -1918,7 +1921,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
     await loader.ShowPlcHistoricalTrendAsync();
     AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical plc trend mode");
     AssertContains("历史", loader.PlcTrendMode.Status);
-    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
     AssertEqual(appliedCountBeforeHistory, appliedCount, "historical trend avoids per-frame plot events");
     AssertEqual(1, batchAppliedCount, "historical trend raises one batch plot event");
     AssertEqual(true, loader.HistoricalTrendWorkbench.IsViewportEnabled, "historical viewport slider enabled");
@@ -1985,7 +1988,7 @@ static async Task MainViewModelLoadsSavedPlcRecordingForReplay()
 
     await loader.ResetPlcHistoricalRangeAsync();
     AssertEqual(2, viewportRequestCount, "historical reset requests viewport update");
-    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.PlcMonitorStatus);
+    AssertContains(loader.LastPlcRecordingFrames.Count.ToString(CultureInfo.InvariantCulture), loader.LiveMonitor.MonitorStatus);
     await loader.SetPlcHistoricalTrendWindowAsync(TimeSpan.FromSeconds(10));
     AssertEqual(3, viewportRequestCount, "historical preset requests viewport update");
     AssertEqual(true, loader.PlcTrendMode.IsHistoricalMode, "historical preset keeps trend mode");

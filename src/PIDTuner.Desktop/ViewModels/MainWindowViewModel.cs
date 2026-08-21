@@ -31,24 +31,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlyList<IReadOnlyList<PlcTagSnapshot>> _lastPlcRecordingFrames = Array.Empty<IReadOnlyList<PlcTagSnapshot>>();
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
 
-    public string PlcCommunicationStatus
-    {
-        get => PlcConfigurationEditor.CommunicationStatus;
-        set => PlcConfigurationEditor.CommunicationStatus = value;
-    }
-
-    public string PlcMonitorStatus
-    {
-        get => LiveMonitor.MonitorStatus;
-        set => LiveMonitor.MonitorStatus = value;
-    }
-
-    public string PlcAcquisitionDiagnosticsStatus
-    {
-        get => LiveMonitor.AcquisitionDiagnosticsStatus;
-        set => LiveMonitor.AcquisitionDiagnosticsStatus = value;
-    }
-
     public MainWindowViewModel()
         : this(
             new WindowsOpenFileDialogService(),
@@ -146,7 +128,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         HistoricalTrendWorkbench.RightYRangeRequested += (min, max) => PlcTrendRightYRangeRequested?.Invoke(min, max);
         HistoricalTrendWorkbench.StatusRequested += (message, replayPhase) =>
         {
-            PlcMonitorStatus = message;
+            LiveMonitor.MonitorStatus = message;
             if (!string.IsNullOrWhiteSpace(replayPhase))
             {
                 Debug.UpdateReplayStatus(replayPhase);
@@ -405,7 +387,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var configuration = PlcConfigurationEditor.BuildConfiguration();
             var result = await PlcConfigurationEditor.CheckCommunicationAsync(CancellationToken.None);
-            Notify(result.Title, PlcCommunicationStatus, result.Kind);
+            Notify(result.Title, PlcConfigurationEditor.CommunicationStatus, result.Kind);
             if (result.IsReachable && startMonitoringOnSuccess)
             {
                 await EnsurePlcMonitoringAsync(configuration, resetHistory: true);
@@ -441,13 +423,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 PlcConfigurationEditor.BuildConfiguration(),
                 CancellationToken.None);
             ApplyPlcMonitorSnapshots(snapshots);
-            PlcMonitorStatus = snapshots.Count == 0
+            LiveMonitor.MonitorStatus = snapshots.Count == 0
                 ? "没有启用的监控点位。"
                 : $"已刷新 {snapshots.Count} 个点位，数据源：{snapshots[0].Source}。";
         }
         catch (Exception exception)
         {
-            PlcMonitorStatus = $"刷新失败：{exception.Message}";
+            LiveMonitor.MonitorStatus = $"刷新失败：{exception.Message}";
             Notify("PLC 点位刷新失败", exception.Message, "Error");
         }
     }
@@ -481,8 +463,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             EnqueuePlcLiveDiagnosticsFrame(frame);
         }
 
-        PlcMonitorStatus = result.MonitorStatus;
-        PlcAcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
+        LiveMonitor.MonitorStatus = result.MonitorStatus;
+        LiveMonitor.AcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
     }
 
     private void EnqueuePlcLiveDiagnosticsFrame(PlcAcquisitionFrame frame)
@@ -495,7 +477,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var historicalSummary = await _plcLiveMonitoringController.StopAsync();
         if (historicalSummary is not null)
         {
-            PlcAcquisitionDiagnosticsStatus =
+            LiveMonitor.AcquisitionDiagnosticsStatus =
                 $"实时采集已停止，SQLite 写入已关闭，已写入 {historicalSummary.FrameCount} 帧 / " +
                 $"{historicalSummary.SnapshotCount} 条点位值，{historicalSummary.DatabasePath}";
         }
@@ -507,7 +489,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (LiveMonitor.IsMonitoring)
         {
             await StopLiveMonitoringAsync();
-            PlcMonitorStatus = "点位监控已停止。";
+            LiveMonitor.MonitorStatus = "点位监控已停止。";
             return;
         }
 
@@ -532,8 +514,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var result = await _plcLiveMonitoringController.StartAsync(
             configuration,
             CancellationToken.None);
-        PlcMonitorStatus = result.MonitorStatus;
-        PlcAcquisitionDiagnosticsStatus =
+        LiveMonitor.MonitorStatus = result.MonitorStatus;
+        LiveMonitor.AcquisitionDiagnosticsStatus =
             $"历史数据：SQLite 写入中，{result.HistoricalDatabasePath}";
     }
 
@@ -578,8 +560,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             StopPlcReplay();
             var configuration = PlcConfigurationEditor.BuildConfiguration();
-            PlcMonitorStatus = "正在记录 1s 点位数据。";
-            PlcAcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
+            LiveMonitor.MonitorStatus = "正在记录 1s 点位数据。";
+            LiveMonitor.AcquisitionDiagnosticsStatus = "采集诊断：正在记录当前 1s 采集链路。";
             var result = await _plcOneSecondRecorder.RecordAsync(
                 configuration,
                 snapshots => ApplyPlcMonitorSnapshots(snapshots, storeLiveHistory: false),
@@ -592,20 +574,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             _lastPlcRecordingFrames = result.Frames;
             OnPropertyChanged(nameof(LastPlcRecordingFrames));
-            PlcMonitorStatus = result.MonitorStatus;
-            PlcAcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
+            LiveMonitor.MonitorStatus = result.MonitorStatus;
+            LiveMonitor.AcquisitionDiagnosticsStatus = result.DiagnosticsStatus;
             Notify(
                 "PLC 1s 记录完成",
                 string.Join(
                     Environment.NewLine,
-                    PlcMonitorStatus,
+                    LiveMonitor.MonitorStatus,
                     result.DiagnosticsStatus,
                     $"保存位置：{result.RecordingPath}"),
                 "Success");
         }
         catch (Exception exception)
         {
-            PlcMonitorStatus = $"1s 记录失败：{exception.Message}";
+            LiveMonitor.MonitorStatus = $"1s 记录失败：{exception.Message}";
             Notify("PLC 1s 记录失败", exception.Message, "Error");
         }
     }
@@ -654,12 +636,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 ApplyPlcReplayOperation(Debug.ApplyReplayFrame(0, advance: true, "已定位"));
             }
 
-            PlcMonitorStatus =
+            LiveMonitor.MonitorStatus =
                 $"已加载 PLC 记录：{recording.FrameCount} 帧，{recording.SnapshotCount} 条快照，周期 {Debug.SourceReplayIntervalMilliseconds} ms。";
             Debug.UpdateReplayStatus("已加载");
             Notify(
                 "PLC 记录已加载",
-                string.Join(Environment.NewLine, PlcMonitorStatus, $"文件位置：{Path.GetFullPath(fileName)}"),
+                string.Join(Environment.NewLine, LiveMonitor.MonitorStatus, $"文件位置：{Path.GetFullPath(fileName)}"),
                 "Success");
         }
         catch (Exception exception)
@@ -813,7 +795,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         PlcTrendMode.UseHistoricalMode();
-        PlcMonitorStatus = result.Status!;
+        LiveMonitor.MonitorStatus = result.Status!;
         if (!string.IsNullOrWhiteSpace(result.ReplayPhase))
         {
             Debug.UpdateReplayStatus(result.ReplayPhase);
@@ -867,7 +849,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         if (!string.IsNullOrWhiteSpace(result.MonitorStatus))
         {
-            PlcMonitorStatus = result.MonitorStatus;
+            LiveMonitor.MonitorStatus = result.MonitorStatus;
         }
 
         if (!string.IsNullOrWhiteSpace(result.NotificationTitle) &&
@@ -899,7 +881,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         PlcSnapshotFramesApplied?.Invoke(frames);
         Debug.MarkHistoricalReplayDisplayed();
-        PlcMonitorStatus = $"历史趋势已显示：{frames.Count} 帧。";
+        LiveMonitor.MonitorStatus = $"历史趋势已显示：{frames.Count} 帧。";
     }
 
     private bool EnsurePlcReplayLoaded()
@@ -930,7 +912,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var loadedFileName = await PlcConfigurationEditor.LoadFromFileAsync(fileName, CancellationToken.None);
             LiveMonitor.ClearTags();
-            PlcMonitorStatus = "PLC 配置已更新，等待刷新点位。";
+            LiveMonitor.MonitorStatus = "PLC 配置已更新，等待刷新点位。";
             Notify("PLC 配置已加载", loadedFileName, "Success");
             await CheckPlcCommunicationInternalAsync(startMonitoringOnSuccess: true);
         }
