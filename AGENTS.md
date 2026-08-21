@@ -49,6 +49,7 @@ Before adding a field, method, or command to `MainWindowViewModel`, identify the
 - Experiment session persistence, history comparison, and recommendation review orchestration belong to `ExperimentWorkspaceViewModel`.
 - Parameter-set input assembly and persistence coordination belong to `ParameterSetWorkspaceViewModel`.
 - Repository discovery and default storage path construction belong to `MainWindowComposition`.
+- Example file discovery, validation, and ordered loading belong to `ExampleWorkspaceWorkflow`.
 - Infrastructure adapters are created only in composition modules.
 - Views contain visual interaction logic only; persistence and domain workflows do not belong in code-behind.
 

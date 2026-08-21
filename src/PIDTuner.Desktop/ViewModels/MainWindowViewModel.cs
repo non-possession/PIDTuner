@@ -21,6 +21,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public const int LiveMonitorUiRefreshMilliseconds = 250;
 
     private readonly IOpenFileDialogService _openFileDialogService;
+    private readonly ExampleWorkspaceWorkflow _exampleWorkspaceWorkflow;
     private readonly ExperimentWorkspaceViewModel _experimentWorkspace;
     private readonly PlcDiagnosticsController _plcDiagnosticsController;
     private string _statusMessage = "阶段 1 已就绪：可在分析页导入离线 CSV 并计算基础指标。";
@@ -130,6 +131,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             new PlcConfigurationWorkflow(plcProjectConfigurationStore, resolvedPlcConnectivityProbe));
         OfflineAnalysis = new OfflineAnalysisViewModel(new AnalysisResultExportWorkflow());
         FieldProfileEditor = new FieldProfileEditorViewModel(new FieldProfileWorkflow(fieldProfileStore));
+        _exampleWorkspaceWorkflow = new ExampleWorkspaceWorkflow(
+            MainWindowComposition.RepositoryRoot,
+            FieldProfileEditor,
+            OfflineAnalysis);
         ExperimentHistory = new ExperimentHistoryViewModel();
         _experimentWorkspace = new ExperimentWorkspaceViewModel(
             experimentSessionCoordinator,
@@ -341,26 +346,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task LoadExampleAsync()
     {
-        var repositoryRoot = MainWindowComposition.RepositoryRoot;
-        var fieldProfilePath = Path.Combine(repositoryRoot, "config", "pid-sample-fields.example.json");
-        var csvPath = Path.Combine(repositoryRoot, "samples", "offline-step-response.csv");
-
-        if (!File.Exists(fieldProfilePath) || !File.Exists(csvPath))
-        {
-            Notify("示例加载失败", "示例文件不存在，请确认从仓库根目录运行程序。", "Error");
-            return;
-        }
-
-        try
-        {
-            await FieldProfileEditor.LoadFromFileAsync(fieldProfilePath, CancellationToken.None);
-
-            await AnalyzeCsvFileAsync(csvPath);
-        }
-        catch (Exception exception)
-        {
-            Notify("示例加载失败", exception.Message, "Error");
-        }
+        var result = await _exampleWorkspaceWorkflow.LoadAsync(CancellationToken.None);
+        Notify(result.Title, result.Message, result.Kind);
     }
 
     public async Task SavePlcConfigurationAsync()

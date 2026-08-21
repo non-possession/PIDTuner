@@ -1577,6 +1577,9 @@ static Task MainViewModelRespectsInfrastructureSeam()
     AssertEqual(false, source.Contains("EnsurePlcReplayLoaded", StringComparison.Ordinal), "main view model replay validation");
     AssertEqual(false, source.Contains("OfflineAnalysis.LastSamples", StringComparison.Ordinal), "main view model parameter set sample assembly");
     AssertEqual(false, source.Contains("ParameterSetLibrary.SaveAsync", StringComparison.Ordinal), "main view model parameter set persistence");
+    AssertEqual(false, source.Contains("pid-sample-fields.example.json", StringComparison.Ordinal), "main view model example path knowledge");
+    AssertEqual(false, source.Contains("offline-step-response.csv", StringComparison.Ordinal), "main view model example csv path knowledge");
+    AssertEqual(false, source.Contains("File.Exists", StringComparison.Ordinal), "main view model example file validation");
     return Task.CompletedTask;
 }
 
